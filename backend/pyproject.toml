@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chat-to-api-backend"
+version = "0.1.0"
+description = "Initial FastAPI backend for chat-to-api"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0,<0.116.0",
+  "uvicorn[standard]>=0.32.0,<0.33.0",
+  "sqlalchemy>=2.0.36,<3.0.0",
+  "psycopg2-binary>=2.9.9,<3.0.0",
+  "redis>=5.0.8,<6.0.0",
+  "rq>=1.16.2,<2.0.0",
+  "langchain>=0.2.13,<0.3.0",
+  "langchain-cohere>=0.1.5,<0.2.0",
+  "cohere>=5.5.8,<6.0.0",
+  "pydantic-settings>=2.6.1,<3.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.3,<9.0.0"
+]
+
+[tool.pytest.ini_options]
+addopts = "-q --cov=app --cov-report=term-missing --ignore=app/__pycache__"
+testpaths = ["app"]
