@@ -4,7 +4,7 @@
 - **Ask mode:** answers are short, clear, and strictly concise.
 
 ## Do
-- Keep code **clean, elegant, small**. No comments. Follow existing patterns only.
+- Keep code **DRY, clean, elegant, small**. No comments. Follow existing patterns only.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.
