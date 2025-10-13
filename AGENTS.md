@@ -14,6 +14,7 @@
 - **Widget `<script>`:** tiny, idempotent init, no globals, no CSS bleed, works without the dashboard.
 - **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **hCaptcha** server-side verified, **LangChain + Cohere** via existing clients.
 - **DB:** write **efficient queries** only; avoid N+1; never full table scans; always use appropriate indexes/limits/projections.
+- **Environment:** when adding env vars or configuration, support both Docker and non-Docker setups.
 
 ## Don't
 - Don’t introduce new patterns, abstractions, or heavy deps.
