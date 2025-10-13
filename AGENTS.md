@@ -54,8 +54,8 @@
 - **LangChain/Cohere:** small, composable chains; respect configured models/temps; never log secrets or PII.
 
 ## Tools
-- If a **Figma** link is provided, **call all available Figma MCP tools** on it.
 - Use **shadcdn MCP tools** when needed.
+- You add shadcdn components such as `pnpm dlx shadcn@latest add label`
 
 ## PR checklist
 - Title: `feat(scope): short description`.
