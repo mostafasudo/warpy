@@ -16,7 +16,8 @@ Embeddable chat/voice agent that turns natural-language into authenticated API a
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
-## Frontend
+## Non-Docker Setup
+### Frontend
 Copy `frontend/.env.example` to `frontend/.env` and adjust values before running `pnpm dev`.
 ```sh
 cd frontend
@@ -28,7 +29,7 @@ pnpm test src/__tests__/App.test.tsx
 ```
 Global styling variables live in `frontend/src/index.css`. Update the CSS custom properties there to change theme colors, fonts, and radii across every shadcn/ui component (Tailwind maps those variables in `frontend/tailwind.config.ts`).
 
-## Backend
+### Backend
 Copy `backend/.env.example` to `backend/.env`, then install dependencies and run tests or the API server:
 ```sh
 cd backend
@@ -39,7 +40,7 @@ PYTHONPATH=app python3 -m pytest
 PYTHONPATH=app python3 -m pytest tests/test_health.py
 ```
 
-## Docker Compose
+## Docker Setup
 Copy `.env.example` to `.env` (root) and fill in any required keys. The sample values align with the backend and frontend `.env.example` files.
 
 Build and start the full stack:
