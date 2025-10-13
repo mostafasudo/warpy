@@ -50,5 +50,5 @@ docker compose up --build
 Services:
 - Frontend (compose): http://localhost:5173
 - Backend (compose): http://localhost:8000
-- Postgres (port exposed by compose): localhost:5432
-- Redis (port exposed by compose): localhost:6379
+- Postgres (port exposed by compose): localhost:5433
+- Redis (port exposed by compose): localhost:6380
