@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     cohere_api_key: str = Field(default="")
     cohere_model: str = Field(default="command")
     hcaptcha_secret: str = Field(default="")
+    clerk_secret_key: str = Field(default="")
 
 
 @lru_cache

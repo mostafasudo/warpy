@@ -53,6 +53,7 @@
 - **RQ:** short jobs; idempotent; visibility timeouts; retries with backoff.
 - **hCaptcha:** verify server-side for public endpoints.
 - **LangChain/Cohere:** small, composable chains; respect configured models/temps; never log secrets or PII.
+- **Clerk auth:** use `session: ClerkSession = Depends(require_clerk_session)` in endpoints; session contains `id`, `user_id`, `status`.
 
 ## Tools
 - Use **shadcdn MCP tools** when needed.

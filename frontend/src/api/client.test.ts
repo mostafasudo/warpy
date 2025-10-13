@@ -10,6 +10,7 @@ describe("apiClient", () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
+    delete (globalThis as typeof globalThis & { Clerk?: unknown }).Clerk
   })
 
   it("resolves JSON payload", async () => {
@@ -29,5 +30,23 @@ describe("apiClient", () => {
 
     await expect(apiClient.health()).rejects.toThrow("Request failed with 502")
   })
-})
 
+  it("attaches session token when available", async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(async (_input, init) => {
+        const headers = init?.headers as Headers | undefined
+        expect(headers?.get("Authorization")).toBe("Bearer token-123")
+        return jsonResponse({ status: "ready" })
+      })
+
+    const getToken = jest.fn(async () => "token-123")
+    ;(globalThis as typeof globalThis & {
+      Clerk?: { session?: { getToken?: typeof getToken } }
+    }).Clerk = { session: { getToken } }
+
+    await expect(apiClient.health()).resolves.toEqual({ status: "ready" })
+    expect(fetchSpy).toHaveBeenCalled()
+    expect(getToken).toHaveBeenCalled()
+  })
+})
