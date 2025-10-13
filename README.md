@@ -33,10 +33,10 @@ Copy `backend/.env.example` to `backend/.env`, then install dependencies and run
 ```sh
 cd backend
 python3 -m pip install -r requirements.txt
+uvicorn app.main:app --reload
 PYTHONPATH=app python3 -m pytest
 # single file
 PYTHONPATH=app python3 -m pytest tests/test_health.py
-uvicorn app.main:app --reload
 ```
 
 ## Docker Compose
