@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import get_settings
+from .logger import log_error
 from ..schemas.auth import ClerkSession
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -57,7 +58,7 @@ def verify_clerk_session(token: str, forwarded_headers: dict[str, str] | None = 
     except HTTPException:
         raise
     except Exception as error:
-        print(f"[clerk-auth-error] {error}")
+        log_error("auth", "verify_clerk_session", "Clerk authentication failed", exc=error)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
 

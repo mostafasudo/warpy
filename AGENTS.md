@@ -15,6 +15,7 @@
 - **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **hCaptcha** server-side verified, **LangChain + Cohere** via existing clients.
 - **DB:** write **efficient queries** only; avoid N+1; never full table scans; always use appropriate indexes/limits/projections.
 - **Environment:** when adding env vars or configuration, support both Docker and non-Docker setups.
+- **Logging:** always use `log_info`, `log_error`, `log_warning`, `log_debug` from `core.logger`; never `print()`. Format: `[scope] [method]: message` where scope is controller/service/worker name.
 
 ## Don't
 - Don’t introduce new patterns, abstractions, or heavy deps.
@@ -54,6 +55,12 @@
 - **hCaptcha:** verify server-side for public endpoints.
 - **LangChain/Cohere:** small, composable chains; respect configured models/temps; never log secrets or PII.
 - **Clerk auth:** use `session: ClerkSession = Depends(require_clerk_session)` in endpoints; session contains `id`, `user_id`, `status`.
+- **Logging patterns:**
+  - Controllers: `log_info("ControllerName", "method_name", "message")`
+  - Services: `log_info("ServiceName", "method_name", "message")`
+  - Workers: `log_info("WorkerName", "job_name", "message")`
+  - Errors: `log_error("scope", "method", "message", exc=exception)` (always include exception)
+  - Extra context: pass as kwargs: `log_info("scope", "method", "msg", user_id=uid, request_id=rid)`
 
 ## Tools
 - Use **shadcdn MCP tools** when needed.
