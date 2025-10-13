@@ -17,22 +17,15 @@ Embeddable chat/voice agent that turns natural-language into authenticated API a
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
 ## Frontend
+Copy `frontend/.env.example` to `frontend/.env` and adjust values before running `pnpm dev`.
 ```sh
 cd frontend
 pnpm install
 pnpm dev --host
-```
-
-Copy `frontend/.env.example` to `frontend/.env` and adjust values before running `pnpm dev`.
-
-Tests and coverage:
-```sh
-cd frontend
 pnpm test
 # single file
 pnpm test src/__tests__/App.test.tsx
 ```
-
 Global styling variables live in `frontend/src/index.css`. Update the CSS custom properties there to change theme colors, fonts, and radii across every shadcn/ui component (Tailwind maps those variables in `frontend/tailwind.config.ts`).
 
 ## Backend
@@ -59,7 +52,3 @@ Services:
 - Backend (compose): http://localhost:8000
 - Postgres (port exposed by compose): localhost:5432
 - Redis (port exposed by compose): localhost:6379
-
-## Testing summary
-- Frontend: `pnpm test`
-- Backend: `PYTHONPATH=app python3 -m pytest`
