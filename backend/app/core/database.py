@@ -15,7 +15,12 @@ def _get_engine():
     global _engine
     if _engine is None:
         settings = get_settings()
-        _engine = create_engine(settings.database_url, pool_pre_ping=True, future=True)
+        _engine = create_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            future=True,
+            connect_args={"options": "-c statement_timeout=180000"}
+        )
     return _engine
 
 
