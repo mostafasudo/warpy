@@ -14,6 +14,7 @@
 - **Widget `<script>`:** tiny, idempotent init, no globals, no CSS bleed, works without the dashboard.
 - **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **hCaptcha** server-side verified, **LangChain + Cohere** via existing clients.
 - **DB:** write **efficient queries** only; avoid N+1; never full table scans; always use appropriate indexes/limits/projections.
+- **Concurrency:** make all operations **idempotent and atomic**; use upserts instead of inserts; implement proper locking; design for high concurrency safety.
 - **Environment:** when adding env vars or configuration, support both Docker and non-Docker setups.
 - **Logging:** always use `log_info`, `log_error`, `log_warning`, `log_debug` from `core.logger`; never `print()`. Format: `[scope] [method]: message` where scope is controller/service/worker name.
 
