@@ -15,6 +15,9 @@ backend/coverage/
 # General
 .env
 .env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 *.log
 .DS_Store
 .vscode/
