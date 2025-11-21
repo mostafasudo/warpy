@@ -23,13 +23,6 @@
 - Don’t mock components; mock **HTTP layer only**: `apiDashboardMock`, `apiV1Mock`.
 - Don’t use `document.querySelectorAll` in tests.
 
-## Migrations (Postgres/Aurora + PGVector)
-- **Always generate files; never run them** in PRs.
-- Use **`IF NOT EXISTS`** wherever possible.
-- **Don’t validate foreign keys** (`NOT VALID`).
-- Create/drop indexes **CONCURRENTLY** (e.g., Alembic `postgresql_concurrently=True`; raw SQL if needed).
-- Vector cols: maintain proper indexes (e.g., IVFFLAT) and tune lists per table size.
-
 ## Commands (file-scoped first)
 - **Typecheck TS:** `pnpm tsc --noEmit path/to/file.tsx`
 - **Format:** `pnpm prettier --write path/to/file.tsx`
