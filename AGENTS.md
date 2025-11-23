@@ -11,6 +11,7 @@
 - **State:** server cache with **@tanstack/react-query**; local state with **zustand** (small slices + selectors).
 - **Data fetching:** never in components; use typed client modules; **one file per mutation hook**.
 - **Tests:** **Jest + Testing Library**; prefer `findBy*` after render; add `data-testid` when needed; **100% coverage**.
+- **Backend tests:** sample command: `PYTHONPATH=app pytest app/controllers/test_config.py app/controllers/test_endpoints.py`
 - **Widget `<script>`:** tiny, idempotent init, no globals, no CSS bleed, works without the dashboard.
 - **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **hCaptcha** server-side verified, **LangChain + Cohere** via existing clients.
 - **DB:** write **efficient queries** only; avoid N+1; never full table scans; always use appropriate indexes/limits/projections.

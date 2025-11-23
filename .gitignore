@@ -2,6 +2,7 @@
 node_modules/
 frontend/dist/
 .pnpm-store/**
+frontend/.pnpm-store/
 
 # Python
 __pycache__/

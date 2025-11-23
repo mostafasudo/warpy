@@ -1,0 +1,266 @@
+import { create } from "zustand"
+
+import type { HttpMethod } from "@/types"
+
+type PrimitiveType = "string" | "number" | "boolean"
+type BodyFieldType = PrimitiveType | "object" | "array:string" | "array:number" | "array:boolean" | "array:object"
+type PrimitiveValue = string | number | boolean
+
+export type PathParam = {
+  name: string
+  description?: string
+  fixed?: string
+}
+
+export type FlatField = {
+  id: string
+  name: string
+  type: PrimitiveType
+  required: boolean
+  description: string
+  fixed?: PrimitiveValue
+}
+
+export type BodyField = {
+  id: string
+  name: string
+  type: BodyFieldType
+  required: boolean
+  description: string
+  fixed?: PrimitiveValue
+  children?: BodyField[]
+}
+
+export type EndpointBuilderState = {
+  path: string
+  method: HttpMethod
+  name: string
+  description: string
+  pathParams: PathParam[]
+  headers: FlatField[]
+  queryParams: FlatField[]
+  bodyFields: BodyField[]
+}
+
+type EndpointBuilderStore = EndpointBuilderState & {
+  setPath: (path: string) => void
+  setMethod: (method: HttpMethod) => void
+  setName: (name: string) => void
+  setDescription: (description: string) => void
+  setPathParamFixed: (name: string, fixed?: string) => void
+  setPathParamDescription: (name: string, description: string) => void
+  addFlatField: (section: "headers" | "queryParams") => void
+  updateFlatField: (section: "headers" | "queryParams", id: string, payload: Partial<FlatField>) => void
+  removeFlatField: (section: "headers" | "queryParams", id: string) => void
+  addBodyField: (parentId?: string | null, type?: BodyFieldType) => void
+  updateBodyField: (id: string, payload: Partial<BodyField>) => void
+  removeBodyField: (id: string) => void
+  reset: () => void
+  hydrate: (state: EndpointBuilderState) => void
+}
+
+const createId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID()
+  }
+  return Math.random().toString(36).slice(2)
+}
+
+const normalizePathInput = (path: string) => {
+  const trimmed = path.trim()
+  const safe = trimmed.startsWith("/") ? trimmed : `/${trimmed}`
+  const normalized = safe.replace(/\{([^}]+)\}/g, ":$1")
+  return normalized || "/"
+}
+
+const extractPathParams = (path: string) => {
+  const matches = Array.from(path.matchAll(/:([A-Za-z0-9_-]+)/g))
+  return matches.map((match) => match[1])
+}
+
+const syncPathParams = (path: string, existing: PathParam[]) => {
+  const names = extractPathParams(path)
+  return names.map((name) => {
+    const current = existing.find((item) => item.name === name)
+    return current ?? { name, description: "" }
+  })
+}
+
+const createFlatField = (): FlatField => ({
+  id: createId(),
+  name: "",
+  type: "string",
+  required: false,
+  description: ""
+})
+
+const canHaveChildren = (type: BodyFieldType) => type === "object" || type === "array:object"
+const isPrimitiveType = (type: BodyFieldType): type is PrimitiveType =>
+  type === "string" || type === "number" || type === "boolean"
+
+const createBodyField = (type: BodyFieldType = "string"): BodyField => ({
+  id: createId(),
+  name: "",
+  type,
+  required: false,
+  description: "",
+  children: canHaveChildren(type) ? [] : undefined
+})
+
+const mapBodyFields = (
+  fields: BodyField[],
+  id: string,
+  updater: (field: BodyField) => BodyField
+): BodyField[] =>
+  fields.map((field) => {
+    if (field.id === id) {
+      return updater(field)
+    }
+    if (field.children) {
+      return { ...field, children: mapBodyFields(field.children, id, updater) }
+    }
+    return field
+  })
+
+const removeBodyFieldById = (fields: BodyField[], id: string): BodyField[] =>
+  fields
+    .filter((field) => field.id !== id)
+    .map((field) =>
+      field.children ? { ...field, children: removeBodyFieldById(field.children, id) } : field
+    )
+
+const addChildField = (fields: BodyField[], parentId: string | null, field: BodyField): BodyField[] => {
+  if (!parentId) {
+    return [...fields, field]
+  }
+  return fields.map((item) => {
+    if (item.id === parentId && canHaveChildren(item.type)) {
+      const nextChildren = item.children ?? []
+      return { ...item, children: [...nextChildren, field] }
+    }
+    if (item.children) {
+      return { ...item, children: addChildField(item.children, parentId, field) }
+    }
+    return item
+  })
+}
+
+const defaultState: EndpointBuilderState = {
+  path: "/",
+  method: "GET",
+  name: "",
+  description: "",
+  pathParams: [],
+  headers: [],
+  queryParams: [],
+  bodyFields: []
+}
+
+export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
+  ...defaultState,
+  setPath: (path) =>
+    set((state) => {
+      const normalized = normalizePathInput(path)
+      return {
+        path: normalized,
+        pathParams: syncPathParams(normalized, state.pathParams)
+      }
+    }),
+  setMethod: (method) => set({ method }),
+  setName: (name) => set({ name }),
+  setDescription: (description) => set({ description }),
+  setPathParamFixed: (name, fixed) =>
+    set((state) => ({
+      pathParams: state.pathParams.map((param) => (param.name === name ? { ...param, fixed } : param))
+    })),
+  setPathParamDescription: (name, description) =>
+    set((state) => ({
+      pathParams: state.pathParams.map((param) => (param.name === name ? { ...param, description } : param))
+    })),
+  addFlatField: (section) =>
+    set((state) => ({
+      [section]: [...state[section], createFlatField()]
+    })),
+  updateFlatField: (section, id, payload) =>
+    set((state) => ({
+      [section]: state[section].map((field) => {
+        if (field.id !== id) {
+          return field
+        }
+        const updated = { ...field, ...payload }
+        if (payload.type !== undefined && payload.type !== field.type) {
+          updated.fixed = undefined
+        }
+        return updated
+      })
+    })),
+  removeFlatField: (section, id) =>
+    set((state) => ({
+      [section]: state[section].filter((field) => field.id !== id)
+    })),
+  addBodyField: (parentId, type = "string") =>
+    set((state) => ({
+      bodyFields: addChildField(state.bodyFields, parentId ?? null, createBodyField(type))
+    })),
+  updateBodyField: (id, payload) =>
+    set((state) => ({
+      bodyFields: mapBodyFields(state.bodyFields, id, (field) => {
+        const nextType = payload.type ?? field.type
+        const typeChanged = payload.type !== undefined && payload.type !== field.type
+        const base: BodyField = {
+          ...field,
+          ...payload,
+          type: nextType
+        }
+        if (!canHaveChildren(nextType)) {
+          base.children = undefined
+        } else {
+          base.children = base.children ?? []
+        }
+        if (!isPrimitiveType(nextType) || (typeChanged && payload.fixed === undefined)) {
+          base.fixed = undefined
+        }
+        return base
+      })
+    })),
+  removeBodyField: (id) =>
+    set((state) => ({
+      bodyFields: removeBodyFieldById(state.bodyFields, id)
+    })),
+  reset: () => set(defaultState),
+  hydrate: (state) => set(state)
+}))
+
+export const endpointBuilderSelectors = {
+  path: (state: EndpointBuilderState) => state.path,
+  method: (state: EndpointBuilderState) => state.method,
+  name: (state: EndpointBuilderState) => state.name,
+  description: (state: EndpointBuilderState) => state.description,
+  pathParams: (state: EndpointBuilderState) => state.pathParams,
+  headers: (state: EndpointBuilderState) => state.headers,
+  queryParams: (state: EndpointBuilderState) => state.queryParams,
+  bodyFields: (state: EndpointBuilderState) => state.bodyFields
+}
+
+export const endpointBuilderActions = {
+  setPath: (state: EndpointBuilderStore) => state.setPath,
+  setMethod: (state: EndpointBuilderStore) => state.setMethod,
+  setName: (state: EndpointBuilderStore) => state.setName,
+  setDescription: (state: EndpointBuilderStore) => state.setDescription,
+  setPathParamFixed: (state: EndpointBuilderStore) => state.setPathParamFixed,
+  setPathParamDescription: (state: EndpointBuilderStore) => state.setPathParamDescription,
+  addFlatField: (state: EndpointBuilderStore) => state.addFlatField,
+  updateFlatField: (state: EndpointBuilderStore) => state.updateFlatField,
+  removeFlatField: (state: EndpointBuilderStore) => state.removeFlatField,
+  addBodyField: (state: EndpointBuilderStore) => state.addBodyField,
+  updateBodyField: (state: EndpointBuilderStore) => state.updateBodyField,
+  removeBodyField: (state: EndpointBuilderStore) => state.removeBodyField,
+  reset: (state: EndpointBuilderStore) => state.reset,
+  hydrate: (state: EndpointBuilderStore) => state.hydrate
+}
+
+export const endpointBuilderUtils = {
+  normalizePathInput,
+  extractPathParams,
+  isPrimitiveType
+}

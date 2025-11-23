@@ -11,3 +11,12 @@ if (!("fetch" in global)) {
     value: jest.fn()
   })
 }
+
+if (!global.ResizeObserver) {
+  class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  global.ResizeObserver = ResizeObserver
+}

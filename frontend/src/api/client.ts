@@ -1,3 +1,5 @@
+import type { ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
+
 type RequestOptions = Omit<RequestInit, "signal"> & {
   timeoutMs?: number
 }
@@ -55,7 +57,14 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
       throw new Error(message || `Request failed with ${response.status}`)
     }
 
-    return (await response.json()) as T
+    const raw = await response.text()
+    if (!raw) {
+      if (response.status === 204) {
+        return undefined as T
+      }
+      throw new Error("Expected response body but received empty response")
+    }
+    return JSON.parse(raw) as T
   } finally {
     clearTimeout(timeoutId)
   }
@@ -65,6 +74,30 @@ export type HealthResponse = {
   status: string
 }
 
+export type { ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
+
 export const apiClient = {
-  health: () => request<HealthResponse>("/health")
+  health: () => request<HealthResponse>("/health"),
+  getConfig: () => request<ConfigResponse>("/config"),
+  updateConfig: (payload: ConfigResponse) =>
+    request<ConfigResponse>("/config", {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  listEndpoints: (page: number, pageSize: number) =>
+    request<PaginatedEndpoints>(`/endpoints?page=${page}&page_size=${pageSize}`),
+  createEndpoint: (payload: EndpointPayload) =>
+    request<EndpointResponse>("/endpoints", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateEndpoint: (id: string, payload: EndpointPayload) =>
+    request<EndpointResponse>(`/endpoints/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  deleteEndpoint: (id: string) =>
+    request<void>(`/endpoints/${id}`, {
+      method: "DELETE"
+    })
 }

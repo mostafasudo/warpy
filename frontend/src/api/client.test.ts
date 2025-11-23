@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach, jest } from "@jest/globals"
 
 import { apiClient, configureApiClient } from "@/api/client"
+import type { EndpointPayload } from "@/types"
 import { jsonResponse, mockFetch, textResponse } from "@/test/http"
 
 describe("apiClient", () => {
@@ -48,5 +49,78 @@ describe("apiClient", () => {
     await expect(apiClient.health()).resolves.toEqual({ status: "ready" })
     expect(fetchSpy).toHaveBeenCalled()
     expect(getToken).toHaveBeenCalled()
+  })
+
+  it("supports config and endpoint operations", async () => {
+    const responses = [
+      jsonResponse({ baseUrl: { local: "http://localhost", production: "https://api" }, headers: {} }),
+      jsonResponse({
+        baseUrl: { local: "http://localhost", production: "https://api", staging: "https://staging" },
+        headers: {}
+      }),
+      jsonResponse({ items: [], page: 2, pageSize: 10, total: 0 }),
+      jsonResponse({
+        id: "endpoint-1",
+        path: "/users",
+        method: "GET",
+        tool: {
+          type: "function",
+          function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
+        }
+      }),
+      jsonResponse({
+        id: "endpoint-1",
+        path: "/users",
+        method: "GET",
+        tool: {
+          type: "function",
+          function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
+        }
+      }),
+      textResponse("", 204)
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    const config = await apiClient.getConfig()
+    expect(config.baseUrl.local).toBe("http://localhost")
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/config", "http://api.test"), expect.any(Object))
+
+    const updatedConfig = await apiClient.updateConfig({
+      baseUrl: { ...config.baseUrl, staging: "https://staging" },
+      headers: {}
+    })
+    expect(updatedConfig.baseUrl.staging).toBe("https://staging")
+
+    const listed = await apiClient.listEndpoints(2, 10)
+    expect(listed.page).toBe(2)
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/endpoints?page=2&page_size=10", "http://api.test"),
+      expect.any(Object)
+    )
+
+    const payload: EndpointPayload = {
+      path: "/users",
+      method: "GET",
+      tool: {
+        type: "function",
+        function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
+      }
+    }
+
+    const created = await apiClient.createEndpoint(payload)
+    expect(created.tool.function.name).toBe("list_users")
+
+    const updated = await apiClient.updateEndpoint("endpoint-1", payload)
+    expect(updated.path).toBe("/users")
+
+    const deleted = await apiClient.deleteEndpoint("endpoint-1")
+    expect(deleted).toBeUndefined()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/endpoints/endpoint-1", "http://api.test"),
+      expect.objectContaining({ method: "DELETE" })
+    )
   })
 })
