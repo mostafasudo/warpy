@@ -126,7 +126,7 @@ export const EndpointEditor = ({ open, editing, isSaving, onSave, onClose }: End
             <Label>Description</Label>
             <Textarea
               rows={3}
-              placeholder="Describe what this tool does"
+              placeholder="Describe what this endpoint does"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               data-testid="endpoint-description"

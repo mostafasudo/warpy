@@ -99,9 +99,10 @@ AlertDialogDescription.displayName =
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
->(({ className, ...props }, ref) => (
+>(({ className, autoFocus = true, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
+    autoFocus={autoFocus}
     className={cn(buttonVariants(), className)}
     {...props}
   />
