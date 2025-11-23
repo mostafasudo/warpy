@@ -32,6 +32,7 @@ import { useEndpointsQuery } from "@/queries/use-endpoints"
 import { useUpdateEndpoint } from "@/queries/use-update-endpoint"
 import { endpointBuilderActions, useEndpointBuilderStore } from "@/stores/endpoint-builder"
 import { endpointsUiSelectors, useEndpointsUiStore } from "@/stores/endpoints-ui"
+import { toastSelectors, useToastStore } from "@/stores/toast"
 import { type HttpMethod } from "@/types"
 import { EndpointEditor } from "./EndpointEditor"
 import { endpointNamePattern, methodTone } from "./constants"
@@ -53,6 +54,7 @@ export const EndpointsPanel = () => {
   const { mutateAsync: updateEndpoint, isPending: isUpdating } = useUpdateEndpoint()
   const hydrate = useEndpointBuilderStore(endpointBuilderActions.hydrate)
   const resetBuilder = useEndpointBuilderStore(endpointBuilderActions.reset)
+  const addToast = useToastStore(toastSelectors.addToast)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
@@ -82,14 +84,31 @@ export const EndpointsPanel = () => {
     ) {
       return
     }
-    if (editingId) {
-      await updateEndpoint({ id: editingId, payload })
-    } else {
-      await createEndpoint(payload)
-      setPage(1)
+    try {
+      if (editingId) {
+        await updateEndpoint({ id: editingId, payload })
+        addToast({ title: "Endpoint updated", description: payload.tool.function.name, variant: "success" })
+      } else {
+        await createEndpoint(payload)
+        addToast({ title: "Endpoint created", description: payload.tool.function.name, variant: "success" })
+        setPage(1)
+      }
+      closeEditor()
+      resetBuilder()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save endpoint"
+      addToast({ title: "Save failed", description: message, variant: "error" })
     }
-    closeEditor()
-    resetBuilder()
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    try {
+      await deleteEndpoint(id)
+      addToast({ title: "Endpoint deleted", description: name, variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not delete endpoint"
+      addToast({ title: "Delete failed", description: message, variant: "error" })
+    }
   }
 
   return (
@@ -149,7 +168,7 @@ export const EndpointsPanel = () => {
                   <TableHead className="w-64">Path</TableHead>
                   <TableHead>Tool name</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead className="w-32 text-right">Actions</TableHead>
+                  <TableHead className="w-32 text-right" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -167,14 +186,25 @@ export const EndpointsPanel = () => {
                           {endpoint.method}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">
-                        {endpoint.path}
+                      <TableCell className="max-w-[240px]">
+                        <div
+                          className="truncate font-mono text-sm text-muted-foreground"
+                          title={endpoint.path}
+                        >
+                          {endpoint.path}
+                        </div>
                       </TableCell>
-                      <TableCell className="font-medium">{endpoint.tool.function.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {endpoint.tool.function.description}
+                      <TableCell className="max-w-[220px]">
+                        <div className="truncate font-medium" title={endpoint.tool.function.name}>
+                          {endpoint.tool.function.name}
+                        </div>
                       </TableCell>
-                      <TableCell className="flex justify-end gap-2">
+                      <TableCell className="max-w-[320px]">
+                        <div className="truncate text-muted-foreground" title={endpoint.tool.function.description}>
+                          {endpoint.tool.function.description}
+                        </div>
+                      </TableCell>
+                      <TableCell className="flex w-32 justify-end gap-2">
                         <ActionTooltip content="Edit endpoint">
                           <Button
                             size="icon"
@@ -207,7 +237,10 @@ export const EndpointsPanel = () => {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteEndpoint(endpoint.id)} disabled={isDeleting}>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(endpoint.id, endpoint.tool.function.name)}
+                                disabled={isDeleting}
+                              >
                                 Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>

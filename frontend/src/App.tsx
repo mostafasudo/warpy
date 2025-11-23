@@ -1,6 +1,7 @@
 import { Shell } from "@/components/shell"
 import { SignedInBoundary, SignedOutCard } from "@/components/signed-out-card"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { ToastContainer } from "@/components/toast-container"
 
 function App() {
   return (
@@ -11,6 +12,7 @@ function App() {
           <Shell />
         </SignedInBoundary>
       </main>
+      <ToastContainer />
     </TooltipProvider>
   )
 }

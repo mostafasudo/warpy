@@ -210,18 +210,33 @@ describe("App", () => {
     await screen.findByRole("heading", { name: "Base URLs" })
     await screen.findByText("local")
 
-    await user.clear(screen.getByTestId("base-env-input"))
+    await user.click(screen.getByTestId("open-base-dialog"))
+    await user.clear(await screen.findByTestId("base-env-input"))
     await user.type(screen.getByTestId("base-env-input"), "staging")
     await user.clear(screen.getByTestId("base-url-input"))
     await user.type(screen.getByTestId("base-url-input"), "https://staging.test")
     await user.click(screen.getByTestId("save-base-env"))
 
     await screen.findByText("staging")
+    await user.click(screen.getByTestId("edit-env-local"))
+    const localEnvInput = await screen.findByTestId("base-env-input")
+    expect(localEnvInput).toBeDisabled()
+    await user.clear(await screen.findByTestId("base-url-input"))
+    await user.type(screen.getByTestId("base-url-input"), "http://localhost:3001")
+    await user.click(screen.getByTestId("save-base-env"))
+
+    await user.click(screen.getByTestId("open-base-dialog"))
+    await user.clear(await screen.findByTestId("base-env-input"))
+    await user.type(screen.getByTestId("base-env-input"), "staging")
+    await user.clear(screen.getByTestId("base-url-input"))
+    await user.type(screen.getByTestId("base-url-input"), "https://duplicate.test")
+    expect(screen.getByTestId("save-base-env")).toBeDisabled()
 
     await user.click(screen.getByText("Session Headers"))
     await screen.findByRole("heading", { name: "Session Headers" })
 
-    await user.clear(screen.getByTestId("header-name-input"))
+    await user.click(screen.getByTestId("open-header-dialog"))
+    await user.clear(await screen.findByTestId("header-name-input"))
     await user.type(screen.getByTestId("header-name-input"), "authToken")
     await act(async () => {
       useConfigUiStore.getState().setHeaderForm({ source: "sessionStorage" })
@@ -231,7 +246,14 @@ describe("App", () => {
     await user.click(screen.getByTestId("save-header"))
 
     await screen.findByText("authToken")
+    await user.click(screen.getByTestId("open-header-dialog"))
+    await user.clear(await screen.findByTestId("header-name-input"))
+    await user.type(screen.getByTestId("header-name-input"), "authToken")
+    await user.clear(screen.getByTestId("header-key-input"))
+    await user.type(screen.getByTestId("header-key-input"), "dupKey")
+    expect(screen.getByTestId("save-header")).toBeDisabled()
     expect(lastConfigPayload.baseUrl.staging).toBe("https://staging.test")
+    expect(lastConfigPayload.baseUrl.local).toBe("http://localhost:3001")
     expect(lastConfigPayload.headers.authToken).toEqual({ source: "sessionStorage", key: "authorization" })
 
     queryClient.clear()
