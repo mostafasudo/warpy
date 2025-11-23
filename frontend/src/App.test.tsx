@@ -207,7 +207,6 @@ describe("App", () => {
 
     render(<App />, { wrapper })
 
-    await screen.findByText(/ok/i)
     await screen.findByRole("heading", { name: "Base URLs" })
     await screen.findByText("local")
 
@@ -314,7 +313,6 @@ describe("App", () => {
 
     render(<App />, { wrapper })
 
-    await screen.findByText(/ok/i)
     await user.click(screen.getByText("Endpoints"))
     await screen.findByText("/users/{id}")
 

@@ -6,10 +6,8 @@ import { BaseUrlsPanel } from "@/features/base-urls/base-urls-panel"
 import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
 import { SessionHeadersPanel } from "@/features/session-headers/session-headers-panel"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useHealthQuery } from "@/queries/use-health"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 
 type NavButtonProps = {
@@ -65,8 +63,6 @@ export const Shell = () => {
   })
   const section = useNavigationStore(navigationSelectors.section)
   const setSection = useNavigationStore(navigationSelectors.setSection)
-  const { data: health } = useHealthQuery()
-  const isHealthy = (health?.status ?? "").toLowerCase() === "ok"
 
   useEffect(() => {
     if (typeof window === "undefined" || !("matchMedia" in window)) return
@@ -124,10 +120,6 @@ export const Shell = () => {
               <p className="text-sm text-muted-foreground">Manage environments, session headers, and endpoints.</p>
             </div>
             <div className="flex items-center gap-3">
-              <Badge variant={isHealthy ? "secondary" : "outline"} className="gap-2">
-                <span className={cn("h-2 w-2 rounded-full", isHealthy ? "bg-primary" : "bg-muted-foreground")} />
-                {isHealthy ? "ok" : health?.status ?? "checking"}
-              </Badge>
               <ThemeToggle />
               <div className="rounded-full">
                 <UserButton />
