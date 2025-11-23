@@ -168,16 +168,24 @@ export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFi
                 </AlertDialogTrigger>
               </ActionTooltip>
               <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Remove field?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Delete {field.name || "this field"} and any nested values.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => onRemove(field.id)}>Remove</AlertDialogAction>
-                </AlertDialogFooter>
+                <form
+                  className="grid gap-4"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    onRemove(field.id)
+                  }}
+                >
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove field?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Delete {field.name || "this field"} and any nested values.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                    <AlertDialogAction type="submit">Remove</AlertDialogAction>
+                  </AlertDialogFooter>
+                </form>
               </AlertDialogContent>
             </AlertDialog>
           </div>

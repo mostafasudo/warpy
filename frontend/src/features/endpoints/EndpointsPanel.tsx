@@ -24,6 +24,8 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { buildEndpointPayload, mapEndpointToBuilderState } from "@/lib/tool-schema"
 import { useCreateEndpoint } from "@/queries/use-create-endpoint"
@@ -60,7 +62,6 @@ export const EndpointsPanel = () => {
 
   useEffect(() => {
     if (!editorOpen) {
-      resetBuilder()
       return
     }
     if (editingId && endpoints.length) {
@@ -94,7 +95,6 @@ export const EndpointsPanel = () => {
         setPage(1)
       }
       closeEditor()
-      resetBuilder()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save endpoint"
       addToast({ title: "Save failed", description: message, variant: "error" })
@@ -129,106 +129,112 @@ export const EndpointsPanel = () => {
         </Button>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <div className="space-y-3 rounded-2xl border border-border/70 p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted-foreground">
-              Page {page} of {totalPages}
-            </p>
-            <div className="flex gap-2">
-              <ActionTooltip content="Previous page">
-                <Button
-                  size="icon"
-                  variant="outline"
-                  disabled={page <= 1}
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  data-testid="prev-page"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-              </ActionTooltip>
-              <ActionTooltip content="Next page">
-                <Button
-                  size="icon"
-                  variant="outline"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  data-testid="next-page"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </ActionTooltip>
-            </div>
+      <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-muted-foreground">
+            Page {page} of {totalPages}
+          </p>
+          <div className="flex gap-2">
+            <ActionTooltip content="Previous page">
+              <Button
+                size="icon"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage(Math.max(1, page - 1))}
+                data-testid="prev-page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </ActionTooltip>
+            <ActionTooltip content="Next page">
+              <Button
+                size="icon"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                data-testid="next-page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </ActionTooltip>
           </div>
-          <div className="overflow-hidden rounded-xl border border-border/60">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30">
-                  <TableHead className="w-28">Method</TableHead>
-                  <TableHead className="w-64">Path</TableHead>
-                  <TableHead>Tool name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="w-32 text-right" />
+        </div>
+        <div className="overflow-hidden rounded-xl border border-border/60">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30">
+                <TableHead className="w-28">Method</TableHead>
+                <TableHead className="w-[260px]">Path</TableHead>
+                <TableHead className="w-[240px]">Tool name</TableHead>
+                <TableHead className="w-[360px]">Description</TableHead>
+                <TableHead className="w-32 text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isPending ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                    Loading endpoints...
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isPending ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                      Loading endpoints...
+              ) : endpoints.length ? (
+                endpoints.map((endpoint) => (
+                  <TableRow key={endpoint.id}>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge className={cn("border", methodTone[endpoint.method as HttpMethod])}>
+                        {endpoint.method}
+                      </Badge>
                     </TableCell>
-                  </TableRow>
-                ) : endpoints.length ? (
-                  endpoints.map((endpoint) => (
-                    <TableRow key={endpoint.id}>
-                      <TableCell>
-                        <Badge className={cn("border", methodTone[endpoint.method as HttpMethod])}>
-                          {endpoint.method}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[240px]">
-                        <div
-                          className="truncate font-mono text-sm text-muted-foreground"
-                          title={endpoint.path}
+                    <TableCell className="max-w-[260px]">
+                      <div className="truncate font-mono text-sm text-muted-foreground" title={endpoint.path}>
+                        {endpoint.path}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[240px]">
+                      <div className="truncate font-medium" title={endpoint.tool.function.name}>
+                        {endpoint.tool.function.name}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[360px]">
+                      <div className="truncate text-muted-foreground" title={endpoint.tool.function.description}>
+                        {endpoint.tool.function.description}
+                      </div>
+                    </TableCell>
+                    <TableCell className="flex w-32 justify-end gap-2">
+                      <ActionTooltip content="Edit endpoint">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openEdit(endpoint.id)}
+                          data-testid={`edit-endpoint-${endpoint.id}`}
                         >
-                          {endpoint.path}
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-[220px]">
-                        <div className="truncate font-medium" title={endpoint.tool.function.name}>
-                          {endpoint.tool.function.name}
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-[320px]">
-                        <div className="truncate text-muted-foreground" title={endpoint.tool.function.description}>
-                          {endpoint.tool.function.description}
-                        </div>
-                      </TableCell>
-                      <TableCell className="flex w-32 justify-end gap-2">
-                        <ActionTooltip content="Edit endpoint">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => openEdit(endpoint.id)}
-                            data-testid={`edit-endpoint-${endpoint.id}`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </ActionTooltip>
+                      <AlertDialog>
+                        <ActionTooltip content="Delete endpoint">
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              disabled={isDeleting}
+                              data-testid={`delete-endpoint-${endpoint.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
                         </ActionTooltip>
-                        <AlertDialog>
-                          <ActionTooltip content="Delete endpoint">
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                disabled={isDeleting}
-                                data-testid={`delete-endpoint-${endpoint.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                          </ActionTooltip>
-                          <AlertDialogContent>
+                        <AlertDialogContent>
+                          <form
+                            className="grid gap-4"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              if (isDeleting) {
+                                return
+                              }
+                              handleDelete(endpoint.id, endpoint.tool.function.name)
+                            }}
+                          >
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete this endpoint?</AlertDialogTitle>
                               <AlertDialogDescription>
@@ -236,41 +242,51 @@ export const EndpointsPanel = () => {
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(endpoint.id, endpoint.tool.function.name)}
-                                disabled={isDeleting}
-                              >
+                              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                              <AlertDialogAction type="submit" disabled={isDeleting}>
                                 Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                      No endpoints yet.
+                          </form>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                    No endpoints yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
-        <EndpointEditor
-          open={editorOpen}
-          isSaving={isCreating || isUpdating}
-          onClose={() => {
-            closeEditor()
-            resetBuilder()
-          }}
-          onSave={handleSave}
-          editing={Boolean(editingId)}
-        />
       </div>
+      <Dialog
+        open={editorOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            closeEditor()
+          }
+        }}
+      >
+        <DialogContent className="max-w-5xl w-[min(1200px,95vw)] max-h-[90vh] overflow-hidden p-0">
+          <ScrollArea className="max-h-[90vh]">
+            <div className="p-6">
+              <EndpointEditor
+                isSaving={isCreating || isUpdating}
+                onClose={() => {
+                  closeEditor()
+                }}
+                onSave={handleSave}
+                editing={Boolean(editingId)}
+              />
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </PanelShell>
   )
 }

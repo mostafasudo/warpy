@@ -142,14 +142,22 @@ export const FlatFieldRow = ({ field, onChange, onRemove }: FlatFieldRowProps) =
             </AlertDialogTrigger>
           </ActionTooltip>
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Remove field?</AlertDialogTitle>
-              <AlertDialogDescription>This will delete the field from this endpoint draft.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={onRemove}>Remove</AlertDialogAction>
-            </AlertDialogFooter>
+            <form
+              className="grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onRemove()
+              }}
+            >
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove field?</AlertDialogTitle>
+                <AlertDialogDescription>This will delete the field from this endpoint draft.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                <AlertDialogAction type="submit">Remove</AlertDialogAction>
+              </AlertDialogFooter>
+            </form>
           </AlertDialogContent>
         </AlertDialog>
       </div>

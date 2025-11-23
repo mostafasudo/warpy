@@ -26,14 +26,13 @@ import { FlatFieldList } from "./FlatFieldList"
 import { endpointNamePattern } from "./constants"
 
 type EndpointEditorProps = {
-  open: boolean
   editing: boolean
   isSaving: boolean
   onSave: () => void
   onClose: () => void
 }
 
-export const EndpointEditor = ({ open, editing, isSaving, onSave, onClose }: EndpointEditorProps) => {
+export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointEditorProps) => {
   const path = useEndpointBuilderStore(endpointBuilderSelectors.path)
   const method = useEndpointBuilderStore(endpointBuilderSelectors.method)
   const name = useEndpointBuilderStore(endpointBuilderSelectors.name)
@@ -58,16 +57,8 @@ export const EndpointEditor = ({ open, editing, isSaving, onSave, onClose }: End
   const isNameValid = Boolean(name.trim() && endpointNamePattern.test(name))
   const canSave = Boolean(path.trim() && isNameValid && description.trim())
 
-  if (!open) {
-    return (
-      <div className="flex h-full flex-col justify-center rounded-2xl border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
-        <p>Create or edit an endpoint to get started.</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/50 p-4">
+    <div className="rounded-2xl bg-card/50 p-4">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold">{editing ? "Edit endpoint" : "New endpoint"}</p>

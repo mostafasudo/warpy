@@ -63,7 +63,6 @@ export const BaseUrlsPanel = () => {
   const canSubmit = Boolean(targetName && baseForm.url.trim() && !duplicateEnvName)
 
   const closeBaseDialog = () => {
-    resetBaseForm()
     setBaseDialogOpen(false)
   }
 
@@ -119,11 +118,7 @@ export const BaseUrlsPanel = () => {
     <Dialog
       open={baseDialogOpen}
       onOpenChange={(open) => {
-        if (open) {
-          setBaseDialogOpen(true)
-          return
-        }
-        closeBaseDialog()
+        setBaseDialogOpen(open)
       }}
     >
       <PanelShell
@@ -213,18 +208,29 @@ export const BaseUrlsPanel = () => {
                               </AlertDialogTrigger>
                             </ActionTooltip>
                             <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete environment?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Remove the base URL for {name}. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(name)} disabled={isSaving}>
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
+                              <form
+                                className="grid gap-4"
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  if (isSaving) {
+                                    return
+                                  }
+                                  handleDelete(name)
+                                }}
+                              >
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete environment?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Remove the base URL for {name}. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                                  <AlertDialogAction type="submit" disabled={isSaving}>
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </form>
                             </AlertDialogContent>
                           </AlertDialog>
                         )}
@@ -244,48 +250,58 @@ export const BaseUrlsPanel = () => {
         </div>
       </PanelShell>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{baseForm.editingKey ? "Edit environment" : "Add environment"}</DialogTitle>
-          <DialogDescription>Assign a base URL to an environment.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="env-name">Environment</Label>
-            <Input
-              id="env-name"
-              placeholder="staging"
-              value={baseForm.envName}
-              onChange={(event) => setBaseForm({ envName: event.target.value })}
-              disabled={Boolean(baseForm.editingKey && requiredEnvironments.has(baseForm.editingKey))}
-              data-testid="base-env-input"
-            />
-            {duplicateEnvName ? (
-              <p className="text-xs text-destructive">Environment already exists.</p>
-            ) : null}
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            handleSubmit()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{baseForm.editingKey ? "Edit environment" : "Add environment"}</DialogTitle>
+            <DialogDescription>Assign a base URL to an environment.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="env-name">Environment</Label>
+              <Input
+                id="env-name"
+                placeholder="staging"
+                value={baseForm.envName}
+                onChange={(event) => setBaseForm({ envName: event.target.value })}
+                disabled={Boolean(baseForm.editingKey && requiredEnvironments.has(baseForm.editingKey))}
+                data-testid="base-env-input"
+              />
+              {duplicateEnvName ? (
+                <p className="text-xs text-destructive">Environment already exists.</p>
+              ) : null}
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <Label htmlFor="env-url">URL</Label>
+              <Input
+                id="env-url"
+                placeholder="https://api.example.com"
+                value={baseForm.url}
+                onChange={(event) => setBaseForm({ url: event.target.value })}
+                data-testid="base-url-input"
+              />
+            </div>
           </div>
-          <div className="sm:col-span-2 space-y-2">
-            <Label htmlFor="env-url">URL</Label>
-            <Input
-              id="env-url"
-              placeholder="https://api.example.com"
-              value={baseForm.url}
-              onChange={(event) => setBaseForm({ url: event.target.value })}
-              data-testid="base-url-input"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit || isSaving || isPending}
-            data-testid="save-base-env"
-          >
-            {baseForm.editingKey ? "Update environment" : "Add environment"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={!canSubmit || isSaving || isPending}
+              data-testid="save-base-env"
+            >
+              {baseForm.editingKey ? "Update environment" : "Add environment"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

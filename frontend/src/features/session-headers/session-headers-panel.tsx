@@ -72,7 +72,6 @@ export const SessionHeadersPanel = () => {
   const canSubmit = Boolean(trimmedHeaderName && headerForm.key.trim() && !duplicateHeaderName)
 
   const closeHeaderDialog = () => {
-    resetHeaderForm()
     setHeaderDialogOpen(false)
   }
 
@@ -127,11 +126,7 @@ export const SessionHeadersPanel = () => {
     <Dialog
       open={headerDialogOpen}
       onOpenChange={(open) => {
-        if (open) {
-          setHeaderDialogOpen(true)
-          return
-        }
-        closeHeaderDialog()
+        setHeaderDialogOpen(open)
       }}
     >
       <PanelShell
@@ -211,18 +206,29 @@ export const SessionHeadersPanel = () => {
                           </AlertDialogTrigger>
                         </ActionTooltip>
                         <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete header?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Remove the {name} header mapping. Requests will no longer include this value.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(name)} disabled={isSaving}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
+                          <form
+                            className="grid gap-4"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              if (isSaving) {
+                                return
+                              }
+                              handleDelete(name)
+                            }}
+                          >
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete header?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Remove the {name} header mapping. Requests will no longer include this value.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                              <AlertDialogAction type="submit" disabled={isSaving}>
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </form>
                         </AlertDialogContent>
                       </AlertDialog>
                     </TableCell>
@@ -240,63 +246,73 @@ export const SessionHeadersPanel = () => {
         </div>
       </PanelShell>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{headerForm.editingKey ? "Edit header" : "Add header"}</DialogTitle>
-          <DialogDescription>Map session values to outgoing request headers.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="header-name">Header name</Label>
-            <Input
-              id="header-name"
-              placeholder="Authorization"
-              value={headerForm.name}
-              onChange={(event) => setHeaderForm({ name: event.target.value })}
-              data-testid="header-name-input"
-            />
-            {duplicateHeaderName ? (
-              <p className="text-xs text-destructive">Header already exists.</p>
-            ) : null}
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            handleSubmit()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{headerForm.editingKey ? "Edit header" : "Add header"}</DialogTitle>
+            <DialogDescription>Map session values to outgoing request headers.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="header-name">Header name</Label>
+              <Input
+                id="header-name"
+                placeholder="Authorization"
+                value={headerForm.name}
+                onChange={(event) => setHeaderForm({ name: event.target.value })}
+                data-testid="header-name-input"
+              />
+              {duplicateHeaderName ? (
+                <p className="text-xs text-destructive">Header already exists.</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>Source</Label>
+              <Select
+                value={headerForm.source}
+                onValueChange={(value) => setHeaderForm({ source: value as StorageSource })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="localStorage">Local storage</SelectItem>
+                  <SelectItem value="sessionStorage">Session storage</SelectItem>
+                  <SelectItem value="cookies">Cookies</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="header-key">Key</Label>
+              <Input
+                id="header-key"
+                placeholder="authorization"
+                value={headerForm.key}
+                onChange={(event) => setHeaderForm({ key: event.target.value })}
+                data-testid="header-key-input"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>Source</Label>
-            <Select
-              value={headerForm.source}
-              onValueChange={(value) => setHeaderForm({ source: value as StorageSource })}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={!canSubmit || isSaving || isPending}
+              data-testid="save-header"
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Pick source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="localStorage">Local storage</SelectItem>
-                <SelectItem value="sessionStorage">Session storage</SelectItem>
-                <SelectItem value="cookies">Cookies</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="header-key">Key</Label>
-            <Input
-              id="header-key"
-              placeholder="authorization"
-              value={headerForm.key}
-              onChange={(event) => setHeaderForm({ key: event.target.value })}
-              data-testid="header-key-input"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit || isSaving || isPending}
-            data-testid="save-header"
-          >
-            {headerForm.editingKey ? "Update header" : "Add header"}
-          </Button>
-        </DialogFooter>
+              {headerForm.editingKey ? "Update header" : "Add header"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )
