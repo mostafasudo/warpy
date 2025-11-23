@@ -87,6 +87,53 @@ const createProviders = (isSignedIn: boolean) => {
   return { wrapper, queryClient }
 }
 
+const setupMatchMedia = (matches: boolean) => {
+  const original = window.matchMedia
+  const listeners = new Set<(event: MediaQueryListEvent) => void>()
+  const mediaQueryList = {
+    matches,
+    media: "(max-width: 767px)",
+    onchange: null,
+    addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener)
+    },
+    removeEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener)
+    },
+    addListener: (listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener)
+    },
+    removeListener: (listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener)
+    },
+    dispatchEvent: (event: MediaQueryListEvent) => {
+      listeners.forEach((listener) => listener(event))
+      return true
+    }
+  } as MediaQueryList & { matches: boolean }
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: jest.fn(() => mediaQueryList)
+  })
+  const setMatches = (next: boolean) => {
+    mediaQueryList.matches = next
+    mediaQueryList.dispatchEvent({ matches: next, media: mediaQueryList.media } as MediaQueryListEvent)
+  }
+  const cleanup = () => {
+    if (original) {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: original
+      })
+    } else {
+      delete (window as any).matchMedia
+    }
+  }
+  return { setMatches, cleanup }
+}
+
 describe("App", () => {
   beforeAll(() => {
     ;(HTMLElement.prototype as any).hasPointerCapture = () => false
@@ -111,6 +158,25 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument()
 
     queryClient.clear()
+  })
+
+  it("guards dashboard on mobile viewports", async () => {
+    const { wrapper, queryClient } = createProviders(true)
+    const { cleanup, setMatches } = setupMatchMedia(true)
+
+    try {
+      render(<App />, { wrapper })
+
+      await screen.findByTestId("mobile-guard")
+
+      act(() => {
+        setMatches(false)
+      })
+      await waitFor(() => expect(screen.queryByTestId("mobile-guard")).not.toBeInTheDocument())
+    } finally {
+      cleanup()
+      queryClient.clear()
+    }
   })
 
   it("manages base urls and session headers", async () => {
