@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -158,11 +159,24 @@ export const SessionHeadersPanel = () => {
             </TableHeader>
             <TableBody>
               {isPending ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                    Loading headers...
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 3 }).map((_, index) => (
+                  <TableRow key={`header-loading-${index}`}>
+                    <TableCell className="w-48">
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
+                    <TableCell className="w-40">
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell className="max-w-[320px]">
+                      <Skeleton className="h-4 w-full max-w-[260px]" />
+                    </TableCell>
+                    <TableCell className="w-32">
+                      <div className="flex justify-end">
+                        <Skeleton className="h-8 w-16" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
               ) : sortedHeaders.length ? (
                 sortedHeaders.map(([name, header]) => (
                   <TableRow key={name}>

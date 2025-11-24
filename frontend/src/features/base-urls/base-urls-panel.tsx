@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -149,11 +150,21 @@ export const BaseUrlsPanel = () => {
             </TableHeader>
             <TableBody>
               {isPending ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-sm text-muted-foreground">
-                    Loading base URLs...
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 3 }).map((_, index) => (
+                  <TableRow key={`base-loading-${index}`}>
+                    <TableCell className="w-32">
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-full max-w-[360px]" />
+                    </TableCell>
+                    <TableCell className="w-32">
+                      <div className="flex justify-end">
+                        <Skeleton className="h-8 w-16" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
               ) : sortedBaseUrls.length ? (
                 sortedBaseUrls.map(([name, url]) => {
                   const isProtected = requiredEnvironments.has(name)

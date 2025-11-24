@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { buildEndpointPayload, mapEndpointToBuilderState } from "@/lib/tool-schema"
 import { useCreateEndpoint } from "@/queries/use-create-endpoint"
@@ -172,11 +173,27 @@ export const EndpointsPanel = () => {
             </TableHeader>
             <TableBody>
               {isPending ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                    Loading endpoints...
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 4 }).map((_, index) => (
+                  <TableRow key={`endpoint-loading-${index}`}>
+                    <TableCell className="whitespace-nowrap">
+                      <Skeleton className="h-6 w-16" />
+                    </TableCell>
+                    <TableCell className="max-w-[260px]">
+                      <Skeleton className="h-4 w-full max-w-[220px]" />
+                    </TableCell>
+                    <TableCell className="max-w-[240px]">
+                      <Skeleton className="h-4 w-full max-w-[200px]" />
+                    </TableCell>
+                    <TableCell className="max-w-[360px]">
+                      <Skeleton className="h-4 w-full max-w-[320px]" />
+                    </TableCell>
+                    <TableCell className="w-32">
+                      <div className="flex justify-end">
+                        <Skeleton className="h-8 w-16" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
               ) : endpoints.length ? (
                 endpoints.map((endpoint) => (
                   <TableRow key={endpoint.id}>
