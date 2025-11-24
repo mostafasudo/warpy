@@ -22,21 +22,25 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 import { type BodyField } from "@/stores/endpoint-builder"
+import type { FieldValidation } from "./validation"
 
 type BodyFieldRowProps = {
   field: BodyField
   depth: number
+  invalid?: Record<string, FieldValidation>
   onUpdate: (id: string, patch: Partial<BodyField>) => void
   onAdd: (parentId: string | null, type?: BodyField["type"]) => void
   onRemove: (id: string) => void
 }
 
-export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFieldRowProps) => {
+export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove }: BodyFieldRowProps) => {
   const fixedEnabled = field.fixed !== undefined
   const canNest = field.type === "object" || field.type === "array:object"
   const isPrimitive = field.type === "string" || field.type === "number" || field.type === "boolean"
   const indent = depth * 16
+  const validation = invalid?.[field.id] ?? {}
 
   const handleTypeChange = (type: BodyField["type"]) => {
     const newFixed =
@@ -56,7 +60,7 @@ export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFi
     })
   }
 
-  const renderFixedInput = (className?: string) => {
+  const renderFixedInput = (className?: string, invalidFixed?: boolean) => {
     if (field.type === "boolean") {
       return (
         <Select
@@ -64,7 +68,13 @@ export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFi
           disabled={!fixedEnabled}
           onValueChange={(value) => onUpdate(field.id, { fixed: value === "true" })}
         >
-          <SelectTrigger className={className}>
+          <SelectTrigger
+            className={cn(
+              className,
+              invalidFixed && "border-destructive focus-visible:ring-destructive"
+            )}
+            data-testid={`body-field-${field.id}-fixed`}
+          >
             <SelectValue placeholder="Fixed value" />
           </SelectTrigger>
           <SelectContent>
@@ -87,7 +97,11 @@ export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFi
             fixed: isNumber ? (event.target.value === "" ? "" : Number(event.target.value)) : event.target.value
           })
         }
-        className={className}
+        className={cn(
+          className,
+          invalidFixed && "border-destructive focus-visible:ring-destructive"
+        )}
+        data-testid={`body-field-${field.id}-fixed`}
       />
     )
   }
@@ -103,15 +117,21 @@ export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFi
             placeholder="Field name"
             value={field.name}
             onChange={(event) => onUpdate(field.id, { name: event.target.value })}
+            className={cn(
+              validation.name && "border-destructive focus-visible:ring-destructive"
+            )}
           />
           {isPrimitive && fixedEnabled ? (
-            renderFixedInput("w-full sm:w-48")
+            renderFixedInput("w-full sm:w-48", validation.fixed)
           ) : (
             <Input
               placeholder="Description"
               value={field.description}
               onChange={(event) => onUpdate(field.id, { description: event.target.value })}
-              className="w-full sm:w-48"
+              className={cn(
+                "w-full sm:w-48",
+                validation.description && "border-destructive focus-visible:ring-destructive"
+              )}
               data-testid={`body-field-${field.id}-description`}
             />
           )}
@@ -198,6 +218,7 @@ export const BodyFieldRow = ({ field, depth, onUpdate, onAdd, onRemove }: BodyFi
               key={child.id}
               field={child}
               depth={depth + 1}
+              invalid={invalid}
               onUpdate={onUpdate}
               onAdd={onAdd}
               onRemove={onRemove}

@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react"
 import { Plus } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -15,6 +16,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 import {
   endpointBuilderActions,
   endpointBuilderSelectors,
@@ -24,6 +26,7 @@ import { type HttpMethod } from "@/types"
 import { BodyFieldRow } from "./BodyFieldRow"
 import { FlatFieldList } from "./FlatFieldList"
 import { endpointNamePattern } from "./constants"
+import { validateEndpointState } from "./validation"
 
 type EndpointEditorProps = {
   editing: boolean
@@ -54,8 +57,37 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
   const updateBodyField = useEndpointBuilderStore(endpointBuilderActions.updateBodyField)
   const removeBodyField = useEndpointBuilderStore(endpointBuilderActions.removeBodyField)
 
+  const [showValidation, setShowValidation] = useState(false)
+
+  const builderState = useMemo(
+    () => ({
+      path,
+      method,
+      name,
+      description,
+      pathParams,
+      headers,
+      queryParams,
+      bodyFields
+    }),
+    [path, method, name, description, pathParams, headers, queryParams, bodyFields]
+  )
+
+  const validation = useMemo(
+    () => (showValidation ? validateEndpointState(builderState) : null),
+    [builderState, showValidation]
+  )
+
+  const handleSave = () => {
+    const result = validateEndpointState(builderState)
+    setShowValidation(result.errors.length > 0)
+    if (result.errors.length) {
+      return
+    }
+    onSave()
+  }
+
   const isNameValid = Boolean(name.trim() && endpointNamePattern.test(name))
-  const canSave = Boolean(path.trim() && isNameValid && description.trim())
 
   return (
     <div className="rounded-2xl bg-card/50 p-4">
@@ -68,11 +100,24 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
           <Button size="sm" variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button size="sm" onClick={onSave} disabled={!canSave || isSaving} data-testid="save-endpoint">
+          <Button size="sm" onClick={handleSave} disabled={isSaving} data-testid="save-endpoint">
             {editing ? "Update" : "Create"}
           </Button>
         </div>
       </div>
+      {validation?.errors.length ? (
+        <div
+          className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          data-testid="endpoint-validation-banner"
+        >
+          <p className="font-medium">Fix the highlighted fields:</p>
+          <ul className="ml-4 list-disc space-y-1">
+            {validation.errors.map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
           <div className="space-y-2">
@@ -82,6 +127,9 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
               value={path}
               onChange={(event) => setPath(event.target.value)}
               data-testid="endpoint-path"
+              className={cn(
+                validation?.invalid.path && "border-destructive focus-visible:ring-destructive"
+              )}
             />
           </div>
           <div className="space-y-2">
@@ -108,6 +156,9 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
               value={name}
               onChange={(event) => setName(event.target.value.replace(/\s+/g, "_"))}
               data-testid="endpoint-name"
+              className={cn(
+                validation?.invalid.name && "border-destructive focus-visible:ring-destructive"
+              )}
             />
             {name.trim() && !isNameValid ? (
               <p className="text-xs text-destructive">Use letters, numbers, underscores, or dashes (max 64).</p>
@@ -121,6 +172,9 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               data-testid="endpoint-description"
+              className={cn(
+                validation?.invalid.description && "border-destructive focus-visible:ring-destructive"
+              )}
             />
           </div>
         </div>
@@ -131,10 +185,14 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
           </div>
           {pathParams.length ? (
             <div className="space-y-2">
-              {pathParams.map((param) => {
+              {pathParams.map((param, index) => {
                 const fixedEnabled = param.fixed !== undefined
+                const pathParamIssue = validation?.invalid.pathParams[index]
                 return (
-                  <div key={param.name} className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-2">
+                  <div
+                    key={param.name || `path-param-${index}`}
+                    className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-2"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="px-2 py-1 text-xs uppercase">
@@ -157,6 +215,9 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
                         value={param.fixed ?? ""}
                         data-testid={`path-param-${param.name}-fixed`}
                         onChange={(event) => setPathParamFixed(param.name, event.target.value)}
+                        className={cn(
+                          pathParamIssue?.fixed && "border-destructive focus-visible:ring-destructive"
+                        )}
                       />
                     ) : (
                       <Input
@@ -164,6 +225,10 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
                         value={param.description ?? ""}
                         onChange={(event) => setPathParamDescription(param.name, event.target.value)}
                         data-testid={`path-param-${param.name}-description`}
+                        className={cn(
+                          pathParamIssue?.description &&
+                            "border-destructive focus-visible:ring-destructive"
+                        )}
                       />
                     )}
                   </div>
@@ -181,6 +246,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
             onAdd={() => addFlatField("headers")}
             onChange={(id, patch) => updateFlatField("headers", id, patch)}
             onRemove={(id) => removeFlatField("headers", id)}
+            invalidFields={validation?.invalid.headers}
           />
           <FlatFieldList
             title="Query params"
@@ -188,6 +254,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
             onAdd={() => addFlatField("queryParams")}
             onChange={(id, patch) => updateFlatField("queryParams", id, patch)}
             onRemove={(id) => removeFlatField("queryParams", id)}
+            invalidFields={validation?.invalid.queryParams}
           />
         </div>
         <div className="rounded-xl border border-border/70 p-3">
@@ -208,6 +275,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
                     key={field.id}
                     field={field}
                     depth={0}
+                    invalid={validation?.invalid.bodyFields}
                     onUpdate={updateBodyField}
                     onAdd={addBodyField}
                     onRemove={removeBodyField}

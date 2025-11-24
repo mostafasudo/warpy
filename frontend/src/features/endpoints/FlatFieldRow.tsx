@@ -22,19 +22,24 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 import { type FlatField } from "@/stores/endpoint-builder"
+import type { FieldValidation } from "./validation"
 
 type FlatFieldRowProps = {
   field: FlatField
+  invalid?: FieldValidation
   onChange: (patch: Partial<FlatField>) => void
   onRemove: () => void
 }
 
-export const FlatFieldRow = ({ field, onChange, onRemove }: FlatFieldRowProps) => {
+export const FlatFieldRow = ({ field, invalid, onChange, onRemove }: FlatFieldRowProps) => {
   const fixedEnabled = field.fixed !== undefined
   const fixedInputValue = typeof field.fixed === "boolean" ? "" : field.fixed ?? ""
+  const validation = invalid ?? {}
 
   const renderDetailInput = () => {
+    const detailInvalid = fixedEnabled ? validation.fixed : validation.description
     if (fixedEnabled) {
       if (field.type === "boolean") {
         return (
@@ -42,7 +47,13 @@ export const FlatFieldRow = ({ field, onChange, onRemove }: FlatFieldRowProps) =
             value={String(field.fixed ?? false)}
             onValueChange={(value) => onChange({ fixed: value === "true" })}
           >
-            <SelectTrigger className="w-full sm:w-48">
+            <SelectTrigger
+              className={cn(
+                "w-full sm:w-48",
+                detailInvalid && "border-destructive focus-visible:ring-destructive"
+              )}
+              data-testid={`field-${field.id}-fixed`}
+            >
               <SelectValue placeholder="Fixed value" />
             </SelectTrigger>
             <SelectContent>
@@ -62,7 +73,11 @@ export const FlatFieldRow = ({ field, onChange, onRemove }: FlatFieldRowProps) =
               fixed: field.type === "number" ? Number(event.target.value) : event.target.value
             })
           }
-          className="w-full sm:w-48"
+          className={cn(
+            "w-full sm:w-48",
+            detailInvalid && "border-destructive focus-visible:ring-destructive"
+          )}
+          data-testid={`field-${field.id}-fixed`}
         />
       )
     }
@@ -72,7 +87,10 @@ export const FlatFieldRow = ({ field, onChange, onRemove }: FlatFieldRowProps) =
         value={field.description}
         onChange={(event) => onChange({ description: event.target.value })}
         data-testid={`field-${field.id}-description`}
-        className="w-full sm:w-48"
+        className={cn(
+          "w-full sm:w-48",
+          detailInvalid && "border-destructive focus-visible:ring-destructive"
+        )}
       />
     )
   }
@@ -101,6 +119,9 @@ export const FlatFieldRow = ({ field, onChange, onRemove }: FlatFieldRowProps) =
             value={field.name}
             onChange={(event) => onChange({ name: event.target.value })}
             data-testid={`field-${field.id}-name`}
+            className={cn(
+              validation.name && "border-destructive focus-visible:ring-destructive"
+            )}
           />
           {renderDetailInput()}
         </div>

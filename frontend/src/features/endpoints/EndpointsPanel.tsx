@@ -29,6 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { buildEndpointPayload, mapEndpointToBuilderState } from "@/lib/tool-schema"
+import { validateEndpointState } from "./validation"
 import { useCreateEndpoint } from "@/queries/use-create-endpoint"
 import { useDeleteEndpoint } from "@/queries/use-delete-endpoint"
 import { useEndpointsQuery } from "@/queries/use-endpoints"
@@ -38,7 +39,7 @@ import { endpointsUiSelectors, useEndpointsUiStore } from "@/stores/endpoints-ui
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import { type HttpMethod } from "@/types"
 import { EndpointEditor } from "./EndpointEditor"
-import { endpointNamePattern, methodTone } from "./constants"
+import { methodTone } from "./constants"
 
 export const EndpointsPanel = () => {
   const page = useEndpointsUiStore(endpointsUiSelectors.page)
@@ -77,15 +78,11 @@ export const EndpointsPanel = () => {
 
   const handleSave = async () => {
     const builderState = useEndpointBuilderStore.getState()
-    const payload = buildEndpointPayload(builderState)
-    if (
-      !payload.path.trim() ||
-      !payload.tool.function.name ||
-      !payload.tool.function.description ||
-      !endpointNamePattern.test(payload.tool.function.name)
-    ) {
+    const validation = validateEndpointState(builderState)
+    if (validation.errors.length) {
       return
     }
+    const payload = buildEndpointPayload(builderState)
     try {
       if (editingId) {
         await updateEndpoint({ id: editingId, payload })
@@ -255,7 +252,7 @@ export const EndpointsPanel = () => {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete this endpoint?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Remove {endpoint.tool.function.name}. Any drafts using it will be cleared.
+                                Are you sure you want to delete {endpoint.tool.function.name}?
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

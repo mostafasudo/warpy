@@ -4,6 +4,7 @@ import { ActionTooltip } from "@/components/action-tooltip"
 import { Button } from "@/components/ui/button"
 import { type FlatField } from "@/stores/endpoint-builder"
 import { FlatFieldRow } from "./FlatFieldRow"
+import type { FieldValidation } from "./validation"
 
 type FlatFieldListProps = {
   title: string
@@ -11,9 +12,10 @@ type FlatFieldListProps = {
   onAdd: () => void
   onChange: (id: string, patch: Partial<FlatField>) => void
   onRemove: (id: string) => void
+  invalidFields?: Record<string, FieldValidation>
 }
 
-export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove }: FlatFieldListProps) => (
+export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove, invalidFields }: FlatFieldListProps) => (
   <div className="rounded-xl border border-border/70 p-3">
     <div className="mb-3 flex items-center justify-between">
       <p className="text-sm font-medium">{title}</p>
@@ -35,6 +37,7 @@ export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove }: Flat
           <FlatFieldRow
             key={field.id}
             field={field}
+            invalid={invalidFields?.[field.id]}
             onChange={(patch) => onChange(field.id, patch)}
             onRemove={() => onRemove(field.id)}
           />
