@@ -48,6 +48,8 @@ export const BaseUrlsPanel = () => {
   const resetBaseForm = useConfigUiStore(configSelectors.resetBaseForm)
   const baseDialogOpen = useConfigUiStore(configSelectors.baseDialogOpen)
   const setBaseDialogOpen = useConfigUiStore(configSelectors.setBaseDialogOpen)
+  const baseSubmitting = useConfigUiStore(configSelectors.baseSubmitting)
+  const setBaseSubmitting = useConfigUiStore(configSelectors.setBaseSubmitting)
   const { mutateAsync: saveConfig, isPending: isSaving } = useSaveConfig()
   const addToast = useToastStore(toastSelectors.addToast)
   const baseUrl = data?.baseUrl ?? {}
@@ -58,9 +60,10 @@ export const BaseUrlsPanel = () => {
   const effectiveEditingKey = baseForm.editingKey
   const isRequiredEditing = Boolean(effectiveEditingKey && requiredEnvironments.has(effectiveEditingKey))
   const targetName = isRequiredEditing ? effectiveEditingKey : trimmedEnvName
-  const duplicateEnvName = Boolean(
-    targetName && Object.keys(baseUrl).some((key) => key === targetName && key !== effectiveEditingKey)
-  )
+  const duplicateEnvName =
+    baseDialogOpen &&
+    !baseSubmitting &&
+    Boolean(targetName && Object.keys(baseUrl).some((key) => key === targetName && key !== effectiveEditingKey))
   const canSubmit = Boolean(targetName && baseForm.url.trim() && !duplicateEnvName)
 
   const closeBaseDialog = () => {
@@ -82,9 +85,10 @@ export const BaseUrlsPanel = () => {
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit || !targetName) {
+    if (!canSubmit || !targetName || baseSubmitting) {
       return
     }
+    setBaseSubmitting(true)
     const nextBase = { ...baseUrl }
     if (baseForm.editingKey && baseForm.editingKey !== targetName) {
       delete nextBase[baseForm.editingKey]
@@ -97,6 +101,8 @@ export const BaseUrlsPanel = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save environment"
       addToast({ title: "Save failed", description: message, variant: "error" })
+    } finally {
+      setBaseSubmitting(false)
     }
   }
 

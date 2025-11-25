@@ -60,16 +60,21 @@ export const SessionHeadersPanel = () => {
   const resetHeaderForm = useConfigUiStore(configSelectors.resetHeaderForm)
   const headerDialogOpen = useConfigUiStore(configSelectors.headerDialogOpen)
   const setHeaderDialogOpen = useConfigUiStore(configSelectors.setHeaderDialogOpen)
+  const headerSubmitting = useConfigUiStore(configSelectors.headerSubmitting)
+  const setHeaderSubmitting = useConfigUiStore(configSelectors.setHeaderSubmitting)
   const { mutateAsync: saveConfig, isPending: isSaving } = useSaveConfig()
   const addToast = useToastStore(toastSelectors.addToast)
   const baseUrl = data?.baseUrl ?? {}
   const headers = data?.headers ?? {}
   const sortedHeaders = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))
   const trimmedHeaderName = headerForm.name.trim()
-  const duplicateHeaderName = Boolean(
-    trimmedHeaderName &&
-      Object.keys(headers).some((key) => key === trimmedHeaderName && key !== headerForm.editingKey)
-  )
+  const duplicateHeaderName =
+    headerDialogOpen &&
+    !headerSubmitting &&
+    Boolean(
+      trimmedHeaderName &&
+        Object.keys(headers).some((key) => key === trimmedHeaderName && key !== headerForm.editingKey)
+    )
   const canSubmit = Boolean(trimmedHeaderName && headerForm.key.trim() && !duplicateHeaderName)
 
   const closeHeaderDialog = () => {
@@ -92,9 +97,10 @@ export const SessionHeadersPanel = () => {
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit) {
+    if (!canSubmit || headerSubmitting) {
       return
     }
+    setHeaderSubmitting(true)
     const name = trimmedHeaderName
     const nextHeaders = { ...headers }
     if (headerForm.editingKey && headerForm.editingKey !== name) {
@@ -108,6 +114,8 @@ export const SessionHeadersPanel = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save header"
       addToast({ title: "Save failed", description: message, variant: "error" })
+    } finally {
+      setHeaderSubmitting(false)
     }
   }
 
