@@ -43,7 +43,7 @@ export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove, invali
           />
         ))
       ) : (
-        <p className="text-xs text-muted-foreground">No fields yet.</p>
+        <p className="text-xs text-muted-foreground">Add a field to describe this schema.</p>
       )}
     </div>
   </div>

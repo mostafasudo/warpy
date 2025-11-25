@@ -270,7 +270,7 @@ export const EndpointsPanel = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                    No endpoints yet.
+                    Create your first endpoint to start defining your API.
                   </TableCell>
                 </TableRow>
               )}

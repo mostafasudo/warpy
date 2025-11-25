@@ -259,7 +259,7 @@ export const SessionHeadersPanel = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                    No headers yet.
+                    Add session headers from the user session for every request, start with Authorization.
                   </TableCell>
                 </TableRow>
               )}

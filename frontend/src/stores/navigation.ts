@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-type Section = "base" | "headers" | "endpoints"
+type Section = "dashboard" | "base" | "headers" | "endpoints"
 
 type NavigationState = {
   section: Section
@@ -35,7 +35,7 @@ const initialSidebarCollapsed = getSidebarCollapsedFromCookie() ?? false
 persistSidebarCollapsed(initialSidebarCollapsed)
 
 export const useNavigationStore = create<NavigationState>((set) => ({
-  section: "base",
+  section: "dashboard",
   sidebarCollapsed: initialSidebarCollapsed,
   setSection: (section) => set({ section }),
   setSidebarCollapsed: (collapsed) =>

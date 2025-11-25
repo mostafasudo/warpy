@@ -22,6 +22,7 @@ describe("navigation store", () => {
 
   it("defaults to expanded sidebar", async () => {
     const { navigationSelectors, useNavigationStore } = await loadNavigationStore()
+    expect(navigationSelectors.section(useNavigationStore.getState())).toBe("dashboard")
     expect(navigationSelectors.sidebarCollapsed(useNavigationStore.getState())).toBe(false)
     expect(document.cookie).toContain("sidebar_collapsed=0")
   })

@@ -258,7 +258,7 @@ export const BaseUrlsPanel = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-sm text-muted-foreground">
-                    No environments yet.
+                    Add your first environment to route requests to the right base URL.
                   </TableCell>
                 </TableRow>
               )}

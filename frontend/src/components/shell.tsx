@@ -1,8 +1,9 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, Link2, Network, PanelLeftClose, PanelLeftOpen, Smartphone } from "lucide-react"
+import { Braces, LayoutDashboard, Link2, Network, PanelLeftClose, PanelLeftOpen, Smartphone } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
+import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
 import { BaseUrlsPanel } from "@/features/base-urls/base-urls-panel"
 import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
 import { SessionHeadersPanel } from "@/features/session-headers/session-headers-panel"
@@ -126,6 +127,13 @@ export const Shell = () => {
           </div>
           <nav className="mt-8 flex flex-col gap-2">
             <NavButton
+              active={section === "dashboard"}
+              label="Dashboard"
+              icon={<LayoutDashboard className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("dashboard")}
+            />
+            <NavButton
               active={section === "base"}
               label="Base URLs"
               icon={<Link2 className="h-4 w-4" />}
@@ -160,8 +168,24 @@ export const Shell = () => {
         <div className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-10 md:py-8">
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">API Surface</h1>
-              <p className="text-sm text-muted-foreground">Manage environments, session headers, and endpoints.</p>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {section === "dashboard"
+                  ? "API configuration"
+                  : section === "base"
+                    ? "Base URLs"
+                    : section === "headers"
+                      ? "Session headers"
+                      : "Endpoints"}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {section === "dashboard"
+                  ? "See setup progress and jump to what matters next."
+                  : section === "base"
+                    ? "Map each environment to a base URL."
+                    : section === "headers"
+                      ? "Send session headers with every request."
+                      : "Design and publish your endpoints."}
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
@@ -170,6 +194,7 @@ export const Shell = () => {
               </div>
             </div>
           </header>
+          {section === "dashboard" && <DashboardPanel />}
           {section === "base" && <BaseUrlsPanel />}
           {section === "headers" && <SessionHeadersPanel />}
           {section === "endpoints" && <EndpointsPanel />}
