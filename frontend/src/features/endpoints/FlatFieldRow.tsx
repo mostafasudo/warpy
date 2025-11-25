@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { Trash2 } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -34,6 +35,7 @@ type FlatFieldRowProps = {
 }
 
 export const FlatFieldRow = ({ field, invalid, onChange, onRemove }: FlatFieldRowProps) => {
+  const actionRef = useRef<HTMLButtonElement>(null)
   const fixedEnabled = field.fixed !== undefined
   const fixedInputValue = typeof field.fixed === "boolean" ? "" : field.fixed ?? ""
   const validation = invalid ?? {}
@@ -157,12 +159,17 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove }: FlatFieldRo
         <AlertDialog>
           <ActionTooltip content="Remove this field">
             <AlertDialogTrigger asChild>
-              <Button size="sm" variant="ghost">
+              <Button size="sm" variant="ghost" data-testid={`remove-flat-field-${field.id}`}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
           </ActionTooltip>
-          <AlertDialogContent>
+          <AlertDialogContent
+            onOpenAutoFocus={(event) => {
+              event.preventDefault()
+              actionRef.current?.focus()
+            }}
+          >
             <form
               className="grid gap-4"
               onSubmit={(event) => {
@@ -176,7 +183,9 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove }: FlatFieldRo
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-                <AlertDialogAction type="submit">Remove</AlertDialogAction>
+                <AlertDialogAction ref={actionRef} type="submit">
+                  Remove
+                </AlertDialogAction>
               </AlertDialogFooter>
             </form>
           </AlertDialogContent>

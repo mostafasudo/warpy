@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { Plus, Trash2 } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -36,6 +37,7 @@ type BodyFieldRowProps = {
 }
 
 export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove }: BodyFieldRowProps) => {
+  const actionRef = useRef<HTMLButtonElement>(null)
   const fixedEnabled = field.fixed !== undefined
   const canNest = field.type === "object" || field.type === "array:object"
   const isPrimitive = field.type === "string" || field.type === "number" || field.type === "boolean"
@@ -182,12 +184,17 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove 
             <AlertDialog>
               <ActionTooltip content="Remove this field">
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="ghost">
+                  <Button size="sm" variant="ghost" data-testid={`remove-body-field-${field.id}`}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </AlertDialogTrigger>
               </ActionTooltip>
-              <AlertDialogContent>
+              <AlertDialogContent
+                onOpenAutoFocus={(event) => {
+                  event.preventDefault()
+                  actionRef.current?.focus()
+                }}
+              >
                 <form
                   className="grid gap-4"
                   onSubmit={(event) => {
@@ -203,7 +210,9 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove 
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-                    <AlertDialogAction type="submit">Remove</AlertDialogAction>
+                    <AlertDialogAction ref={actionRef} type="submit">
+                      Remove
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </form>
               </AlertDialogContent>
