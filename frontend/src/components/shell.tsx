@@ -68,8 +68,7 @@ const MobileGuard = () => (
       <div className="space-y-2">
         <p className="text-lg font-semibold">Use a larger screen</p>
         <p className="text-sm text-muted-foreground">
-          The dashboard is optimized for laptops and desktops. Continue there to configure environments, headers, and
-          endpoints.
+          This dashboard works best on larger screens. Switch to your laptop or desktop to continue.
         </p>
       </div>
       <p className="text-xs text-muted-foreground">You will stay signed in on this device.</p>
