@@ -29,7 +29,7 @@ const NavButton = ({ active, label, icon, onClick, collapsed }: NavButtonProps) 
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-200",
-        collapsed ? "justify-center" : "justify-start gap-3",
+        collapsed ? "justify-center gap-0" : "justify-start gap-3",
         active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
       )}
     >
@@ -110,7 +110,7 @@ export const Shell = () => {
             sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"
           )}
         >
-          <div className={cn("flex items-center gap-3 px-2", sidebarCollapsed && "justify-center px-0")}>
+          <div className={cn("flex items-center gap-3 px-2", sidebarCollapsed && "justify-center gap-0 px-0")}>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <Network className="h-5 w-5" />
             </div>

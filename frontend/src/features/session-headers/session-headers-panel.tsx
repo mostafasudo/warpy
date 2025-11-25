@@ -68,12 +68,16 @@ export const SessionHeadersPanel = () => {
   const headers = data?.headers ?? {}
   const sortedHeaders = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))
   const trimmedHeaderName = headerForm.name.trim()
+  const targetHeaderName = trimmedHeaderName.toLowerCase()
+  const editingHeaderName = headerForm.editingKey?.toLowerCase()
   const duplicateHeaderName =
     headerDialogOpen &&
     !headerSubmitting &&
     Boolean(
       trimmedHeaderName &&
-        Object.keys(headers).some((key) => key === trimmedHeaderName && key !== headerForm.editingKey)
+        Object.keys(headers).some(
+          (key) => key.toLowerCase() === targetHeaderName && key.toLowerCase() !== editingHeaderName
+        )
     )
   const canSubmit = Boolean(trimmedHeaderName && headerForm.key.trim() && !duplicateHeaderName)
 
@@ -267,7 +271,7 @@ export const SessionHeadersPanel = () => {
           </Table>
         </div>
       </PanelShell>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <form
           className="grid gap-4"
           onSubmit={(event) => {

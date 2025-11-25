@@ -31,6 +31,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { ActionTooltip } from "@/components/action-tooltip"
 import { PanelShell } from "@/components/panel-shell"
 import { useConfigQuery } from "@/queries/use-config"
@@ -177,8 +178,15 @@ export const BaseUrlsPanel = () => {
                   return (
                     <TableRow key={name}>
                       <TableCell className="w-32">
-                        <div className="truncate font-medium capitalize" title={name}>
-                          {name}
+                        <div className="flex items-center gap-2">
+                          <div className="truncate font-medium capitalize" title={name}>
+                            {name}
+                          </div>
+                          {isProtected ? (
+                            <Badge variant="secondary" className="px-2 py-0 text-[10px]">
+                              Default
+                            </Badge>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[340px]">
@@ -266,7 +274,7 @@ export const BaseUrlsPanel = () => {
           </Table>
         </div>
       </PanelShell>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <form
           className="grid gap-4"
           onSubmit={(event) => {
