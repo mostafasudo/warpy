@@ -40,6 +40,11 @@ PYTHONPATH=app python3 -m pytest
 PYTHONPATH=app python3 -m pytest tests/test_health.py
 ```
 
+Migrations (run from `backend`):
+- `alembic upgrade head` applies pending migrations.
+- `alembic revision --autogenerate -m "message"` generates a migration from model diffs.
+- `alembic revision -m "message"` creates an empty migration to edit manually.
+
 ## Docker Setup
 Copy `.env.example` to `.env` (root) and fill in any required keys. The sample values align with the backend and frontend `.env.example` files.
 
@@ -47,6 +52,8 @@ Build and start the full stack:
 ```sh
 docker compose up --build
 ```
+
+If using compose, run the same Alembic commands inside the backend container.
 
 Services:
 - Frontend (compose): http://localhost:5173

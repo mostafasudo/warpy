@@ -31,7 +31,7 @@
 - **Unit test TS:** `pnpm jest path/to/file.test.tsx --coverage`
 - **Py tests:** `pytest path/to/test_*.py -q`
 - **Py lint/format** (if configured): `ruff check --fix path/` · `black path/` · `mypy path/`
-- **Migrations:** `alembic revision --autogenerate -m "..."` (generate only)
+- **Migrations:** `alembic upgrade head` (apply) · `alembic revision --autogenerate -m "..."` (generate from models) · `alembic revision -m "..."` (empty draft)
 - **Full builds** only when explicitly asked.
 
 ## Safety & Permissions
