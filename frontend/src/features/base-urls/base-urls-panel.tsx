@@ -37,7 +37,7 @@ import { useConfigQuery } from "@/queries/use-config"
 import { useSaveConfig } from "@/queries/use-save-config"
 import { configSelectors, useConfigUiStore } from "@/stores/config-ui"
 import { toastSelectors, useToastStore } from "@/stores/toast"
-import { Trash2, Pencil, Plus } from "lucide-react"
+import { CornerDownLeft, Trash2, Pencil, Plus } from "lucide-react"
 
 const requiredEnvironments = new Set(["local", "production"])
 
@@ -316,6 +316,7 @@ export const BaseUrlsPanel = () => {
               data-testid="save-base-env"
             >
               {baseForm.editingKey ? "Update environment" : "Add environment"}
+              <CornerDownLeft className="h-4 w-4" />
             </Button>
           </DialogFooter>
         </form>

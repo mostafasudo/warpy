@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Plus } from "lucide-react"
+import { CornerDownLeft, Plus } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { Badge } from "@/components/ui/badge"
@@ -102,6 +102,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
           </Button>
           <Button size="sm" onClick={handleSave} disabled={isSaving} data-testid="save-endpoint">
             {editing ? "Update" : "Create"}
+            <CornerDownLeft className="h-4 w-4" />
           </Button>
         </div>
       </div>

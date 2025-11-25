@@ -45,7 +45,7 @@ import { useSaveConfig } from "@/queries/use-save-config"
 import { configSelectors, useConfigUiStore } from "@/stores/config-ui"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import { type StorageSource } from "@/types"
-import { Trash2, Pencil, Plus } from "lucide-react"
+import { CornerDownLeft, Trash2, Pencil, Plus } from "lucide-react"
 
 const storageLabels: Record<StorageSource, string> = {
   localStorage: "Local storage",
@@ -332,6 +332,7 @@ export const SessionHeadersPanel = () => {
               data-testid="save-header"
             >
               {headerForm.editingKey ? "Update header" : "Add header"}
+              <CornerDownLeft className="h-4 w-4" />
             </Button>
           </DialogFooter>
         </form>
