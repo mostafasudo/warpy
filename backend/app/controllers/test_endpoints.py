@@ -41,15 +41,22 @@ def auth_headers():
     return {"Authorization": "Bearer token"}
 
 
+def build_tool(name: str, description: str):
+    return {
+        "type": "function",
+        "function": {"name": name, "description": description, "parameters": {"type": "object", "properties": {}}}
+    }
+
+
 def test_endpoint_crud_flow(client: TestClient):
-    payload = {"path": "/users/{id}", "method": "GET", "tool": {"name": "getUser"}}
+    payload = {"path": "/users/{id}", "method": "GET", "tool": build_tool("getUser", "Fetch user")}
     response = client.post("/endpoints", json=payload, headers=auth_headers())
     assert response.status_code == 201
     created = response.json()
     endpoint_id = created["id"]
     UUID(endpoint_id)
     assert created["method"] == "GET"
-    assert created["tool"] == {"name": "getUser"}
+    assert created["tool"] == build_tool("getUser", "Fetch user")
 
     response = client.get("/endpoints", headers=auth_headers())
     assert response.status_code == 200
@@ -59,13 +66,13 @@ def test_endpoint_crud_flow(client: TestClient):
     assert data["pageSize"] == 20
     assert data["items"][0]["id"] == endpoint_id
 
-    update_payload = {"path": "/users", "method": "POST", "tool": {"name": "createUser"}}
+    update_payload = {"path": "/users", "method": "POST", "tool": build_tool("createUser", "Create user")}
     response = client.put(f"/endpoints/{endpoint_id}", json=update_payload, headers=auth_headers())
     assert response.status_code == 200
     updated = response.json()
     assert updated["path"] == "/users"
     assert updated["method"] == "POST"
-    assert updated["tool"] == {"name": "createUser"}
+    assert updated["tool"] == build_tool("createUser", "Create user")
 
     response = client.delete(f"/endpoints/{endpoint_id}", headers=auth_headers())
     assert response.status_code == 204
@@ -74,6 +81,35 @@ def test_endpoint_crud_flow(client: TestClient):
     data = response.json()
     assert data["total"] == 0
     assert data["items"] == []
+
+
+def test_search_filters_endpoints(client: TestClient):
+    entries = [
+        {"path": "/users/{id}", "method": "GET", "tool": build_tool("getUser", "Fetch profile")},
+        {"path": "/orders", "method": "POST", "tool": build_tool("createOrder", "Submit order for user")},
+        {"path": "/sessions", "method": "GET", "tool": build_tool("listSessions", "List active sessions")}
+    ]
+    for entry in entries:
+        response = client.post("/endpoints", json=entry, headers=auth_headers())
+        assert response.status_code == 201
+
+    response = client.get("/endpoints?search=order", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["path"] == "/orders"
+
+    response = client.get("/endpoints?search=sess", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["tool"]["function"]["name"] == "listSessions"
+
+    response = client.get("/endpoints?search=ofile", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["path"] == "/users/{id}"
 
 
 def test_invalid_pagination_returns_error(client: TestClient):

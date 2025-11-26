@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react"
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { PanelShell } from "@/components/panel-shell"
@@ -25,6 +25,7 @@ import {
   TableRow
 } from "@/components/ui/table"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -44,23 +45,33 @@ import { methodTone } from "./constants"
 export const EndpointsPanel = () => {
   const page = useEndpointsUiStore(endpointsUiSelectors.page)
   const pageSize = useEndpointsUiStore(endpointsUiSelectors.pageSize)
+  const search = useEndpointsUiStore(endpointsUiSelectors.search)
+  const searchDraft = useEndpointsUiStore(endpointsUiSelectors.searchDraft)
   const setPage = useEndpointsUiStore(endpointsUiSelectors.setPage)
+  const setSearch = useEndpointsUiStore(endpointsUiSelectors.setSearch)
+  const setSearchDraft = useEndpointsUiStore(endpointsUiSelectors.setSearchDraft)
   const openCreate = useEndpointsUiStore(endpointsUiSelectors.openCreate)
   const openEdit = useEndpointsUiStore(endpointsUiSelectors.openEdit)
   const closeEditor = useEndpointsUiStore(endpointsUiSelectors.closeEditor)
   const editorOpen = useEndpointsUiStore(endpointsUiSelectors.editorOpen)
   const editingId = useEndpointsUiStore(endpointsUiSelectors.editingId)
-  const { data, isPending } = useEndpointsQuery(page, pageSize)
+  const { data, isPending, isFetching } = useEndpointsQuery(page, pageSize, search)
   const endpoints = useMemo(() => data?.items ?? [], [data])
   const total = data?.total ?? 0
   const { mutateAsync: deleteEndpoint, isPending: isDeleting } = useDeleteEndpoint()
-  const { mutateAsync: createEndpoint, isPending: isCreating } = useCreateEndpoint(pageSize)
+  const { mutateAsync: createEndpoint, isPending: isCreating } = useCreateEndpoint()
   const { mutateAsync: updateEndpoint, isPending: isUpdating } = useUpdateEndpoint()
   const hydrate = useEndpointBuilderStore(endpointBuilderActions.hydrate)
   const resetBuilder = useEndpointBuilderStore(endpointBuilderActions.reset)
   const addToast = useToastStore(toastSelectors.addToast)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setSearch(searchDraft)
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [searchDraft, setSearch])
 
   useEffect(() => {
     if (!editorOpen) {
@@ -75,6 +86,12 @@ export const EndpointsPanel = () => {
       resetBuilder()
     }
   }, [editorOpen, editingId, endpoints, hydrate, resetBuilder])
+
+  useEffect(() => {
+    if (!isPending && page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [isPending, page, setPage, totalPages])
 
   const handleSave = async () => {
     const builderState = useEndpointBuilderStore.getState()
@@ -128,11 +145,21 @@ export const EndpointsPanel = () => {
       }
     >
       <div className="space-y-3 rounded-2xl border border-border/70 p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-muted-foreground">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex gap-2">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+            <p className="text-sm font-medium text-muted-foreground">
+              Page {page} of {totalPages}
+            </p>
+            <Input
+              placeholder="Search endpoints"
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              className="w-full md:w-72 transition-shadow focus-visible:shadow-[0_0_0_2px_var(--ring)]"
+              data-testid="endpoint-search"
+              suffix={isFetching ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+            />
+          </div>
+          <div className="flex items-center gap-2 self-end md:self-auto">
             <ActionTooltip content="Previous page">
               <Button
                 size="icon"

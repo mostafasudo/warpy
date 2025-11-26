@@ -84,8 +84,14 @@ export const apiClient = {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
-  listEndpoints: (page: number, pageSize: number) =>
-    request<PaginatedEndpoints>(`/endpoints?page=${page}&page_size=${pageSize}`),
+  listEndpoints: (page: number, pageSize: number, search: string) => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+    const term = search.trim()
+    if (term) {
+      params.set("search", term)
+    }
+    return request<PaginatedEndpoints>(`/endpoints?${params.toString()}`)
+  },
   createEndpoint: (payload: EndpointPayload) =>
     request<EndpointResponse>("/endpoints", {
       method: "POST",

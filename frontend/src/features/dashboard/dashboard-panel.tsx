@@ -36,7 +36,7 @@ const StatCard = ({ label, helper, icon, value, loading }: StatCardProps) => (
 
 export const DashboardPanel = () => {
   const { data: config, isPending: isConfigPending } = useConfigQuery()
-  const { data: endpoints, isPending: isEndpointsPending } = useEndpointsQuery(1, 1)
+  const { data: endpoints, isPending: isEndpointsPending } = useEndpointsQuery(1, 1, "")
   const setSection = useNavigationStore(navigationSelectors.setSection)
 
   const environmentCount = Object.keys(config?.baseUrl ?? {}).length

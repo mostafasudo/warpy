@@ -4,10 +4,10 @@ import { apiClient } from "@/api/client"
 
 export const endpointsQueryKey = ["endpoints"] as const
 
-export const useEndpointsQuery = (page: number, pageSize: number) =>
+export const useEndpointsQuery = (page: number, pageSize: number, search: string) =>
   useQuery({
-    queryKey: [...endpointsQueryKey, page, pageSize],
-    queryFn: () => apiClient.listEndpoints(page, pageSize),
+    queryKey: [...endpointsQueryKey, page, pageSize, search],
+    queryFn: () => apiClient.listEndpoints(page, pageSize, search),
     placeholderData: keepPreviousData,
     retry: 1
   })

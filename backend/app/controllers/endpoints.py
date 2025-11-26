@@ -17,11 +17,12 @@ router = APIRouter()
 def read_endpoints(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, alias="page_size"),
+    search: str | None = Query(None, min_length=1, max_length=128),
     session: Session = Depends(get_session),
     clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> PaginatedEndpointsResponse:
     try:
-        items, total = list_endpoints(session, page, page_size)
+        items, total = list_endpoints(session, page, page_size, search)
         log_info("EndpointsController", "read_endpoints", "Endpoints fetched", user_id=clerk_session.user_id)
         return PaginatedEndpointsResponse(items=items, page=page, page_size=page_size, total=total)
     except HTTPException:
