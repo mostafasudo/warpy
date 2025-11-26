@@ -297,7 +297,7 @@ export const EndpointsPanel = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                    Create your first endpoint to start defining your API.
+                    Add endpoints to give your agent access to them.
                   </TableCell>
                 </TableRow>
               )}
