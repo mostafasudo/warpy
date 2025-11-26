@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals"
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -73,5 +73,20 @@ describe("EndpointEditor validation UI", () => {
     expect(screen.getByTestId(`field-${queryId}-description`).className).toContain("border-destructive")
     expect(screen.getByTestId(`body-field-${bodyId}-description`).className).toContain("border-destructive")
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it("returns focus to add headers after confirming removal with enter", async () => {
+    const { user } = renderEditor(jest.fn())
+
+    await user.click(screen.getByTestId("add-headers"))
+    const headerId = useEndpointBuilderStore.getState().headers[0].id
+
+    await user.click(screen.getByTestId(`remove-flat-field-${headerId}`))
+    const confirmButton = await screen.findByRole("button", { name: "Remove" })
+    confirmButton.focus()
+    await user.keyboard("{Enter}")
+
+    await waitFor(() => expect(screen.queryByTestId(`remove-flat-field-${headerId}`)).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("add-headers")))
   })
 })

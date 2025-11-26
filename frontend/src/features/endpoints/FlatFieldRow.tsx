@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { type RefObject, useRef } from "react"
 import { Trash2 } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -32,13 +32,18 @@ type FlatFieldRowProps = {
   invalid?: FieldValidation
   onChange: (patch: Partial<FlatField>) => void
   onRemove: () => void
+  focusRef?: RefObject<HTMLButtonElement | null>
 }
 
-export const FlatFieldRow = ({ field, invalid, onChange, onRemove }: FlatFieldRowProps) => {
+export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: FlatFieldRowProps) => {
   const actionRef = useRef<HTMLButtonElement>(null)
   const fixedEnabled = field.fixed !== undefined
   const fixedInputValue = typeof field.fixed === "boolean" ? "" : field.fixed ?? ""
   const validation = invalid ?? {}
+  const handleRemove = () => {
+    onRemove()
+    queueMicrotask(() => focusRef?.current?.focus())
+  }
 
   const renderDetailInput = () => {
     const detailInvalid = fixedEnabled ? validation.fixed : validation.description
@@ -174,7 +179,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove }: FlatFieldRo
               className="grid gap-4"
               onSubmit={(event) => {
                 event.preventDefault()
-                onRemove()
+                handleRemove()
               }}
             >
               <AlertDialogHeader>

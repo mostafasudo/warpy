@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { type RefObject, useRef } from "react"
 import { Plus, Trash2 } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -34,15 +34,20 @@ type BodyFieldRowProps = {
   onUpdate: (id: string, patch: Partial<BodyField>) => void
   onAdd: (parentId: string | null, type?: BodyField["type"]) => void
   onRemove: (id: string) => void
+  focusRef?: RefObject<HTMLButtonElement | null>
 }
 
-export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove }: BodyFieldRowProps) => {
+export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove, focusRef }: BodyFieldRowProps) => {
   const actionRef = useRef<HTMLButtonElement>(null)
   const fixedEnabled = field.fixed !== undefined
   const canNest = field.type === "object" || field.type === "array:object"
   const isPrimitive = field.type === "string" || field.type === "number" || field.type === "boolean"
   const indent = depth * 16
   const validation = invalid?.[field.id] ?? {}
+  const handleRemove = () => {
+    onRemove(field.id)
+    queueMicrotask(() => focusRef?.current?.focus())
+  }
 
   const handleTypeChange = (type: BodyField["type"]) => {
     const newFixed =
@@ -199,7 +204,7 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove 
                   className="grid gap-4"
                   onSubmit={(event) => {
                     event.preventDefault()
-                    onRemove(field.id)
+                    handleRemove()
                   }}
                 >
                   <AlertDialogHeader>
@@ -231,6 +236,7 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove 
               onUpdate={onUpdate}
               onAdd={onAdd}
               onRemove={onRemove}
+              focusRef={focusRef}
             />
           ))}
         </div>

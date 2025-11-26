@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -56,6 +56,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
   const addBodyField = useEndpointBuilderStore(endpointBuilderActions.addBodyField)
   const updateBodyField = useEndpointBuilderStore(endpointBuilderActions.updateBodyField)
   const removeBodyField = useEndpointBuilderStore(endpointBuilderActions.removeBodyField)
+  const addBodyFieldRef = useRef<HTMLButtonElement>(null)
 
   const [showValidation, setShowValidation] = useState(false)
 
@@ -261,7 +262,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium">Body</p>
             <ActionTooltip content="Add a top-level body field">
-              <Button size="sm" variant="outline" onClick={() => addBodyField(null)}>
+              <Button ref={addBodyFieldRef} size="sm" variant="outline" onClick={() => addBodyField(null)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add field
               </Button>
@@ -279,6 +280,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
                     onUpdate={updateBodyField}
                     onAdd={addBodyField}
                     onRemove={removeBodyField}
+                    focusRef={addBodyFieldRef}
                   />
                 ))}
               </div>
