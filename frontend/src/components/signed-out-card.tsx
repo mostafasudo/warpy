@@ -10,8 +10,8 @@ export const SignedOutCard = () => (
       <div className="w-full max-w-md rounded-2xl border border-border bg-card/70 p-8 shadow-sm">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="space-y-2">
-            <h1 className="text-xl font-semibold">API workspace</h1>
-            <p className="text-sm text-muted-foreground">Sign in to set up environments, headers, and endpoints.</p>
+            <h1 className="text-xl font-semibold">Chat to API</h1>
+            <p className="text-sm text-muted-foreground">Sign in to continue</p>
           </div>
           <ThemeToggle />
         </div>
