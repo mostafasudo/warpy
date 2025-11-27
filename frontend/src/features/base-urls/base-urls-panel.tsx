@@ -98,12 +98,12 @@ export const BaseUrlsPanel = () => {
     try {
       await saveConfig({ baseUrl: nextBase, headers })
       addToast({ title: "Environment saved", description: `${targetName} updated`, variant: "success" })
-      closeBaseDialog()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save environment"
       addToast({ title: "Save failed", description: message, variant: "error" })
     } finally {
       setBaseSubmitting(false)
+      closeBaseDialog()
     }
   }
 

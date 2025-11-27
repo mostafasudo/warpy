@@ -114,12 +114,12 @@ export const SessionHeadersPanel = () => {
     try {
       await saveConfig({ baseUrl, headers: nextHeaders })
       addToast({ title: "Header saved", description: `${name} updated`, variant: "success" })
-      closeHeaderDialog()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save header"
       addToast({ title: "Save failed", description: message, variant: "error" })
     } finally {
       setHeaderSubmitting(false)
+      closeHeaderDialog()
     }
   }
 

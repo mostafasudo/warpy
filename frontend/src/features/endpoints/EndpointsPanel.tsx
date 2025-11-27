@@ -109,10 +109,11 @@ export const EndpointsPanel = () => {
         addToast({ title: "Endpoint created", description: payload.tool.function.name, variant: "success" })
         setPage(1)
       }
-      closeEditor()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save endpoint"
       addToast({ title: "Save failed", description: message, variant: "error" })
+    } finally {
+      closeEditor()
     }
   }
 
