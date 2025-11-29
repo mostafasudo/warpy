@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .controllers.agent import router as agent_router
 from .controllers.config import router as config_router
 from .controllers.endpoints import router as endpoints_router
 from .controllers.health import router as health_router
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(session_router)
     app.include_router(config_router)
     app.include_router(endpoints_router)
+    app.include_router(agent_router)
 
     return app
 

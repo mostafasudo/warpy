@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Endpoint
 from ..schemas.endpoint import EndpointPayload
+from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
 
 
 def _validate_tool(tool: dict[str, Any]) -> None:
@@ -77,6 +78,7 @@ def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) ->
     endpoint = Endpoint(user_id=user_id, path=payload.path, method=payload.method, tool=payload.tool)
     session.add(endpoint)
     session.flush()
+    upsert_endpoint_embedding(session, endpoint.id, user_id)
     return endpoint
 
 
@@ -88,10 +90,12 @@ def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: 
     endpoint.tool = payload.tool
     endpoint.updated_at = func.now()
     session.flush()
+    upsert_endpoint_embedding(session, endpoint.id, user_id)
     return endpoint
 
 
 def delete_endpoint(session: Session, endpoint_id: UUID, user_id: str) -> None:
     endpoint = _get_endpoint(session, endpoint_id, user_id)
+    delete_endpoint_embedding(session, endpoint_id)
     session.delete(endpoint)
     session.flush()
