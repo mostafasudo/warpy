@@ -15,14 +15,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { type FlatField } from "@/stores/endpoint-builder"
 import type { FieldValidation } from "./validation"
@@ -38,7 +32,7 @@ type FlatFieldRowProps = {
 export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: FlatFieldRowProps) => {
   const actionRef = useRef<HTMLButtonElement>(null)
   const fixedEnabled = field.fixed !== undefined
-  const fixedInputValue = typeof field.fixed === "boolean" ? "" : field.fixed ?? ""
+  const fixedInputValue = String(field.fixed ?? "")
   const validation = invalid ?? {}
   const handleRemove = () => {
     onRemove()
@@ -48,102 +42,44 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
   const renderDetailInput = () => {
     const detailInvalid = fixedEnabled ? validation.fixed : validation.description
     if (fixedEnabled) {
-      if (field.type === "boolean") {
-        return (
-          <Select
-            value={String(field.fixed ?? false)}
-            onValueChange={(value) => onChange({ fixed: value === "true" })}
-          >
-            <SelectTrigger
-              className={cn(
-                "w-full sm:w-48",
-                detailInvalid && "border-destructive focus-visible:ring-destructive"
-              )}
-              data-testid={`field-${field.id}-fixed`}
-            >
-              <SelectValue placeholder="Fixed value" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="true">true</SelectItem>
-              <SelectItem value="false">false</SelectItem>
-            </SelectContent>
-          </Select>
-        )
-      }
       return (
         <Input
           placeholder="Fixed value"
-          type={field.type === "number" ? "number" : "text"}
           value={fixedInputValue}
-          onChange={(event) =>
-            onChange({
-              fixed: field.type === "number" ? Number(event.target.value) : event.target.value
-            })
-          }
-          className={cn(
-            "w-full sm:w-48",
-            detailInvalid && "border-destructive focus-visible:ring-destructive"
-          )}
+          onChange={(event) => onChange({ fixed: event.target.value })}
+          className={cn(detailInvalid && "border-destructive focus-visible:ring-destructive")}
           data-testid={`field-${field.id}-fixed`}
         />
       )
     }
     return (
-      <Input
+      <Textarea
         placeholder="Description"
         value={field.description}
         onChange={(event) => onChange({ description: event.target.value })}
         data-testid={`field-${field.id}-description`}
+        rows={2}
         className={cn(
-          "w-full sm:w-48",
+          "resize-none",
           detailInvalid && "border-destructive focus-visible:ring-destructive"
         )}
       />
     )
   }
 
-  const handleTypeChange = (type: FlatField["type"]) => {
-    const base: Partial<FlatField> = { type }
-    if (fixedEnabled) {
-      if (type === "boolean") {
-        base.fixed = Boolean(field.fixed)
-      } else if (type === "number") {
-        const numeric = Number(field.fixed)
-        base.fixed = Number.isNaN(numeric) ? 0 : numeric
-      } else {
-        base.fixed = typeof field.fixed === "string" ? field.fixed : ""
-      }
-    }
-    onChange(base)
-  }
-
   return (
     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
-      <div className="grid gap-2 sm:grid-cols-[1.1fr_200px]">
-        <div className="space-y-2">
-          <Input
-            placeholder="Name"
-            value={field.name}
-            onChange={(event) => onChange({ name: event.target.value })}
-            data-testid={`field-${field.id}-name`}
-            className={cn(
-              validation.name && "border-destructive focus-visible:ring-destructive"
-            )}
-          />
-          {renderDetailInput()}
-        </div>
-        <div className="space-y-2">
-          <Select value={field.type} onValueChange={(value) => handleTypeChange(value as FlatField["type"])}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="string">string</SelectItem>
-              <SelectItem value="number">number</SelectItem>
-              <SelectItem value="boolean">boolean</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="space-y-2">
+        <Input
+          placeholder="Name"
+          value={field.name}
+          onChange={(event) => onChange({ name: event.target.value })}
+          data-testid={`field-${field.id}-name`}
+          className={cn(
+            validation.name && "border-destructive focus-visible:ring-destructive"
+          )}
+        />
+        {renderDetailInput()}
       </div>
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-2">
@@ -153,9 +89,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
         <span className="inline-flex items-center gap-2">
           <Switch
             checked={fixedEnabled}
-            onCheckedChange={(checked) =>
-              onChange({ fixed: checked ? (field.type === "boolean" ? false : "") : undefined })
-            }
+            onCheckedChange={(checked) => onChange({ fixed: checked ? "" : undefined })}
           />
           Fixed value
         </span>
