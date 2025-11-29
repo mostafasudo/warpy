@@ -84,7 +84,7 @@ export const apiClient = {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
-  listEndpoints: (page: number, pageSize: number, search: string) => {
+  listEndpoints: (page: number, pageSize: number, search = "") => {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
     const term = search.trim()
     if (term) {

@@ -10,30 +10,32 @@ from ..schemas.config import ConfigPayload, ConfigResponse, SessionHeaderPayload
 REQUIRED_ENVIRONMENTS = {"local", "production"}
 
 
-def ensure_required_environments(session: Session, user_id: str) -> None:
-    dialect = session.bind.dialect.name if session.bind else ""
-    values = [{"user_id": user_id, "name": name, "base_url": ""} for name in REQUIRED_ENVIRONMENTS]
+def _dialect_name(session: Session) -> str:
+    return session.bind.dialect.name if session.bind else ""
+
+
+def _conflict_insert(model, dialect: str):
     if dialect == "postgresql":
         from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-        statement = pg_insert(Environment).values(values)
-        statement = statement.on_conflict_do_nothing(index_elements=[Environment.user_id, Environment.name])
-        session.execute(statement)
-    elif dialect == "sqlite":
+        return pg_insert(model)
+    if dialect == "sqlite":
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        return sqlite_insert(model)
+    return None
 
-        statement = sqlite_insert(Environment).values(values)
-        statement = statement.on_conflict_do_nothing(index_elements=[Environment.user_id, Environment.name])
-        session.execute(statement)
+
+def ensure_required_environments(session: Session, user_id: str) -> None:
+    dialect = _dialect_name(session)
+    values = [{"user_id": user_id, "name": name, "base_url": ""} for name in REQUIRED_ENVIRONMENTS]
+    statement = _conflict_insert(Environment, dialect)
+    if statement is not None:
+        session.execute(
+            statement.values(values).on_conflict_do_nothing(index_elements=[Environment.user_id, Environment.name])
+        )
     else:
-        existing = {
-            name for name in session.execute(
-                select(Environment.name).where(Environment.user_id == user_id)
-            ).scalars().all()
-        }
-        for name in REQUIRED_ENVIRONMENTS:
-            if name not in existing:
-                session.add(Environment(user_id=user_id, name=name, base_url=""))
+        existing = set(session.execute(select(Environment.name).where(Environment.user_id == user_id)).scalars().all())
+        for name in REQUIRED_ENVIRONMENTS - existing:
+            session.add(Environment(user_id=user_id, name=name, base_url=""))
     session.flush()
 
 
@@ -49,27 +51,16 @@ def _upsert_environments(session: Session, user_id: str, base_urls: dict[str, st
 
     ensure_required_environments(session, user_id)
 
-    dialect = session.bind.dialect.name if session.bind else ""
+    dialect = _dialect_name(session)
     values = [{"user_id": user_id, "name": name, "base_url": url} for name, url in base_urls.items()]
-
-    if dialect == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-        statement = pg_insert(Environment).values(values)
-        statement = statement.on_conflict_do_update(
-            index_elements=[Environment.user_id, Environment.name],
-            set_={"base_url": statement.excluded.base_url, "updated_at": func.now()}
+    statement = _conflict_insert(Environment, dialect)
+    if statement is not None:
+        session.execute(
+            statement.values(values).on_conflict_do_update(
+                index_elements=[Environment.user_id, Environment.name],
+                set_={"base_url": statement.excluded.base_url, "updated_at": func.now()}
+            )
         )
-        session.execute(statement)
-    elif dialect == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-        statement = sqlite_insert(Environment).values(values)
-        statement = statement.on_conflict_do_update(
-            index_elements=[Environment.user_id, Environment.name],
-            set_={"base_url": statement.excluded.base_url, "updated_at": func.now()}
-        )
-        session.execute(statement)
     else:
         names = list(base_urls.keys())
         existing = {

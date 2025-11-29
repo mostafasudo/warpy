@@ -43,14 +43,13 @@ def _search_condition(search: str | None):
     normalized_path = func.lower(func.coalesce(Endpoint.path, ""))
     normalized_name = func.lower(func.coalesce(tool_name, ""))
     normalized_description = func.lower(func.coalesce(tool_description, ""))
-    def make_predicate(term: str):
+    predicates = []
+    for term in terms:
         pattern = f"%{term}%"
-        return or_(
-            normalized_path.like(pattern),
-            normalized_name.like(pattern),
-            normalized_description.like(pattern)
+        predicates.append(
+            or_(normalized_path.like(pattern), normalized_name.like(pattern), normalized_description.like(pattern))
         )
-    return and_(*[make_predicate(term) for term in terms])
+    return and_(*predicates)
 
 
 def list_endpoints(session: Session, user_id: str, page: int, page_size: int, search: str | None = None) -> tuple[list[Endpoint], int]:

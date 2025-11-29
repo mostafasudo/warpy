@@ -32,6 +32,17 @@ describe("apiClient", () => {
     await expect(apiClient.health()).rejects.toThrow("Request failed with 502")
   })
 
+  it("throws when response is empty", async () => {
+    const emptyResponse = {
+      ok: true,
+      status: 200,
+      text: async () => ""
+    } as Response
+    mockFetch(emptyResponse)
+
+    await expect(apiClient.getConfig()).rejects.toThrow("Expected response body")
+  })
+
   it("attaches session token when available", async () => {
     const fetchSpy = jest
       .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
@@ -121,6 +132,18 @@ describe("apiClient", () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/endpoints/endpoint-1", "http://api.test"),
       expect.objectContaining({ method: "DELETE" })
+    )
+  })
+
+  it("applies trimmed search term", async () => {
+    const fetchSpy = jest.spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+    fetchSpy.mockImplementation(() => Promise.resolve(jsonResponse({ items: [], page: 1, pageSize: 10, total: 0 })))
+
+    await apiClient.listEndpoints(1, 10, "  users ")
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/endpoints?page=1&page_size=10&search=users", "http://api.test"),
+      expect.any(Object)
     )
   })
 })

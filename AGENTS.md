@@ -11,6 +11,7 @@
 - **State:** server cache with **@tanstack/react-query**; local state with **zustand** (small slices + selectors).
 - **Data fetching:** never in components; use typed client modules; **one file per mutation hook**.
 - **Tests:** **Jest + Testing Library**; prefer `findBy*` after render; add `data-testid` when needed; **100% coverage**.
+- Keep **100% test coverage** for frontend and backend; when changing any existing file, adjust tests to stay green.
 - **Backend tests (local):** activate `backend/.venv` then `python3 -m pytest app`
 - **Backend tests (docker):** `docker compose exec backend python3 -m pytest app`
 - **Widget `<script>`:** tiny, idempotent init, no globals, no CSS bleed, works without the dashboard.

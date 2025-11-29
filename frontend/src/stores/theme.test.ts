@@ -41,4 +41,12 @@ describe("theme store", () => {
     expect(document.cookie).toContain("theme=dark")
     expect(document.documentElement.dataset.theme).toBe("dark")
   })
+
+  it("handles environments without document", async () => {
+    const originalDocument = global.document
+    ;(global as any).document = undefined
+    const { themeSelectors, useThemeStore } = await loadThemeStore()
+    expect(themeSelectors.theme(useThemeStore.getState())).toBe("dark")
+    ;(global as any).document = originalDocument
+  })
 })
