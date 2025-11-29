@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..core.logger import log_info
@@ -49,6 +49,9 @@ def list_conversations(session: Session, agent_id: UUID) -> list[Conversation]:
 
 
 def save_message(session: Session, conversation_id: UUID, role: str, content: str) -> Message:
+    conversation = session.get(Conversation, conversation_id)
+    if conversation:
+        conversation.updated_at = func.now()
     message = Message(conversation_id=conversation_id, role=role, content=content)
     session.add(message)
     session.flush()

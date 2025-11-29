@@ -137,12 +137,12 @@ async def chat_route(
         conversation = get_conversation(session, conversation_id, clerk_session.user_id)
         if not conversation:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-        
-        user_message = save_message(session, conversation_id, "user", payload.message)
-        
+
         messages = get_messages(session, conversation_id)
-        history = [{"role": m.role, "content": m.content} for m in messages[:-1]]
-        
+        history = [{"role": m.role, "content": m.content} for m in messages]
+
+        user_message = save_message(session, conversation_id, "user", payload.message)
+
         executor = AgentExecutor(session, clerk_session.user_id)
         response_content = await executor.run(payload.message, history)
         

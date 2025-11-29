@@ -7,8 +7,8 @@ rq==2.6.0
 pydantic-settings==2.11.0
 clerk-backend-api
 alembic==1.17.2
-langchain>=0.3.0
-langchain-openai>=0.2.0
-pgvector>=0.3.0
-tiktoken>=0.8.0
-httpx>=0.27.0
+langchain==0.3.12
+langchain-openai==0.2.14
+pgvector==0.3.6
+tiktoken==0.8.0
+httpx==0.28.1

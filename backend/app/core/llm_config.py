@@ -12,8 +12,10 @@ class LLMConfig:
     top_k_max: int = 10
 
     def calculate_top_k(self, total_endpoints: int) -> int:
+        if total_endpoints <= 0:
+            return 0
         calculated = int(total_endpoints * self.top_k_ratio)
-        return max(self.top_k_min, min(calculated, self.top_k_max))
+        return min(total_endpoints, max(self.top_k_min, min(calculated, self.top_k_max)))
 
 
 llm_config = LLMConfig()

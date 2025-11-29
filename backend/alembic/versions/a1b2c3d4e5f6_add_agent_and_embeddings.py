@@ -1,7 +1,7 @@
 """add agent and embeddings
 
 Revision ID: a1b2c3d4e5f6
-Revises: ed2ee7ad1a42
+Revises: 0c0cf44b8110
 Create Date: 2025-11-29 12:00:00.000000
 
 """

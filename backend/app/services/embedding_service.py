@@ -63,6 +63,7 @@ def upsert_endpoint_embedding(session: Session, endpoint_id: UUID, user_id: str)
     if existing:
         existing.embedding = embedding_vector
         existing.content_hash = content_hash
+        existing.user_id = user_id
         session.flush()
         log_info("EmbeddingService", "upsert_endpoint_embedding", "Embedding updated", endpoint_id=str(endpoint_id))
         return existing
