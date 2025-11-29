@@ -14,14 +14,14 @@ router = APIRouter()
 @router.get("/config", response_model=ConfigResponse)
 def read_config(
     session: Session = Depends(get_session),
-    _: ClerkSession = Depends(require_clerk_session)
+    clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> ConfigResponse:
     try:
-        return get_config(session)
+        return get_config(session, clerk_session.user_id)
     except HTTPException:
         raise
     except Exception as error:
-        log_error("ConfigController", "read_config", "Failed to fetch config", exc=error)
+        log_error("ConfigController", "read_config", "Failed to fetch config", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch config")
 
 
@@ -32,7 +32,7 @@ def replace_config(
     clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> ConfigResponse:
     try:
-        config = upsert_config(session, payload)
+        config = upsert_config(session, clerk_session.user_id, payload)
         log_info("ConfigController", "replace_config", "Config saved", user_id=clerk_session.user_id)
         return config
     except HTTPException:

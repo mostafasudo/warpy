@@ -22,7 +22,7 @@ def read_endpoints(
     clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> PaginatedEndpointsResponse:
     try:
-        items, total = list_endpoints(session, page, page_size, search)
+        items, total = list_endpoints(session, clerk_session.user_id, page, page_size, search)
         log_info("EndpointsController", "read_endpoints", "Endpoints fetched", user_id=clerk_session.user_id)
         return PaginatedEndpointsResponse(items=items, page=page, page_size=page_size, total=total)
     except HTTPException:
@@ -39,7 +39,7 @@ def create_endpoint_route(
     clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> EndpointResponse:
     try:
-        endpoint = create_endpoint(session, payload)
+        endpoint = create_endpoint(session, clerk_session.user_id, payload)
         log_info("EndpointsController", "create_endpoint", "Endpoint created", user_id=clerk_session.user_id)
         return endpoint
     except HTTPException:
@@ -57,7 +57,7 @@ def replace_endpoint(
     clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> EndpointResponse:
     try:
-        endpoint = update_endpoint(session, endpoint_id, payload)
+        endpoint = update_endpoint(session, endpoint_id, clerk_session.user_id, payload)
         log_info("EndpointsController", "replace_endpoint", "Endpoint updated", user_id=clerk_session.user_id)
         return endpoint
     except HTTPException:
@@ -74,7 +74,7 @@ def remove_endpoint(
     clerk_session: ClerkSession = Depends(require_clerk_session)
 ) -> None:
     try:
-        delete_endpoint(session, endpoint_id)
+        delete_endpoint(session, endpoint_id, clerk_session.user_id)
         log_info("EndpointsController", "remove_endpoint", "Endpoint deleted", user_id=clerk_session.user_id)
     except HTTPException:
         raise

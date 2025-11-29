@@ -26,9 +26,13 @@ class HttpMethod(str, enum.Enum):
 
 class Environment(Base):
     __tablename__ = "environments"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_environments_user_name"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(Text, unique=True, nullable=False)
+    user_id = Column(Text, nullable=False, index=True)
+    name = Column(Text, nullable=False)
     base_url = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -37,10 +41,11 @@ class Environment(Base):
 class SessionHeader(Base):
     __tablename__ = "session_headers"
     __table_args__ = (
-        UniqueConstraint("header_name", "source", "key", name="uq_session_headers_header_source_key"),
+        UniqueConstraint("user_id", "header_name", "source", "key", name="uq_session_headers_user_header_source_key"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
     header_name = Column(Text, nullable=False)
     source = Column(Enum(StorageSource, name="storage_source", native_enum=True, validate_strings=True), nullable=False)
     key = Column(Text, nullable=False)
@@ -51,10 +56,11 @@ class SessionHeader(Base):
 class Endpoint(Base):
     __tablename__ = "endpoints"
     __table_args__ = (
-        UniqueConstraint("path", "method", name="uq_endpoint_path_method"),
+        UniqueConstraint("user_id", "path", "method", name="uq_endpoint_user_path_method"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
     path = Column(Text, nullable=False)
     method = Column(Enum(HttpMethod, name="http_method", native_enum=True, validate_strings=True), nullable=False)
     tool = Column(json_type, nullable=False)

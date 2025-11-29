@@ -24,8 +24,8 @@ def _endpoint_condition(endpoint_id: UUID):
     return Endpoint.id == endpoint_id
 
 
-def _get_endpoint(session: Session, endpoint_id: UUID) -> Endpoint:
-    endpoint = session.scalar(select(Endpoint).where(_endpoint_condition(endpoint_id)))
+def _get_endpoint(session: Session, endpoint_id: UUID, user_id: str) -> Endpoint:
+    endpoint = session.scalar(select(Endpoint).where(and_(_endpoint_condition(endpoint_id), Endpoint.user_id == user_id)))
     if not endpoint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found")
     return endpoint
@@ -52,13 +52,14 @@ def _search_condition(search: str | None):
     return and_(*[make_predicate(term) for term in terms])
 
 
-def list_endpoints(session: Session, page: int, page_size: int, search: str | None = None) -> tuple[list[Endpoint], int]:
+def list_endpoints(session: Session, user_id: str, page: int, page_size: int, search: str | None = None) -> tuple[list[Endpoint], int]:
     if page < 1 or page_size < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid pagination parameters")
     condition = _search_condition(search)
-    count_query = select(func.count()).select_from(Endpoint)
+    count_query = select(func.count()).select_from(Endpoint).where(Endpoint.user_id == user_id)
     items_query = (
         select(Endpoint)
+        .where(Endpoint.user_id == user_id)
         .order_by(Endpoint.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
@@ -71,17 +72,17 @@ def list_endpoints(session: Session, page: int, page_size: int, search: str | No
     return items, total
 
 
-def create_endpoint(session: Session, payload: EndpointPayload) -> Endpoint:
+def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) -> Endpoint:
     _validate_tool(payload.tool)
-    endpoint = Endpoint(path=payload.path, method=payload.method, tool=payload.tool)
+    endpoint = Endpoint(user_id=user_id, path=payload.path, method=payload.method, tool=payload.tool)
     session.add(endpoint)
     session.flush()
     return endpoint
 
 
-def update_endpoint(session: Session, endpoint_id: UUID, payload: EndpointPayload) -> Endpoint:
+def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: EndpointPayload) -> Endpoint:
     _validate_tool(payload.tool)
-    endpoint = _get_endpoint(session, endpoint_id)
+    endpoint = _get_endpoint(session, endpoint_id, user_id)
     endpoint.path = payload.path
     endpoint.method = payload.method
     endpoint.tool = payload.tool
@@ -90,7 +91,7 @@ def update_endpoint(session: Session, endpoint_id: UUID, payload: EndpointPayloa
     return endpoint
 
 
-def delete_endpoint(session: Session, endpoint_id: UUID) -> None:
-    endpoint = _get_endpoint(session, endpoint_id)
+def delete_endpoint(session: Session, endpoint_id: UUID, user_id: str) -> None:
+    endpoint = _get_endpoint(session, endpoint_id, user_id)
     session.delete(endpoint)
     session.flush()

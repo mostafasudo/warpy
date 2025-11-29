@@ -8,19 +8,10 @@ from .controllers.endpoints import router as endpoints_router
 from .controllers.health import router as health_router
 from .controllers.session import router as session_router
 from .core.config import get_settings
-from .core.database import session_scope
-from .core.logger import log_error
-from .services.config_service import ensure_required_environments
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        with session_scope() as session:
-            ensure_required_environments(session)
-    except Exception as exc:
-        log_error("Main", "lifespan_start", "Failed to bootstrap application", exc=exc)
-        raise
     yield
 
 

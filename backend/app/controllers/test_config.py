@@ -18,7 +18,14 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     importlib.reload(database)
     database._engine = None
     database._SessionLocal = None
-    return get_settings()
+    from app.models import Base
+
+    engine = database.get_engine()
+    Base.metadata.create_all(engine)
+    try:
+        yield get_settings()
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -96,3 +103,50 @@ def test_put_config_requires_local_and_production(client: TestClient):
     response = client.put("/config", json=payload, headers=auth_headers())
     assert response.status_code == 400
     assert response.json()["detail"] == "Missing required environments: production"
+
+
+def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    payload_user1 = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "headers": {
+            "authToken": {"source": "localStorage", "key": "authorization"}
+        }
+    }
+    first_save = client.put("/config", json=payload_user1, headers=auth_headers())
+    assert first_save.status_code == 200
+
+    monkeypatch.setattr(
+        "app.core.auth.verify_clerk_session",
+        lambda token, forwarded_headers=None: ClerkSession(id="sess_2", user_id="user_2", status="active")
+    )
+    second_get = client.get("/config", headers=auth_headers())
+    assert second_get.status_code == 200
+    second_data = second_get.json()
+    assert second_data["baseUrl"]["local"] == ""
+    assert second_data["baseUrl"]["production"] == ""
+    assert second_data["headers"] == {}
+
+    payload_user2 = {
+        "baseUrl": {
+            "local": "http://localhost:4000",
+            "production": "https://api.user2.com"
+        },
+        "headers": {
+            "session": {"source": "sessionStorage", "key": "sid"}
+        }
+    }
+    second_save = client.put("/config", json=payload_user2, headers=auth_headers())
+    assert second_save.status_code == 200
+
+    monkeypatch.setattr(
+        "app.core.auth.verify_clerk_session",
+        lambda token, forwarded_headers=None: ClerkSession(id="sess_1", user_id="user_1", status="active")
+    )
+    first_get = client.get("/config", headers=auth_headers())
+    assert first_get.status_code == 200
+    first_data = first_get.json()
+    assert first_data["baseUrl"]["local"] == "http://localhost:3000"
+    assert first_data["headers"] == {"authToken": {"source": "localStorage", "key": "authorization"}}

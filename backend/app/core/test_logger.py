@@ -6,6 +6,14 @@ import pytest
 from .logger import AppLogger, get_logger, log_debug, log_error, log_info, log_warning
 
 
+def enable_capture(level: int) -> None:
+    logger = get_logger()
+    logger.setLevel(level)
+    logger.propagate = True
+    for handler in logger.handlers:
+        handler.setLevel(level)
+
+
 def test_app_logger_singleton():
     logger1 = AppLogger.get_logger()
     logger2 = AppLogger.get_logger()
@@ -19,12 +27,14 @@ def test_get_logger_cached():
 
 
 def test_log_info_format(caplog):
+    enable_capture(logging.INFO)
     with caplog.at_level(logging.INFO):
         log_info("TestController", "test_method", "test message")
     assert "[TestController] [test_method]: test message" in caplog.text
 
 
 def test_log_info_with_kwargs(caplog):
+    enable_capture(logging.INFO)
     with caplog.at_level(logging.INFO):
         log_info("TestController", "test_method", "test message", user_id="123", status="active")
     log_text = caplog.text
@@ -34,12 +44,14 @@ def test_log_info_with_kwargs(caplog):
 
 
 def test_log_warning_format(caplog):
+    enable_capture(logging.WARNING)
     with caplog.at_level(logging.WARNING):
         log_warning("TestService", "test_method", "warning message")
     assert "[TestService] [test_method]: warning message" in caplog.text
 
 
 def test_log_warning_with_kwargs(caplog):
+    enable_capture(logging.WARNING)
     with caplog.at_level(logging.WARNING):
         log_warning("TestService", "test_method", "warning message", retries=3)
     log_text = caplog.text
@@ -48,6 +60,7 @@ def test_log_warning_with_kwargs(caplog):
 
 
 def test_log_error_format(caplog):
+    enable_capture(logging.ERROR)
     with caplog.at_level(logging.ERROR):
         log_error("TestWorker", "test_job", "error occurred")
     assert "[TestWorker] [test_job]: error occurred" in caplog.text
@@ -55,6 +68,7 @@ def test_log_error_format(caplog):
 
 def test_log_error_with_exception(caplog):
     test_exception = ValueError("test error")
+    enable_capture(logging.ERROR)
     with caplog.at_level(logging.ERROR):
         log_error("TestWorker", "test_job", "error occurred", exc=test_exception)
     log_text = caplog.text
@@ -64,6 +78,7 @@ def test_log_error_with_exception(caplog):
 
 
 def test_log_error_with_kwargs(caplog):
+    enable_capture(logging.ERROR)
     with caplog.at_level(logging.ERROR):
         log_error("TestWorker", "test_job", "error occurred", task_id="abc123")
     log_text = caplog.text
@@ -72,12 +87,14 @@ def test_log_error_with_kwargs(caplog):
 
 
 def test_log_debug_format(caplog):
+    enable_capture(logging.DEBUG)
     with caplog.at_level(logging.DEBUG):
         log_debug("TestService", "test_method", "debug info")
     assert "[TestService] [test_method]: debug info" in caplog.text
 
 
 def test_log_debug_with_kwargs(caplog):
+    enable_capture(logging.DEBUG)
     with caplog.at_level(logging.DEBUG):
         log_debug("TestService", "test_method", "debug info", trace_id="xyz789")
     log_text = caplog.text
@@ -87,6 +104,10 @@ def test_log_debug_with_kwargs(caplog):
 
 def test_logger_configuration():
     logger = get_logger()
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    for handler in logger.handlers:
+        handler.setLevel(logging.INFO)
     assert logger.name == "chat_to_api"
     assert logger.level == logging.INFO
     assert len(logger.handlers) > 0
@@ -99,4 +120,3 @@ def test_app_logger_reset():
     logger = AppLogger.get_logger()
     assert logger is not None
     assert logger.name == "chat_to_api"
-

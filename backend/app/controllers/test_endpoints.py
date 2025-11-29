@@ -20,7 +20,14 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     importlib.reload(database)
     database._engine = None
     database._SessionLocal = None
-    return get_settings()
+    from app.models import Base
+
+    engine = database.get_engine()
+    Base.metadata.create_all(engine)
+    try:
+        yield get_settings()
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -123,8 +130,32 @@ def test_list_endpoints_service_validation(client: TestClient):
 
     with session_scope() as session:
         with pytest.raises(HTTPException) as exc:
-            list_endpoints(session, 0, 1)
+            list_endpoints(session, "user_1", 0, 1)
         assert exc.value.status_code == 400
         with pytest.raises(HTTPException) as exc:
-            list_endpoints(session, 1, 0)
+            list_endpoints(session, "user_1", 1, 0)
         assert exc.value.status_code == 400
+
+
+def test_endpoints_are_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    payload = {"path": "/users/{id}", "method": "GET", "tool": build_tool("getUser", "Fetch user")}
+    create_response = client.post("/endpoints", json=payload, headers=auth_headers())
+    assert create_response.status_code == 201
+    endpoint_id = create_response.json()["id"]
+
+    monkeypatch.setattr(
+        "app.core.auth.verify_clerk_session",
+        lambda token, forwarded_headers=None: ClerkSession(id="sess_2", user_id="user_2", status="active")
+    )
+
+    empty_response = client.get("/endpoints", headers=auth_headers())
+    assert empty_response.status_code == 200
+    assert empty_response.json()["total"] == 0
+
+    not_found = client.delete(f"/endpoints/{endpoint_id}", headers=auth_headers())
+    assert not_found.status_code == 404
+
+    second_payload = {"path": "/orders", "method": "POST", "tool": build_tool("createOrder", "Create order")}
+    second_create = client.post("/endpoints", json=second_payload, headers=auth_headers())
+    assert second_create.status_code == 201
+    assert second_create.json()["path"] == "/orders"

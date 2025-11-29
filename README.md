@@ -30,14 +30,29 @@ pnpm test src/__tests__/App.test.tsx
 Global styling variables live in `frontend/src/index.css`. Update the CSS custom properties there to change theme colors, fonts, and radii across every shadcn/ui component (Tailwind maps those variables in `frontend/tailwind.config.ts`).
 
 ### Backend
-Copy `backend/.env.example` to `backend/.env`, then install dependencies and run tests or the API server:
+Copy `backend/.env.example` to `backend/.env`, then install dependencies and run tests or the API server.
+
+Install dependencies (pyproject editable with dev extras):
 ```sh
 cd backend
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e '.[dev]'
+```
+Alternative install (requirements file):
+```sh
 python3 -m pip install -r requirements.txt
+```
+
+Run the API server:
+```sh
 uvicorn app.main:app --reload
-PYTHONPATH=app python3 -m pytest
-# single file
-PYTHONPATH=app python3 -m pytest tests/test_health.py
+```
+
+Run tests:
+```sh
+python3 -m pytest app/controllers/test_config.py app/controllers/test_endpoints.py -q
+python3 -m pytest app/controllers/test_endpoints.py::test_endpoint_crud_flow -q
 ```
 
 Migrations (run from `backend`):
@@ -54,6 +69,12 @@ docker compose up --build
 ```
 
 If using compose, run the same Alembic commands inside the backend container.
+
+Run backend tests in Docker:
+```sh
+docker compose exec backend python3 -m pytest app
+docker compose exec backend python3 -m pytest app/controllers/test_endpoints.py::test_endpoint_crud_flow -q
+```
 
 Services:
 - Frontend (compose): http://localhost:5173

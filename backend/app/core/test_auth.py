@@ -1,7 +1,4 @@
-import base64
-import json
 from typing import Any
-from urllib.error import HTTPError, URLError
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -10,23 +7,6 @@ from fastapi.testclient import TestClient
 from .auth import require_clerk_session, verify_clerk_session
 from .config import Settings, get_settings
 from ..schemas.auth import ClerkSession
-
-
-class FakeResponse:
-    def __init__(self, payload: Any, *, raw: bytes | None = None):
-        self._payload = payload
-        self._raw = raw
-
-    def read(self) -> bytes:
-        if self._raw is not None:
-            return self._raw
-        return json.dumps(self._payload).encode()
-
-    def __enter__(self) -> "FakeResponse":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
 
 
 def configure_settings(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> Settings:
@@ -38,6 +18,8 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> Set
         return config
 
     monkeypatch.setattr("app.core.auth.get_settings", fake_get_settings)
+    from app.core import auth
+    auth._get_clerk_client.cache_clear()
     return config
 
 
@@ -92,113 +74,85 @@ def test_require_session_success(monkeypatch: pytest.MonkeyPatch):
     assert response.json() == {"session_id": "sess_1", "user_id": "user_1", "status": "active"}
 
 
+class FakeRequestState:
+    def __init__(self, is_signed_in: bool = True, payload: dict[str, Any] | None = None, reason: str | None = None):
+        self.is_signed_in = is_signed_in
+        self.payload = payload or {}
+        self.reason = reason
+
+
+class FakeClerk:
+    def __init__(self, state: FakeRequestState | None = None, error: Exception | None = None):
+        self.state = state
+        self.error = error
+        self.calls: list[dict[str, Any]] = []
+
+    def authenticate_request(self, request, options):
+        self.calls.append({"headers": dict(request.headers)})
+        if self.error:
+            raise self.error
+        return self.state
+
+
+def use_fake_clerk(monkeypatch: pytest.MonkeyPatch, state: FakeRequestState | None = None, error: Exception | None = None) -> FakeClerk:
+    fake = FakeClerk(state=state, error=error)
+    from app.core import auth
+    auth._get_clerk_client.cache_clear()
+    monkeypatch.setattr("app.core.auth._get_clerk_client", lambda: fake)
+    return fake
+
+
 def test_verify_clerk_session_success(monkeypatch: pytest.MonkeyPatch):
     configure_settings(monkeypatch)
-
-    def fake_urlopen(request, timeout):
-        return FakeResponse({"session": {"id": "sess_1", "user_id": "user_1", "status": "active"}})
-
-    monkeypatch.setattr("app.core.auth.urlopen", fake_urlopen)
+    state = FakeRequestState(payload={"sid": "sess_1", "sub": "user_1", "sts": "active"})
+    use_fake_clerk(monkeypatch, state=state)
     result = verify_clerk_session("token")
     assert result.id == "sess_1"
     assert result.user_id == "user_1"
     assert result.status == "active"
 
 
-def test_verify_clerk_session_handles_alias_fields(monkeypatch: pytest.MonkeyPatch):
+def test_verify_clerk_session_requires_signed_in(monkeypatch: pytest.MonkeyPatch):
     configure_settings(monkeypatch)
-
-    def fake_urlopen(request, timeout):
-        return FakeResponse({"session_id": "sess_2", "user_id": "user_2"})
-
-    monkeypatch.setattr("app.core.auth.urlopen", fake_urlopen)
-    result = verify_clerk_session("token")
-    assert result.id == "sess_2"
-    assert result.user_id == "user_2"
+    state = FakeRequestState(is_signed_in=False, reason="signed_out")
+    use_fake_clerk(monkeypatch, state=state)
+    with pytest.raises(HTTPException) as exc:
+        verify_clerk_session("token")
+    assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert exc.value.detail == "signed_out"
 
 
-def test_verify_clerk_session_handles_http_error(monkeypatch: pytest.MonkeyPatch):
+def test_verify_clerk_session_requires_payload(monkeypatch: pytest.MonkeyPatch):
     configure_settings(monkeypatch)
-    error = HTTPError("https://api.clerk.com", 401, "unauthorized", hdrs=None, fp=None)
-
-    def raise_error(request, timeout):
-        raise error
-
-    monkeypatch.setattr("app.core.auth.urlopen", raise_error)
+    state = FakeRequestState(payload={})
+    use_fake_clerk(monkeypatch, state=state)
     with pytest.raises(HTTPException) as exc:
         verify_clerk_session("token")
     assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_verify_clerk_session_handles_service_error(monkeypatch: pytest.MonkeyPatch):
+def test_verify_clerk_session_requires_claims(monkeypatch: pytest.MonkeyPatch):
     configure_settings(monkeypatch)
-    error = HTTPError("https://api.clerk.com", 500, "error", hdrs=None, fp=None)
-
-    def raise_error(request, timeout):
-        raise error
-
-    monkeypatch.setattr("app.core.auth.urlopen", raise_error)
-    with pytest.raises(HTTPException) as exc:
-        verify_clerk_session("token")
-    assert exc.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-
-
-def test_verify_clerk_session_handles_network_error(monkeypatch: pytest.MonkeyPatch):
-    configure_settings(monkeypatch)
-
-    def raise_error(request, timeout):
-        raise URLError("offline")
-
-    monkeypatch.setattr("app.core.auth.urlopen", raise_error)
-    with pytest.raises(HTTPException) as exc:
-        verify_clerk_session("token")
-    assert exc.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-
-
-def test_verify_clerk_session_handles_invalid_json(monkeypatch: pytest.MonkeyPatch):
-    configure_settings(monkeypatch)
-
-    def fake_urlopen(request, timeout):
-        return FakeResponse({}, raw=b"{invalid")
-
-    monkeypatch.setattr("app.core.auth.urlopen", fake_urlopen)
-    with pytest.raises(HTTPException) as exc:
-        verify_clerk_session("token")
-    assert exc.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-
-
-def test_verify_clerk_session_handles_missing_fields(monkeypatch: pytest.MonkeyPatch):
-    configure_settings(monkeypatch)
-
-    def fake_urlopen(request, timeout):
-        return FakeResponse({"session": {"status": "active"}})
-
-    monkeypatch.setattr("app.core.auth.urlopen", fake_urlopen)
+    state = FakeRequestState(payload={"sid": "sess_1"})
+    use_fake_clerk(monkeypatch, state=state)
     with pytest.raises(HTTPException) as exc:
         verify_clerk_session("token")
     assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_verify_clerk_session_sends_session_id(monkeypatch: pytest.MonkeyPatch):
+def test_verify_clerk_session_handles_client_error(monkeypatch: pytest.MonkeyPatch):
     configure_settings(monkeypatch)
-    captured: dict[str, Any] = {}
+    use_fake_clerk(monkeypatch, error=RuntimeError("boom"))
+    with pytest.raises(HTTPException) as exc:
+        verify_clerk_session("token")
+    assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def fake_urlopen(request, timeout):
-        captured["payload"] = json.loads(request.data.decode())
-        return FakeResponse({"session": {"id": "sess_1", "user_id": "user_1"}})
 
-    monkeypatch.setattr("app.core.auth.urlopen", fake_urlopen)
-
-    header = base64.urlsafe_b64encode(json.dumps({"alg": "none", "typ": "JWT"}).encode()).rstrip(b"=").decode()
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"sid": "sess_42", "cid": "client_1", "sub": "user_3"}).encode()
-    ).rstrip(b"=").decode()
-    token = f"{header}.{payload}."
-
-    verify_clerk_session(token)
-    assert captured["payload"] == {
-        "session_token": token,
-        "session_id": "sess_42",
-        "client_id": "client_1",
-        "user_id": "user_3"
-    }
+def test_verify_clerk_session_uses_forwarded_headers(monkeypatch: pytest.MonkeyPatch):
+    configure_settings(monkeypatch)
+    state = FakeRequestState(payload={"sid": "sess_1", "sub": "user_1"})
+    fake = use_fake_clerk(monkeypatch, state=state)
+    verify_clerk_session("token", {"X-Test": "123"})
+    headers = fake.calls[0]["headers"]
+    assert headers["authorization"] == "Bearer token"
+    assert headers["x-test"] == "123"
