@@ -50,4 +50,11 @@ describe("navigation store", () => {
     navigationSelectors.setSidebarCollapsed(useNavigationStore.getState())(false)
     expect(useNavigationStore.getState().sidebarCollapsed).toBe(false)
   })
+
+  it("initializes when document is unavailable", async () => {
+    ;(global as any).document = undefined
+    const { navigationSelectors, useNavigationStore } = await loadNavigationStore()
+    expect(navigationSelectors.sidebarCollapsed(useNavigationStore.getState())).toBe(false)
+    ;(global as any).document = originalDocument
+  })
 })

@@ -1,0 +1,121 @@
+/// <reference types="@testing-library/jest-dom" />
+import { describe, expect, it, beforeAll } from "@jest/globals"
+import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { BodyFieldRow } from "./BodyFieldRow"
+import { type BodyField } from "@/stores/endpoint-builder"
+
+beforeAll(() => {
+  ;(HTMLElement.prototype as any).hasPointerCapture = () => false
+  ;(HTMLElement.prototype as any).releasePointerCapture = () => {}
+  ;(Element.prototype as any).scrollIntoView = () => {}
+})
+
+const renderField = (field: BodyField, handlers: any = {}) =>
+  render(
+    <TooltipProvider>
+      <BodyFieldRow
+        field={field}
+        depth={0}
+        invalid={{}}
+        onUpdate={handlers.onUpdate ?? jest.fn()}
+        onAdd={handlers.onAdd ?? jest.fn()}
+        onRemove={handlers.onRemove ?? jest.fn()}
+      />
+    </TooltipProvider>
+  )
+
+describe("BodyFieldRow", () => {
+  it("handles primitive interactions and removal", async () => {
+    const onUpdate = jest.fn()
+    const onRemove = jest.fn()
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderField(
+      { id: "f1", name: "status", type: "string", required: false, description: "desc" },
+      { onUpdate, onRemove }
+    )
+
+    const nameInput = screen.getByDisplayValue("status")
+    await user.clear(nameInput)
+    await user.type(nameInput, "state")
+    expect(onUpdate).toHaveBeenCalled()
+
+    const switches = screen.getAllByRole("switch")
+    await user.click(switches[1])
+    expect(onUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ fixed: "" }))
+
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("boolean"))
+    expect(onUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ type: "boolean" }))
+
+    await user.click(screen.getByTestId("remove-body-field-f1"))
+    await user.click(await screen.findByRole("button", { name: "Remove" }))
+    expect(onRemove).toHaveBeenCalledWith("f1")
+  })
+
+  it("supports fixed boolean values and nested add", async () => {
+    const onUpdate = jest.fn()
+    const onAdd = jest.fn()
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderField(
+      { id: "bool", name: "flag", type: "boolean", required: false, description: "", fixed: false },
+      { onUpdate, onAdd }
+    )
+
+    await user.click(screen.getByTestId("body-field-bool-fixed"))
+    await user.click(await screen.findByText("true"))
+    expect(onUpdate).toHaveBeenCalledWith("bool", expect.objectContaining({ fixed: true }))
+
+    renderField(
+      {
+        id: "obj",
+        name: "payload",
+        type: "object",
+        required: false,
+        description: "",
+        children: []
+      },
+      { onUpdate: jest.fn(), onAdd }
+    )
+
+    await user.click(screen.getByRole("button", { name: /Add child/i }))
+    expect(onAdd).toHaveBeenCalledWith("obj", "string")
+  })
+
+  it("renders nested children for object fields", () => {
+    renderField({
+      id: "parent",
+      name: "payload",
+      type: "object",
+      required: true,
+      description: "body",
+      children: [
+        { id: "child-1", name: "id", type: "number", required: true, description: "id" }
+      ]
+    })
+
+    expect(screen.getByDisplayValue("payload")).not.toBeNull()
+    expect(screen.getAllByDisplayValue("id").length).toBeGreaterThan(0)
+  })
+
+  it("updates number fixed values and toggles required", async () => {
+    const onUpdate = jest.fn()
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderField(
+      { id: "num", name: "count", type: "number", required: true, description: "qty", fixed: 1 },
+      { onUpdate }
+    )
+
+    await user.clear(screen.getByTestId("body-field-num-fixed"))
+    await user.type(screen.getByTestId("body-field-num-fixed"), "9")
+    expect(onUpdate.mock.calls.some(([_, patch]) => "fixed" in patch)).toBe(true)
+
+    const switches = screen.getAllByRole("switch")
+    await user.click(switches[0])
+    await user.click(switches[1])
+    expect(onUpdate).toHaveBeenCalledWith("num", expect.objectContaining({ required: false }))
+    expect(onUpdate).toHaveBeenCalledWith("num", expect.objectContaining({ fixed: undefined }))
+  })
+})

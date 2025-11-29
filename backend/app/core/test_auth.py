@@ -102,6 +102,20 @@ def use_fake_clerk(monkeypatch: pytest.MonkeyPatch, state: FakeRequestState | No
     return fake
 
 
+def test_get_clerk_client_uses_settings(monkeypatch: pytest.MonkeyPatch):
+    class DummyClerk:
+        def __init__(self, bearer_auth):
+            self.bearer_auth = bearer_auth
+    monkeypatch.setattr("app.core.auth.Clerk", DummyClerk)
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_dummy")
+    from app.core import auth
+    auth._get_clerk_client.cache_clear()
+    client = auth._get_clerk_client()
+    assert client.bearer_auth == "sk_dummy"
+
+
 def test_verify_clerk_session_success(monkeypatch: pytest.MonkeyPatch):
     configure_settings(monkeypatch)
     state = FakeRequestState(payload={"sid": "sess_1", "sub": "user_1", "sts": "active"})

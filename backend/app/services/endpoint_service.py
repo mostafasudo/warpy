@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Endpoint
 from ..schemas.endpoint import EndpointPayload
+from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
 
 
 def _validate_tool(tool: dict[str, Any]) -> None:
@@ -42,14 +43,13 @@ def _search_condition(search: str | None):
     normalized_path = func.lower(func.coalesce(Endpoint.path, ""))
     normalized_name = func.lower(func.coalesce(tool_name, ""))
     normalized_description = func.lower(func.coalesce(tool_description, ""))
-    def make_predicate(term: str):
+    predicates = []
+    for term in terms:
         pattern = f"%{term}%"
-        return or_(
-            normalized_path.like(pattern),
-            normalized_name.like(pattern),
-            normalized_description.like(pattern)
+        predicates.append(
+            or_(normalized_path.like(pattern), normalized_name.like(pattern), normalized_description.like(pattern))
         )
-    return and_(*[make_predicate(term) for term in terms])
+    return and_(*predicates)
 
 
 def list_endpoints(session: Session, user_id: str, page: int, page_size: int, search: str | None = None) -> tuple[list[Endpoint], int]:
@@ -77,6 +77,7 @@ def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) ->
     endpoint = Endpoint(user_id=user_id, path=payload.path, method=payload.method, tool=payload.tool)
     session.add(endpoint)
     session.flush()
+    upsert_endpoint_embedding(session, endpoint.id, user_id)
     return endpoint
 
 
@@ -88,10 +89,12 @@ def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: 
     endpoint.tool = payload.tool
     endpoint.updated_at = func.now()
     session.flush()
+    upsert_endpoint_embedding(session, endpoint.id, user_id)
     return endpoint
 
 
 def delete_endpoint(session: Session, endpoint_id: UUID, user_id: str) -> None:
     endpoint = _get_endpoint(session, endpoint_id, user_id)
+    delete_endpoint_embedding(session, endpoint_id)
     session.delete(endpoint)
     session.flush()
