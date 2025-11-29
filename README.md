@@ -12,7 +12,7 @@ Embeddable chat/voice agent that turns natural-language into authenticated API a
 - **Frontend:** Vite, React, TypeScript, pnpm, shadcn/ui, Zustand, Jest, TanStack React Query
 - **Widget:** embeddable `<script>`
 - **Dashboard:** React SPA
-- **Backend:** FastAPI, LangChain, PostgreSQL/PGVector, SQLAlchemy, Cohere, Redis, RQ, Pytest, hCaptcha
+- **Backend:** FastAPI, LangChain, PostgreSQL/PGVector, SQLAlchemy, Redis, RQ, Pytest, hCaptcha
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 

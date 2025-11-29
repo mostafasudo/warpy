@@ -14,7 +14,7 @@
 - **Backend tests (local):** activate `backend/.venv` then `python3 -m pytest app`
 - **Backend tests (docker):** `docker compose exec backend python3 -m pytest app`
 - **Widget `<script>`:** tiny, idempotent init, no globals, no CSS bleed, works without the dashboard.
-- **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **hCaptcha** server-side verified, **LangChain + Cohere** via existing clients.
+- **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **hCaptcha** server-side verified, **LangChain** via existing clients.
 - **DB:** write **efficient queries** only; avoid N+1; never full table scans; always use appropriate indexes/limits/projections.
 - **Concurrency:** make all operations **idempotent and atomic**; use upserts instead of inserts; implement proper locking; design for high concurrency safety.
 - **Environment:** when adding env vars or configuration, support both Docker and non-Docker setups.
@@ -49,7 +49,7 @@
 - **SQLAlchemy:** explicit columns (no `*`); eager loading (`selectinload`/`joinedload`) to prevent N+1; `EXPLAIN ANALYZE` when optimizing.
 - **RQ:** short jobs; idempotent; visibility timeouts; retries with backoff.
 - **hCaptcha:** verify server-side for public endpoints.
-- **LangChain/Cohere:** small, composable chains; respect configured models/temps; never log secrets or PII.
+- **LangChain:** clean, composable chains; respect configured models/temps; never log secrets or PII.
 - **Clerk auth:** use `session: ClerkSession = Depends(require_clerk_session)` in endpoints; session contains `id`, `user_id`, `status`.
 - **Logging patterns:**
   - Controllers: `log_info("ControllerName", "method_name", "message")`
