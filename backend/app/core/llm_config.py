@@ -10,6 +10,7 @@ class LLMConfig:
     top_k_ratio: float = 0.3
     top_k_min: int = 2
     top_k_max: int = 10
+    max_iterations: int = 20
 
     def calculate_top_k(self, total_endpoints: int) -> int:
         if total_endpoints <= 0:

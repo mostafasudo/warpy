@@ -71,7 +71,7 @@ class AgentExecutor:
                 messages.append(AIMessage(content=message["content"]))
         messages.append(HumanMessage(content=user_message))
 
-        max_iterations = 10
+        max_iterations = llm_config.max_iterations
         iteration = 0
         while iteration < max_iterations:
             iteration += 1
