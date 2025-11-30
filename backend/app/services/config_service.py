@@ -108,11 +108,11 @@ def get_config(session: Session, user_id: str) -> ConfigResponse:
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == user_id)).all()
     base_urls = {environment.name: environment.base_url for environment in environments}
     header_map = {header.header_name: {"source": header.source, "key": header.key} for header in headers}
-    return ConfigResponse(base_url=base_urls, headers=header_map)
+    return ConfigResponse(baseUrl=base_urls, headers=header_map)
 
 
 def upsert_config(session: Session, user_id: str, payload: ConfigPayload) -> ConfigResponse:
-    _upsert_environments(session, user_id, payload.base_url)
+    _upsert_environments(session, user_id, payload.baseUrl)
     _replace_session_headers(session, user_id, payload.headers)
     log_info("ConfigService", "upsert_config", "Config updated", user_id=user_id)
     return get_config(session, user_id)

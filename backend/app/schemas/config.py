@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 from ..models import StorageSource
 
@@ -9,9 +9,7 @@ class SessionHeaderPayload(BaseModel):
 
 
 class ConfigPayload(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    base_url: dict[str, str] = Field(alias="baseUrl")
+    baseUrl: dict[str, str] = {}
     headers: dict[str, SessionHeaderPayload]
 
 

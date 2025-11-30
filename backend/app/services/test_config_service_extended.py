@@ -43,7 +43,7 @@ def test_upsert_config_replaces_headers_and_envs(session):
         headers={"auth": {"source": "localStorage", "key": "token"}}
     )
     saved = upsert_config(session, "user", payload)
-    assert saved.base_url["production"] == "https://api"
+    assert saved.baseUrl["production"] == "https://api"
     second = ConfigPayload(
         baseUrl={"local": "http://localhost:4000", "production": "https://api"},
         headers={}
@@ -104,7 +104,7 @@ def test_dialect_helpers_and_custom_branch():
     fake = _FakeSession()
     payload = ConfigPayload(baseUrl={"local": "http://l", "production": "http://p", "staging": "http://s"}, headers={})
     result = upsert_config(fake, "user", payload)
-    assert result.base_url["staging"] == "http://s"
+    assert result.baseUrl["staging"] == "http://s"
     assert fake.added
 
 
