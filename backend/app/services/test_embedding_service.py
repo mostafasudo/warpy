@@ -118,10 +118,12 @@ def test_delete_endpoint_embedding_removes(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_search_similar_endpoints_handles_zero_and_errors(monkeypatch: pytest.MonkeyPatch):
-    session = FakeSession(scalar_results=[0])
+    monkeypatch.setattr(embedding_service, "get_endpoint_count", lambda _s, _u: 0)
+    session = FakeSession()
     assert search_similar_endpoints(session, "u", "q") == []
 
-    session2 = FakeSession(scalar_results=[1], scalars_result=[UUID(int=5)])
+    monkeypatch.setattr(embedding_service, "get_endpoint_count", lambda _s, _u: 1)
+    session2 = FakeSession(scalars_result=[UUID(int=5)])
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: (_ for _ in ()).throw(RuntimeError("fail")))
     assert search_similar_endpoints(session2, "u", "q") == []
 

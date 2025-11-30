@@ -47,7 +47,10 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
           placeholder="Fixed value"
           value={fixedInputValue}
           onChange={(event) => onChange({ fixed: event.target.value })}
-          className={cn(detailInvalid && "border-destructive focus-visible:ring-destructive")}
+          className={cn(
+            "h-9",
+            detailInvalid && "border-destructive focus-visible:ring-destructive"
+          )}
           data-testid={`field-${field.id}-fixed`}
         />
       )
@@ -60,7 +63,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
         data-testid={`field-${field.id}-description`}
         rows={2}
         className={cn(
-          "resize-none",
+          "resize-none text-sm leading-5",
           detailInvalid && "border-destructive focus-visible:ring-destructive"
         )}
       />
@@ -68,20 +71,21 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
-      <div className="space-y-2">
+    <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/30 p-2.5 text-sm">
+      <div className="space-y-1.5">
         <Input
           placeholder="Name"
           value={field.name}
           onChange={(event) => onChange({ name: event.target.value })}
           data-testid={`field-${field.id}-name`}
           className={cn(
+            "h-9",
             validation.name && "border-destructive focus-visible:ring-destructive"
           )}
         />
         {renderDetailInput()}
       </div>
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-2">
           <Switch checked={field.required} onCheckedChange={(checked) => onChange({ required: checked })} />
           Required

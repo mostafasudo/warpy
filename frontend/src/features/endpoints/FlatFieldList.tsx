@@ -20,8 +20,8 @@ export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove, invali
   const addButtonRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <div className="rounded-xl border border-border/70 p-3">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-xl border border-border/70 p-2.5">
+      <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-medium">{title}</p>
         <ActionTooltip content={`Add ${title}`}>
           <Button
@@ -36,7 +36,7 @@ export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove, invali
           </Button>
         </ActionTooltip>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {fields.length ? (
           fields.map((field) => (
             <FlatFieldRow

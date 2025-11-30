@@ -3,13 +3,14 @@ import json
 from uuid import UUID
 
 from openai import OpenAI
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
 from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
 from ..models import Endpoint, EndpointEmbedding
+from .user_stats_service import get_endpoint_count
 
 
 def _get_openai_client() -> OpenAI:
@@ -90,9 +91,7 @@ def delete_endpoint_embedding(session: Session, endpoint_id: UUID) -> None:
 
 def search_similar_endpoints(session: Session, user_id: str, query: str, top_k: int | None = None) -> list[UUID]:
     if top_k is None:
-        total = session.scalar(
-            select(func.count()).select_from(EndpointEmbedding).where(EndpointEmbedding.user_id == user_id)
-        ) or 0
+        total = get_endpoint_count(session, user_id)
         top_k = llm_config.calculate_top_k(total)
 
     if top_k == 0:
@@ -113,4 +112,3 @@ def search_similar_endpoints(session: Session, user_id: str, query: str, top_k: 
 
     log_info("EmbeddingService", "search_similar_endpoints", "Search completed", user_id=user_id, results=len(results))
     return list(results)
-

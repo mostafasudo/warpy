@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..models import Endpoint
 from ..schemas.endpoint import EndpointPayload
 from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
+from .user_stats_service import adjust_endpoint_count, get_endpoint_count
 
 
 def _validate_tool(tool: dict[str, Any]) -> None:
@@ -67,7 +68,9 @@ def list_endpoints(session: Session, user_id: str, page: int, page_size: int, se
     if condition is not None:
         count_query = count_query.where(condition)
         items_query = items_query.where(condition)
-    total = session.scalar(count_query) or 0
+        total = session.scalar(count_query) or 0
+    else:
+        total = get_endpoint_count(session, user_id)
     items = session.scalars(items_query).all()
     return items, total
 
@@ -77,6 +80,7 @@ def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) ->
     endpoint = Endpoint(user_id=user_id, path=payload.path, method=payload.method, tool=payload.tool)
     session.add(endpoint)
     session.flush()
+    adjust_endpoint_count(session, user_id, 1)
     upsert_endpoint_embedding(session, endpoint.id, user_id)
     return endpoint
 
@@ -98,3 +102,4 @@ def delete_endpoint(session: Session, endpoint_id: UUID, user_id: str) -> None:
     delete_endpoint_embedding(session, endpoint_id)
     session.delete(endpoint)
     session.flush()
+    adjust_endpoint_count(session, user_id, -1)

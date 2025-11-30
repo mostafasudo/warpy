@@ -2,7 +2,7 @@ import enum
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -52,6 +52,15 @@ class SessionHeader(Base):
     header_name = Column(Text, nullable=False)
     source = Column(Enum(StorageSource, name="storage_source", native_enum=True, validate_strings=True), nullable=False)
     key = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class UserStats(Base):
+    __tablename__ = "user_stats"
+
+    user_id = Column(Text, primary_key=True)
+    endpoint_count = Column(Integer, nullable=False, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
