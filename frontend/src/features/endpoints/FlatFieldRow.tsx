@@ -61,7 +61,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
         value={field.description}
         onChange={(event) => onChange({ description: event.target.value })}
         data-testid={`field-${field.id}-description`}
-        rows={2}
+        rows={1}
         className={cn(
           "resize-none text-sm leading-5",
           detailInvalid && "border-destructive focus-visible:ring-destructive"
