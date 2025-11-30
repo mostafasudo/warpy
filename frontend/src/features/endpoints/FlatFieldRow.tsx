@@ -48,7 +48,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
           value={fixedInputValue}
           onChange={(event) => onChange({ fixed: event.target.value })}
           className={cn(
-            "h-9",
+            "h-10",
             detailInvalid && "border-destructive focus-visible:ring-destructive"
           )}
           data-testid={`field-${field.id}-fixed`}
@@ -63,7 +63,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
         data-testid={`field-${field.id}-description`}
         rows={1}
         className={cn(
-          "resize-none text-sm leading-5",
+          "min-h-[44px] resize-none text-sm leading-5",
           detailInvalid && "border-destructive focus-visible:ring-destructive"
         )}
       />
@@ -71,21 +71,57 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
   }
 
   return (
-    <div className="space-y-1.5 rounded-lg border border-border/60 bg-muted/30 p-2.5 text-sm">
-      <div className="space-y-1.5">
+    <div className="space-y-2.5 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+      <div className="grid gap-3 sm:grid-cols-[minmax(120px,160px)_minmax(240px,1fr)_auto] sm:items-start">
         <Input
           placeholder="Name"
           value={field.name}
           onChange={(event) => onChange({ name: event.target.value })}
           data-testid={`field-${field.id}-name`}
           className={cn(
-            "h-9",
+            "h-10",
             validation.name && "border-destructive focus-visible:ring-destructive"
           )}
         />
         {renderDetailInput()}
+        <div className="flex items-start justify-end">
+          <AlertDialog>
+            <ActionTooltip content="Remove this field">
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="ghost" data-testid={`remove-flat-field-${field.id}`}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+            </ActionTooltip>
+            <AlertDialogContent
+              onOpenAutoFocus={(event) => {
+                event.preventDefault()
+                actionRef.current?.focus()
+              }}
+            >
+              <form
+                className="grid gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  handleRemove()
+                }}
+              >
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove field?</AlertDialogTitle>
+                  <AlertDialogDescription>This will delete the field from this endpoint draft.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                  <AlertDialogAction ref={actionRef} type="submit">
+                    Remove
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </form>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-2">
           <Switch checked={field.required} onCheckedChange={(checked) => onChange({ required: checked })} />
           Required
@@ -97,42 +133,6 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
           />
           Fixed value
         </span>
-      </div>
-      <div className="flex justify-end">
-        <AlertDialog>
-          <ActionTooltip content="Remove this field">
-            <AlertDialogTrigger asChild>
-              <Button size="sm" variant="ghost" data-testid={`remove-flat-field-${field.id}`}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-          </ActionTooltip>
-          <AlertDialogContent
-            onOpenAutoFocus={(event) => {
-              event.preventDefault()
-              actionRef.current?.focus()
-            }}
-          >
-            <form
-              className="grid gap-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                handleRemove()
-              }}
-            >
-              <AlertDialogHeader>
-                <AlertDialogTitle>Remove field?</AlertDialogTitle>
-                <AlertDialogDescription>This will delete the field from this endpoint draft.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-                <AlertDialogAction ref={actionRef} type="submit">
-                  Remove
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </form>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </div>
   )
