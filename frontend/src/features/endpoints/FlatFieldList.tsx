@@ -18,6 +18,7 @@ type FlatFieldListProps = {
 
 export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove, invalidFields }: FlatFieldListProps) => {
   const addButtonRef = useRef<HTMLButtonElement>(null)
+  const emptyCopy = title === "Headers" ? "Add headers." : "Add query params."
 
   return (
     <div className="rounded-xl border border-border/70 p-2.5">
@@ -49,7 +50,7 @@ export const FlatFieldList = ({ title, fields, onAdd, onChange, onRemove, invali
             />
           ))
         ) : (
-          <p className="text-xs text-muted-foreground">Add a field to describe this schema.</p>
+          <p className="text-xs text-muted-foreground">{emptyCopy}</p>
         )}
       </div>
     </div>

@@ -120,7 +120,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
         </div>
       ) : null}
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+        <div className="grid gap-3 sm:grid-cols-[1.1fr_1fr_140px]">
           <div className="space-y-2">
             <Label>Path</Label>
             <Input
@@ -132,6 +132,21 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
                 validation?.invalid.path && "border-destructive focus-visible:ring-destructive"
               )}
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Endpoint name</Label>
+            <Input
+              placeholder="getUserProfile"
+              value={name}
+              onChange={(event) => setName(event.target.value.replace(/\s+/g, "_"))}
+              data-testid="endpoint-name"
+              className={cn(
+                validation?.invalid.name && "border-destructive focus-visible:ring-destructive"
+              )}
+            />
+            {name.trim() && !isNameValid ? (
+              <p className="text-xs text-destructive">Use letters, numbers, underscores, or dashes (max 64).</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label>Method</Label>
@@ -149,35 +164,19 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
             </Select>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Endpoint name</Label>
-            <Input
-              placeholder="getUserProfile"
-              value={name}
-              onChange={(event) => setName(event.target.value.replace(/\s+/g, "_"))}
-              data-testid="endpoint-name"
-              className={cn(
-                validation?.invalid.name && "border-destructive focus-visible:ring-destructive"
-              )}
-            />
-            {name.trim() && !isNameValid ? (
-              <p className="text-xs text-destructive">Use letters, numbers, underscores, or dashes (max 64).</p>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea
-              rows={3}
-              placeholder="Describe what this endpoint does"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              data-testid="endpoint-description"
-              className={cn(
-                validation?.invalid.description && "border-destructive focus-visible:ring-destructive"
-              )}
-            />
-          </div>
+        <div className="space-y-2">
+          <Label>Description</Label>
+          <Textarea
+            rows={2}
+            placeholder="Describe what this endpoint does"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            data-testid="endpoint-description"
+            className={cn(
+              "min-h-[52px] resize-y text-sm leading-5",
+              validation?.invalid.description && "border-destructive focus-visible:ring-destructive"
+            )}
+          />
         </div>
         <div className="rounded-xl border border-border/70 p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -286,7 +285,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
               </div>
             </ScrollArea>
           ) : (
-            <p className="text-xs text-muted-foreground">No body fields defined.</p>
+            <p className="text-xs text-muted-foreground">Add body fields.</p>
           )}
         </div>
       </div>
