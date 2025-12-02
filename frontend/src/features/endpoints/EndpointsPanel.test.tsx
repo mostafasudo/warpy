@@ -315,4 +315,29 @@ describe("EndpointsPanel", () => {
     await user.click(screen.getByTestId("next-page"))
     expect(useEndpointsUiStore.getState().page).toBe(1)
   })
+
+  it("hides search loader when search is empty", () => {
+    mockedUseEndpointsQuery.mockReturnValue({
+      data: { items: [], total: 0, page: 1, pageSize: 5 },
+      isPending: false,
+      isFetching: true
+    })
+
+    renderPanel()
+
+    expect(screen.queryByTestId("endpoint-search-loading")).toBeNull()
+  })
+
+  it("shows search loader when search is active", async () => {
+    mockedUseEndpointsQuery.mockReturnValue({
+      data: { items: [], total: 0, page: 1, pageSize: 5 },
+      isPending: false,
+      isFetching: true
+    })
+    useEndpointsUiStore.setState((state) => ({ ...state, search: "users", searchDraft: "users" }))
+
+    renderPanel()
+
+    await screen.findByTestId("endpoint-search-loading")
+  })
 })

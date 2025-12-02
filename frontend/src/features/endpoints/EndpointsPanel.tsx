@@ -56,6 +56,7 @@ export const EndpointsPanel = () => {
   const editorOpen = useEndpointsUiStore(endpointsUiSelectors.editorOpen)
   const editingId = useEndpointsUiStore(endpointsUiSelectors.editingId)
   const { data, isPending, isFetching } = useEndpointsQuery(page, pageSize, search)
+  const showSearchLoading = isFetching && Boolean(search.trim())
   const endpoints = useMemo(() => data?.items ?? [], [data])
   const total = data?.total ?? 0
   const { mutateAsync: deleteEndpoint, isPending: isDeleting } = useDeleteEndpoint()
@@ -157,7 +158,14 @@ export const EndpointsPanel = () => {
               onChange={(event) => setSearchDraft(event.target.value)}
               className="w-full md:w-72 transition-shadow focus-visible:shadow-[0_0_0_2px_var(--ring)]"
               data-testid="endpoint-search"
-              suffix={isFetching ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+              suffix={
+                showSearchLoading ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin text-muted-foreground"
+                    data-testid="endpoint-search-loading"
+                  />
+                ) : null
+              }
             />
           </div>
           <div className="flex items-center gap-2 self-end md:self-auto">
