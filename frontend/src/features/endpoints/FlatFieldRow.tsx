@@ -63,7 +63,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
         data-testid={`field-${field.id}-description`}
         rows={1}
         className={cn(
-          "min-h-[44px] resize-none text-sm leading-5",
+          "h-10 min-h-[40px] resize-none text-sm leading-5",
           detailInvalid && "border-destructive focus-visible:ring-destructive"
         )}
       />
