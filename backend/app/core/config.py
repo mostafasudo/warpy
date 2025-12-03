@@ -12,7 +12,6 @@ class Settings(BaseSettings):
         default="postgresql+psycopg2://postgres:postgres@localhost:5432/chat_to_api"
     )
     redis_url: str = Field(default="redis://localhost:6379/0")
-    hcaptcha_secret: str = Field(default="")
     clerk_secret_key: str = Field(default="")
     open_ai_key: str = Field(default="")
 
