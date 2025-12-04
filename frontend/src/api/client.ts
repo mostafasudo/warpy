@@ -1,4 +1,4 @@
-import type { ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
+import type { AgentResponse, ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
 
 type RequestOptions = Omit<RequestInit, "signal"> & {
   timeoutMs?: number
@@ -74,7 +74,7 @@ export type HealthResponse = {
   status: string
 }
 
-export type { ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
+export type { AgentResponse, ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
 
 export const apiClient = {
   health: () => request<HealthResponse>("/health"),
@@ -105,5 +105,10 @@ export const apiClient = {
   deleteEndpoint: (id: string) =>
     request<void>(`/endpoints/${id}`, {
       method: "DELETE"
+    }),
+  getAgent: () => request<AgentResponse>("/agent"),
+  createAgent: () =>
+    request<AgentResponse>("/agent", {
+      method: "POST"
     })
 }

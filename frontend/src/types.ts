@@ -41,3 +41,10 @@ export type PaginatedEndpoints = {
   pageSize: number
   total: number
 }
+
+export type AgentResponse = {
+  id: string
+  userId: string
+  createdAt: string
+  updatedAt: string
+}

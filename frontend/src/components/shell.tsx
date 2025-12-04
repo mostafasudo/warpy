@@ -1,8 +1,9 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, LayoutDashboard, Link2, Network, PanelLeftClose, PanelLeftOpen, Smartphone } from "lucide-react"
+import { Braces, LayoutDashboard, Link2, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
+import { AgentPanel } from "@/features/agent/agent-panel"
 import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
 import { BaseUrlsPanel } from "@/features/base-urls/base-urls-panel"
 import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
@@ -153,6 +154,13 @@ export const Shell = () => {
               collapsed={sidebarCollapsed}
               onClick={() => setSection("endpoints")}
             />
+            <NavButton
+              active={section === "agent"}
+              label="Agent"
+              icon={<Sparkles className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("agent")}
+            />
           </nav>
           <div className="mt-auto pt-8">
             <NavButton
@@ -174,7 +182,9 @@ export const Shell = () => {
                     ? "Base URLs"
                     : section === "headers"
                       ? "Session headers"
-                      : "Endpoints"}
+                      : section === "endpoints"
+                        ? "Endpoints"
+                        : "Agent"}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {section === "dashboard"
@@ -183,7 +193,9 @@ export const Shell = () => {
                     ? "Map each environment to a base URL."
                     : section === "headers"
                       ? "Send session headers with every request."
-                      : "Design and publish your endpoints."}
+                      : section === "endpoints"
+                        ? "Design and publish your endpoints."
+                        : "Publish your agent."}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -197,6 +209,7 @@ export const Shell = () => {
           {section === "base" && <BaseUrlsPanel />}
           {section === "headers" && <SessionHeadersPanel />}
           {section === "endpoints" && <EndpointsPanel />}
+          {section === "agent" && <AgentPanel />}
         </div>
       </div>
       {isMobile && <MobileGuard />}
