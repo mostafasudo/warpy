@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_info
-from ..models import Agent, Conversation, Message, SessionHeader
+from ..models import Agent, AuthType, Conversation, Message, SessionHeader
 from ..schemas.widget import SessionHeaderConfig, WidgetConfigResponse
 
 
@@ -14,9 +14,15 @@ def get_agent_by_id(session: Session, agent_id: UUID) -> Agent | None:
 
 def get_widget_config(session: Session, user_id: str) -> WidgetConfigResponse:
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == user_id)).all()
-    header_map = {
-        h.header_name: SessionHeaderConfig(source=h.source, key=h.key) for h in headers
-    }
+    header_map = {}
+    for header in headers:
+        auth_type = header.auth_type
+        if header.header_name.lower() == "authorization":
+            auth_type = auth_type or AuthType.bearer
+        config_kwargs = {"source": header.source, "key": header.key}
+        if auth_type:
+            config_kwargs["auth_type"] = auth_type
+        header_map[header.header_name] = SessionHeaderConfig(**config_kwargs)
     return WidgetConfigResponse(headers=header_map)
 
 
@@ -50,4 +56,3 @@ def get_widget_messages(session: Session, conversation_id: UUID) -> list[Message
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
     ).all())
-

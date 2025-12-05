@@ -150,3 +150,4 @@ async def widget_chat(
         log_error("WidgetController", "widget_chat", "Failed to process chat", exc=error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process chat")
 
+

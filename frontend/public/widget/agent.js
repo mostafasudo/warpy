@@ -64,12 +64,23 @@
   function buildHeaders(headerConfig) {
     const headers = {};
     for (const [headerName, config] of Object.entries(headerConfig)) {
-      let value = extractHeaderValue(config.source, config.key);
+      const value = extractHeaderValue(config.source, config.key);
       if (value) {
-        if (headerName.toLowerCase() === "authorization" && !value.startsWith("Bearer ")) {
-          value = "Bearer " + value;
+        const isAuth = headerName.toLowerCase() === "authorization";
+        if (isAuth) {
+          const type = config.authType || "bearer";
+          const trimmed = value.trim();
+          const lower = trimmed.toLowerCase();
+          if (type === "basic") {
+            headers[headerName] = lower.startsWith("basic ") ? trimmed : "Basic " + trimmed;
+          } else if (type === "none") {
+            headers[headerName] = trimmed;
+          } else {
+            headers[headerName] = lower.startsWith("bearer ") ? trimmed : "Bearer " + trimmed;
+          }
+        } else {
+          headers[headerName] = value;
         }
-        headers[headerName] = value;
       }
     }
     return headers;
@@ -670,4 +681,3 @@
     init();
   }
 })();
-

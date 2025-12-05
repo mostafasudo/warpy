@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models import Agent, SessionHeader, StorageSource
+from app.models import Agent, AuthType, SessionHeader, StorageSource
 from app.services.widget_service import (
     create_widget_conversation,
     get_agent_by_id,
@@ -79,6 +79,7 @@ def test_get_widget_config_with_headers(db_session: Session):
     assert "Authorization" in config.headers
     assert config.headers["Authorization"].source == StorageSource.local_storage
     assert config.headers["Authorization"].key == "auth_token"
+    assert config.headers["Authorization"].auth_type == AuthType.bearer
 
 
 def test_create_widget_conversation(db_session: Session):

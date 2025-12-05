@@ -211,3 +211,4 @@ def test_widget_chat_accepts_tool_results(client: TestClient, monkeypatch: pytes
     assert response.status_code == 200
     assert response.json()["done"] is True
 
+

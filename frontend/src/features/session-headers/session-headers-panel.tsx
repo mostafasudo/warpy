@@ -40,17 +40,25 @@ import {
 } from "@/components/ui/dialog"
 import { ActionTooltip } from "@/components/action-tooltip"
 import { PanelShell } from "@/components/panel-shell"
+import { Badge } from "@/components/ui/badge"
 import { useConfigQuery } from "@/queries/use-config"
 import { useSaveConfig } from "@/queries/use-save-config"
 import { configSelectors, useConfigUiStore } from "@/stores/config-ui"
 import { toastSelectors, useToastStore } from "@/stores/toast"
-import { type StorageSource } from "@/types"
+import { type AuthorizationType, type HeaderConfig, type StorageSource } from "@/types"
+import clsx from "clsx"
 import { CornerDownLeft, Trash2, Pencil, Plus } from "lucide-react"
 
 const storageLabels: Record<StorageSource, string> = {
   localStorage: "Local storage",
   sessionStorage: "Session storage",
   cookies: "Cookies"
+}
+
+const authLabels: Record<AuthorizationType, string> = {
+  bearer: "Bearer",
+  basic: "Basic",
+  none: "No prefix"
 }
 
 export const SessionHeadersPanel = () => {
@@ -69,6 +77,8 @@ export const SessionHeadersPanel = () => {
   const sortedHeaders = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))
   const trimmedHeaderName = headerForm.name.trim()
   const targetHeaderName = trimmedHeaderName.toLowerCase()
+  const isAuthorization = targetHeaderName === "authorization"
+  const headerGridCols = "sm:grid-cols-3"
   const editingHeaderName = headerForm.editingKey?.toLowerCase()
   const duplicateHeaderName =
     headerDialogOpen &&
@@ -90,11 +100,13 @@ export const SessionHeadersPanel = () => {
     setHeaderDialogOpen(true)
   }
 
-  const startEdit = (name: string, header: { source: StorageSource; key: string }) => {
+  const startEdit = (name: string, header: HeaderConfig[string]) => {
+    const authType = name.toLowerCase() === "authorization" ? header.authType ?? "bearer" : "bearer"
     setHeaderForm({
       name,
       source: header.source as StorageSource,
       key: header.key,
+      authType,
       editingKey: name
     })
     setHeaderDialogOpen(true)
@@ -110,7 +122,14 @@ export const SessionHeadersPanel = () => {
     if (headerForm.editingKey && headerForm.editingKey !== name) {
       delete nextHeaders[headerForm.editingKey]
     }
-    nextHeaders[name] = { source: headerForm.source, key: headerForm.key.trim() }
+    const headerPayload: HeaderConfig[string] = {
+      source: headerForm.source,
+      key: headerForm.key.trim()
+    }
+    if (targetHeaderName === "authorization") {
+      headerPayload.authType = headerForm.authType || "bearer"
+    }
+    nextHeaders[name] = headerPayload
     try {
       await saveConfig({ baseUrl, headers: nextHeaders })
       addToast({ title: "Header saved", description: `${name} updated`, variant: "success" })
@@ -203,8 +222,15 @@ export const SessionHeadersPanel = () => {
                       </div>
                     </TableCell>
                     <TableCell className="max-w-[320px]">
-                      <div className="truncate text-muted-foreground" title={header.key}>
-                        {header.key}
+                      <div className="flex items-center gap-2 truncate text-muted-foreground">
+                        <span className="truncate" title={header.key}>
+                          {header.key}
+                        </span>
+                        {name.toLowerCase() === "authorization" ? (
+                          <Badge variant="secondary" className="whitespace-nowrap text-[11px]">
+                            {authLabels[header.authType ?? "bearer"]}
+                          </Badge>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell className="flex w-32 justify-end gap-2">
@@ -271,7 +297,7 @@ export const SessionHeadersPanel = () => {
           </Table>
         </div>
       </PanelShell>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -283,7 +309,7 @@ export const SessionHeadersPanel = () => {
             <DialogTitle>{headerForm.editingKey ? "Edit header" : "Add header"}</DialogTitle>
             <DialogDescription>Map session values to outgoing request headers.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className={clsx("grid gap-3", headerGridCols, "items-start")}>
             <div className="space-y-2">
               <Label htmlFor="header-name">Header name</Label>
               <Input
@@ -313,7 +339,7 @@ export const SessionHeadersPanel = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-visible">
               <Label htmlFor="header-key">Key</Label>
               <Input
                 id="header-key"
@@ -321,8 +347,27 @@ export const SessionHeadersPanel = () => {
                 value={headerForm.key}
                 onChange={(event) => setHeaderForm({ key: event.target.value })}
                 data-testid="header-key-input"
+                className="w-full"
               />
             </div>
+            {isAuthorization ? (
+              <div className="space-y-2 sm:col-span-1 animate-in fade-in-0">
+                <Label>Auth type</Label>
+                <Select
+                  value={headerForm.authType}
+                  onValueChange={(value) => setHeaderForm({ authType: value as AuthorizationType })}
+                >
+                  <SelectTrigger data-testid="auth-type-trigger" className="w-full">
+                    <SelectValue placeholder="Select auth type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bearer">Bearer</SelectItem>
+                    <SelectItem value="basic">Basic</SelectItem>
+                    <SelectItem value="none">No prefix</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <DialogClose asChild>

@@ -3,7 +3,7 @@ from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_info
-from ..models import Environment, SessionHeader
+from ..models import AuthType, Environment, SessionHeader
 from ..schemas.config import ConfigPayload, ConfigResponse, SessionHeaderPayload
 
 
@@ -96,7 +96,13 @@ def _replace_session_headers(session: Session, user_id: str, headers: dict[str, 
     if not headers:
         return
     values = [
-        {"user_id": user_id, "header_name": name, "source": header.source, "key": header.key}
+        {
+            "user_id": user_id,
+            "header_name": name,
+            "source": header.source,
+            "key": header.key,
+            "auth_type": header.auth_type or (AuthType.bearer if name.lower() == "authorization" else None)
+        }
         for name, header in headers.items()
     ]
     session.execute(insert(SessionHeader), values)
@@ -107,7 +113,15 @@ def get_config(session: Session, user_id: str) -> ConfigResponse:
     environments = session.scalars(select(Environment).where(Environment.user_id == user_id)).all()
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == user_id)).all()
     base_urls = {environment.name: environment.base_url for environment in environments}
-    header_map = {header.header_name: {"source": header.source, "key": header.key} for header in headers}
+    header_map = {}
+    for header in headers:
+        auth_type = header.auth_type
+        if header.header_name.lower() == "authorization":
+            auth_type = auth_type or AuthType.bearer
+        entry = {"source": header.source, "key": header.key}
+        if auth_type:
+            entry["authType"] = auth_type
+        header_map[header.header_name] = entry
     return ConfigResponse(baseUrl=base_urls, headers=header_map)
 
 

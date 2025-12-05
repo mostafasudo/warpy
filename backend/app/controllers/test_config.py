@@ -105,6 +105,27 @@ def test_put_config_requires_local_and_production(client: TestClient):
     assert response.json()["detail"] == "Missing required environments: production"
 
 
+def test_authorization_header_auth_type(client: TestClient):
+    payload = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "headers": {
+            "Authorization": {"source": "cookies", "key": "token"}
+        }
+    }
+
+    first = client.put("/config", json=payload, headers=auth_headers())
+    assert first.status_code == 200
+    assert first.json()["headers"]["Authorization"]["authType"] == "bearer"
+
+    payload["headers"]["Authorization"]["authType"] = "basic"
+    second = client.put("/config", json=payload, headers=auth_headers())
+    assert second.status_code == 200
+    assert second.json()["headers"]["Authorization"]["authType"] == "basic"
+
+
 def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     payload_user1 = {
         "baseUrl": {

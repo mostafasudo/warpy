@@ -19,6 +19,12 @@ class StorageSource(str, enum.Enum):
     cookies = "cookies"
 
 
+class AuthType(str, enum.Enum):
+    bearer = "bearer"
+    basic = "basic"
+    none = "none"
+
+
 class HttpMethod(str, enum.Enum):
     get = "GET"
     post = "POST"
@@ -52,6 +58,7 @@ class SessionHeader(Base):
     header_name = Column(Text, nullable=False)
     source = Column(Enum(StorageSource, name="storage_source", native_enum=True, validate_strings=True), nullable=False)
     key = Column(Text, nullable=False)
+    auth_type = Column(Enum(AuthType, name="auth_type", native_enum=True, validate_strings=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

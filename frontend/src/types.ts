@@ -1,7 +1,9 @@
 export type StorageSource = "localStorage" | "sessionStorage" | "cookies"
 
+export type AuthorizationType = "bearer" | "basic" | "none"
+
 export type ConfigMap = Record<string, string>
-export type HeaderConfig = Record<string, { source: StorageSource; key: string }>
+export type HeaderConfig = Record<string, { source: StorageSource; key: string; authType?: AuthorizationType }>
 
 export type ConfigResponse = {
   baseUrl: ConfigMap

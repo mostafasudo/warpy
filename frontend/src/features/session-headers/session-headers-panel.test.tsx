@@ -40,6 +40,7 @@ describe("SessionHeadersPanel", () => {
   beforeAll(() => {
     ;(HTMLElement.prototype as any).hasPointerCapture = () => false
     ;(HTMLElement.prototype as any).releasePointerCapture = () => {}
+    ;(HTMLElement.prototype as any).scrollIntoView = () => {}
   })
   beforeEach(() => {
     useConfigUiStore.getState().resetHeaderForm()
@@ -111,6 +112,33 @@ describe("SessionHeadersPanel", () => {
     expect(mutateAsync).toHaveBeenCalledWith({
       baseUrl: { local: "http://localhost" },
       headers: {}
+    })
+  })
+
+  it("shows auth type selector for authorization headers", async () => {
+    const mutateAsync = jest.fn(async (payload) => payload)
+    mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: {},
+        headers: { Authorization: { source: "cookies", key: "auth", authType: "basic" } }
+      },
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderPanel()
+
+    await screen.findByText("Authorization")
+
+    await user.click(screen.getByTestId("edit-header-Authorization"))
+    await user.click(screen.getByTestId("auth-type-trigger"))
+    await user.click(await screen.findByRole("option", { name: "Bearer" }))
+    await user.click(screen.getByTestId("save-header"))
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      baseUrl: {},
+      headers: { Authorization: { source: "cookies", key: "auth", authType: "bearer" } }
     })
   })
 
