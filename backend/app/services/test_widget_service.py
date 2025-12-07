@@ -152,3 +152,4 @@ def test_save_and_get_widget_messages(db_session: Session):
     assert messages[1].role == "assistant"
     assert messages[1].content == "hi there"
 
+

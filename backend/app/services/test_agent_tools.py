@@ -8,14 +8,20 @@ from app.services import agent_tools
 from app.services.agent_tools import create_endpoint_tool, create_get_endpoints_tool
 
 
+class DummyFeature:
+    def __init__(self, name: str):
+        self.name = name
+
+
 class DummyEndpoint:
-    def __init__(self, endpoint_id: str, path: str, method: HttpMethod, tool: dict, agent_enabled: bool = True):
+    def __init__(self, endpoint_id: str, path: str, method: HttpMethod, tool: dict, agent_enabled: bool = True, feature: DummyFeature | None = None):
         self.id = UUID(endpoint_id)
         self.path = path
         self.method = method
         self.tool = tool
         self.user_id = "user"
         self.agent_enabled = agent_enabled
+        self.feature = feature
 
 
 class DummySession:
@@ -90,7 +96,8 @@ def test_create_get_endpoints_tool_formats_results(monkeypatch: pytest.MonkeyPat
         "22222222-2222-2222-2222-222222222222",
         "/orders",
         HttpMethod.post,
-        {"function": {"name": "createOrder", "description": "Create order"}}
+        {"function": {"name": "createOrder", "description": "Create order"}},
+        feature=DummyFeature("Orders")
     )
     session = DummySession([endpoint])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [endpoint.id])
@@ -100,6 +107,7 @@ def test_create_get_endpoints_tool_formats_results(monkeypatch: pytest.MonkeyPat
     assert response[0]["id"] == str(endpoint.id)
     assert response[0]["name"] == "createOrder"
     assert response[0]["description"] == "Create order"
+    assert response[0]["feature"] == "Orders"
 
 
 def test_create_get_endpoints_tool_handles_empty(monkeypatch: pytest.MonkeyPatch):

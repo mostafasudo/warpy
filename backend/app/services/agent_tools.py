@@ -5,7 +5,7 @@ from uuid import UUID
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..models import Endpoint
 from .embedding_service import search_similar_endpoints
@@ -27,7 +27,7 @@ def create_get_endpoints_tool(session: Session, user_id: str) -> StructuredTool:
                 Endpoint.id.in_(endpoint_ids),
                 Endpoint.user_id == user_id,
                 Endpoint.agent_enabled.is_(True)
-            )
+            ).options(selectinload(Endpoint.feature))
         ).all()
         if not endpoints:
             return "No matching endpoints found. Try a different search query."
@@ -41,7 +41,8 @@ def create_get_endpoints_tool(session: Session, user_id: str) -> StructuredTool:
                     "method": endpoint.method.value,
                     "path": endpoint.path,
                     "name": function.get("name", ""),
-                    "description": function.get("description", "")
+                    "description": function.get("description", ""),
+                    "feature": getattr(endpoint.feature, "name", "")
                 }
             )
         return json.dumps(result, indent=2)
