@@ -3,96 +3,105 @@ import type {
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
+  FeatureEndpointsResponse,
   FeaturePayload,
   FeatureTogglePayload,
   FeatureWithEndpoints,
-  PaginatedEndpoints
-} from "@/types"
+  PaginatedEndpoints,
+} from "@/types";
 
 type RequestOptions = Omit<RequestInit, "signal"> & {
-  timeoutMs?: number
-}
+  timeoutMs?: number;
+};
 
-let apiUrl = "http://localhost:8000"
-let defaultTimeoutMs = 5000
+let apiUrl = "http://localhost:8000";
+let defaultTimeoutMs = 5000;
 
-export const configureApiClient = (config: { apiUrl: string; apiTimeoutMs: number }) => {
-  apiUrl = config.apiUrl
-  defaultTimeoutMs = config.apiTimeoutMs
-}
+export const configureApiClient = (config: {
+  apiUrl: string;
+  apiTimeoutMs: number;
+}) => {
+  apiUrl = config.apiUrl;
+  defaultTimeoutMs = config.apiTimeoutMs;
+};
 
 const getSessionToken = async (): Promise<string | null> => {
-  const clerk = (globalThis as typeof globalThis & {
-    Clerk?: { session?: { getToken?: () => Promise<string | null> | string | null } }
-  }).Clerk
-  const session = clerk?.session
-  const getter = session?.getToken
+  const clerk = (
+    globalThis as typeof globalThis & {
+      Clerk?: {
+        session?: { getToken?: () => Promise<string | null> | string | null };
+      };
+    }
+  ).Clerk;
+  const session = clerk?.session;
+  const getter = session?.getToken;
   if (!getter || typeof getter !== "function") {
-    return null
+    return null;
   }
-  const result = await getter()
-  return result ?? null
-}
+  const result = await getter();
+  return result ?? null;
+};
 
 const createController = (timeoutMs: number) => {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(controller.abort.bind(controller), timeoutMs)
-  return { controller, timeoutId }
-}
+  const controller = new AbortController();
+  const timeoutId = setTimeout(controller.abort.bind(controller), timeoutMs);
+  return { controller, timeoutId };
+};
 
 const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
-  const url = new URL(path, apiUrl)
-  const timeoutMs = init?.timeoutMs ?? defaultTimeoutMs
-  const { controller, timeoutId } = createController(timeoutMs)
+  const url = new URL(path, apiUrl);
+  const timeoutMs = init?.timeoutMs ?? defaultTimeoutMs;
+  const { controller, timeoutId } = createController(timeoutMs);
 
   try {
-    const headers = new Headers(init?.headers ?? undefined)
+    const headers = new Headers(init?.headers ?? undefined);
     if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json")
+      headers.set("Content-Type", "application/json");
     }
-    const token = await getSessionToken()
+    const token = await getSessionToken();
     if (token) {
-      headers.set("Authorization", `Bearer ${token}`)
+      headers.set("Authorization", `Bearer ${token}`);
     }
 
     const response = await fetch(url, {
       ...init,
       signal: controller.signal,
-      headers
-    })
+      headers,
+    });
 
     if (!response.ok) {
-      const message = await response.text()
-      throw new Error(message || `Request failed with ${response.status}`)
+      const message = await response.text();
+      throw new Error(message || `Request failed with ${response.status}`);
     }
 
-    const raw = await response.text()
+    const raw = await response.text();
     if (!raw) {
       if (response.status === 204) {
-        return undefined as T
+        return undefined as T;
       }
-      throw new Error("Expected response body but received empty response")
+      throw new Error("Expected response body but received empty response");
     }
-    return JSON.parse(raw) as T
+    return JSON.parse(raw) as T;
   } finally {
-    clearTimeout(timeoutId)
+    clearTimeout(timeoutId);
   }
-}
+};
 
 export type HealthResponse = {
-  status: string
-}
+  status: string;
+};
 
 export type {
   AgentResponse,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
+  FeatureEndpointsResponse,
   FeaturePayload,
   FeatureTogglePayload,
   FeatureWithEndpoints,
-  PaginatedEndpoints
-} from "@/types"
+  PaginatedEndpoints,
+} from "@/types";
 
 export const apiClient = {
   health: () => request<HealthResponse>("/health"),
@@ -100,62 +109,71 @@ export const apiClient = {
   updateConfig: (payload: ConfigResponse) =>
     request<ConfigResponse>("/config", {
       method: "PUT",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     }),
   listEndpoints: (page: number, pageSize: number, search = "") => {
-    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
-    const term = search.trim()
+    const params = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    });
+    const term = search.trim();
     if (term) {
-      params.set("search", term)
+      params.set("search", term);
     }
-    return request<PaginatedEndpoints>(`/endpoints?${params.toString()}`)
+    return request<PaginatedEndpoints>(`/endpoints?${params.toString()}`);
   },
   createEndpoint: (payload: EndpointPayload) =>
     request<EndpointResponse>("/endpoints", {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     }),
   updateEndpoint: (id: string, payload: EndpointPayload) =>
     request<EndpointResponse>(`/endpoints/${id}`, {
       method: "PUT",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     }),
   deleteEndpoint: (id: string) =>
     request<void>(`/endpoints/${id}`, {
-      method: "DELETE"
+      method: "DELETE",
     }),
   listFeatures: (search = "") => {
-    const params = new URLSearchParams()
-    const term = search.trim()
+    const params = new URLSearchParams();
+    const term = search.trim();
     if (term) {
-      params.set("search", term)
+      params.set("search", term);
     }
-    const query = params.toString()
-    const path = query ? `/features?${query}` : "/features"
-    return request<FeatureWithEndpoints[]>(path)
+    const query = params.toString();
+    const path = query ? `/features?${query}` : "/features";
+    return request<FeatureWithEndpoints[]>(path);
   },
   createFeature: (payload: FeaturePayload) =>
     request<FeatureWithEndpoints>("/features", {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     }),
   updateFeature: (id: string, payload: FeaturePayload) =>
     request<FeatureWithEndpoints>(`/features/${id}`, {
       method: "PUT",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     }),
   toggleFeature: (id: string, payload: FeatureTogglePayload) =>
     request<FeatureWithEndpoints>(`/features/${id}/enabled`, {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     }),
   deleteFeature: (id: string) =>
     request<void>(`/features/${id}`, {
-      method: "DELETE"
+      method: "DELETE",
     }),
+  listFeatureEndpoints: (featureId: string, page: number) => {
+    const params = new URLSearchParams({ page: String(page) });
+    return request<FeatureEndpointsResponse>(
+      `/features/${encodeURIComponent(featureId)}/endpoints?${params.toString()}`,
+    );
+  },
   getAgent: () => request<AgentResponse>("/agent"),
   createAgent: () =>
     request<AgentResponse>("/agent", {
-      method: "POST"
-    })
-}
+      method: "POST",
+    }),
+};

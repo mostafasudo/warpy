@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 class FeatureEnabledState(str, Enum):
@@ -50,5 +50,20 @@ class FeatureTogglePayload(BaseModel):
     agent_enabled: bool = Field(alias="agentEnabled")
 
 
+class EndpointPagination(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, alias="pageSize")
+    total: int = Field(ge=0)
+    total_pages: int = Field(ge=1, alias="totalPages")
+
+    @computed_field(alias="hasMore")
+    @property
+    def has_more(self) -> bool:
+        return self.page < self.total_pages
+
+
 class FeatureWithEndpointsResponse(FeatureResponse):
     endpoints: list["EndpointResponse"] = Field(default_factory=list)
+    pagination: EndpointPagination

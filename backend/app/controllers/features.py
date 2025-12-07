@@ -7,11 +7,16 @@ from ..core.auth import require_clerk_session
 from ..core.database import get_session
 from ..core.logger import log_error, log_info
 from ..schemas.auth import ClerkSession
-from ..schemas.feature import FeaturePayload, FeatureTogglePayload, FeatureWithEndpointsResponse
-from ..services.feature_service import create_feature, delete_feature, list_features, set_feature_enabled, update_feature
+from ..schemas.endpoint import EndpointResponse
+from ..schemas.feature import EndpointPagination, FeaturePayload, FeatureTogglePayload, FeatureWithEndpointsResponse
+from ..services.feature_service import create_feature, delete_feature, list_feature_endpoints, list_features, set_feature_enabled, update_feature
 
 
 router = APIRouter()
+
+
+class FeatureEndpointsResponse(EndpointPagination):
+    items: list[EndpointResponse]
 
 
 @router.get("/features", response_model=list[FeatureWithEndpointsResponse])
@@ -29,6 +34,30 @@ def read_features(
     except Exception as error:
         log_error("FeaturesController", "read_features", "Failed to fetch features", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch features")
+
+
+@router.get("/features/{feature_id}/endpoints", response_model=FeatureEndpointsResponse)
+def read_feature_endpoints(
+    feature_id: UUID,
+    page: int = Query(1, ge=1),
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> FeatureEndpointsResponse:
+    try:
+        endpoints, pagination = list_feature_endpoints(session, feature_id, clerk_session.user_id, page)
+        log_info("FeaturesController", "read_feature_endpoints", "Endpoints fetched", user_id=clerk_session.user_id, feature_id=str(feature_id))
+        return FeatureEndpointsResponse(
+            items=endpoints,
+            page=pagination.page,
+            page_size=pagination.page_size,
+            total=pagination.total,
+            total_pages=pagination.total_pages
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("FeaturesController", "read_feature_endpoints", "Failed to fetch endpoints", exc=error, user_id=clerk_session.user_id, feature_id=str(feature_id))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch endpoints")
 
 
 @router.post("/features", response_model=FeatureWithEndpointsResponse, status_code=status.HTTP_201_CREATED)

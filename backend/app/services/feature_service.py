@@ -1,4 +1,4 @@
-from typing import Any
+from math import ceil
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session, selectinload
 from ..core.logger import log_info
 from ..models import Endpoint, Feature
 from ..schemas.endpoint import EndpointPayload
-from ..schemas.feature import FeatureSelector
+from ..schemas.feature import EndpointPagination, FeatureSelector
 from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
 from .feature_classifier import classify_feature_name
 from .user_stats_service import adjust_endpoint_count
+
+ENDPOINTS_PAGE_SIZE = 5
 
 
 def _normalize_name(name: str) -> str:
@@ -57,17 +59,193 @@ def _feature_search_condition(search: str | None):
     return and_(*predicates)
 
 
-def list_features(session: Session, user_id: str, search: str | None = None) -> list[Feature]:
+def _get_feature_endpoint_counts(session: Session, feature_ids: list[UUID]) -> dict[UUID, int]:
+    if not feature_ids:
+        return {}
+    rows = session.execute(
+        select(Endpoint.feature_id, func.count(Endpoint.id))
+        .where(Endpoint.feature_id.in_(feature_ids))
+        .group_by(Endpoint.feature_id)
+    ).all()
+    return {row[0]: row[1] for row in rows}
+
+
+def _get_feature_enabled_states(session: Session, feature_ids: list[UUID]) -> dict[UUID, tuple[int, int]]:
+    if not feature_ids:
+        return {}
+    from sqlalchemy import case, Integer
+    enabled_case = case((Endpoint.agent_enabled == True, 1), else_=0)
+    rows = session.execute(
+        select(
+            Endpoint.feature_id,
+            func.sum(enabled_case),
+            func.count(Endpoint.id)
+        )
+        .where(Endpoint.feature_id.in_(feature_ids))
+        .group_by(Endpoint.feature_id)
+    ).all()
+    return {row[0]: (int(row[1] or 0), row[2]) for row in rows}
+
+
+def _compute_enabled_state(enabled_count: int, total: int) -> str:
+    if total == 0:
+        return "disabled"
+    if enabled_count == total:
+        return "enabled"
+    if enabled_count > 0:
+        return "partial"
+    return "disabled"
+
+
+class FeatureWithPagination:
+    def __init__(
+        self,
+        feature: Feature,
+        endpoints: list[Endpoint],
+        endpoint_count: int,
+        enabled_state: str,
+        pagination: EndpointPagination
+    ):
+        self.id = feature.id
+        self.name = feature.name
+        self.endpoint_count = endpoint_count
+        self.enabled_state = enabled_state
+        self.endpoints = endpoints
+        self.pagination = pagination
+
+
+def _get_paginated_endpoints_by_feature(
+    session: Session,
+    feature_ids: list[UUID],
+    page: int
+) -> dict[UUID, list[Endpoint]]:
+    if not feature_ids:
+        return {}
+    from sqlalchemy import over, literal_column
+    from sqlalchemy.orm import aliased
+    offset = (page - 1) * ENDPOINTS_PAGE_SIZE
+    row_num = func.row_number().over(
+        partition_by=Endpoint.feature_id,
+        order_by=[Endpoint.created_at, Endpoint.id]
+    ).label("row_num")
+    subq = (
+        select(Endpoint.id, row_num)
+        .where(Endpoint.feature_id.in_(feature_ids))
+        .subquery()
+    )
+    endpoint_ids = session.scalars(
+        select(subq.c.id)
+        .where(subq.c.row_num > offset)
+        .where(subq.c.row_num <= offset + ENDPOINTS_PAGE_SIZE)
+    ).all()
+    if not endpoint_ids:
+        return {fid: [] for fid in feature_ids}
+    endpoints = session.scalars(
+        select(Endpoint)
+        .where(Endpoint.id.in_(endpoint_ids))
+        .order_by(Endpoint.feature_id, Endpoint.created_at, Endpoint.id)
+    ).all()
+    result: dict[UUID, list[Endpoint]] = {fid: [] for fid in feature_ids}
+    for ep in endpoints:
+        result[ep.feature_id].append(ep)
+    return result
+
+
+def list_features(
+    session: Session,
+    user_id: str,
+    search: str | None = None,
+    endpoint_page: int = 1
+) -> list[FeatureWithPagination]:
     condition = _feature_search_condition(search)
-    query = select(Feature).where(Feature.user_id == user_id).options(
-        selectinload(Feature.endpoints)
-    ).order_by(Feature.created_at.desc())
+    query = select(Feature).where(Feature.user_id == user_id).order_by(Feature.created_at.desc())
     if condition is not None:
         query = query.outerjoin(Endpoint, Endpoint.feature_id == Feature.id).where(condition).distinct()
-    return list(session.scalars(query).all())
+    features = list(session.scalars(query).all())
+    if not features:
+        return []
+    feature_ids = [f.id for f in features]
+    counts = _get_feature_endpoint_counts(session, feature_ids)
+    states = _get_feature_enabled_states(session, feature_ids)
+    endpoints_by_feature = _get_paginated_endpoints_by_feature(session, feature_ids, endpoint_page)
+    result = []
+    for feature in features:
+        total = counts.get(feature.id, 0)
+        state_info = states.get(feature.id, (0, 0))
+        enabled_state = _compute_enabled_state(state_info[0], state_info[1])
+        paged_eps = endpoints_by_feature.get(feature.id, [])
+        total_pages = max(1, ceil(total / ENDPOINTS_PAGE_SIZE))
+        pagination = EndpointPagination(
+            page=endpoint_page,
+            page_size=ENDPOINTS_PAGE_SIZE,
+            total=total,
+            total_pages=total_pages
+        )
+        result.append(FeatureWithPagination(feature, paged_eps, total, enabled_state, pagination))
+    return result
 
 
-def create_feature(session: Session, user_id: str, name: str) -> Feature:
+def list_feature_endpoints(
+    session: Session,
+    feature_id: UUID,
+    user_id: str,
+    page: int = 1
+) -> tuple[list[Endpoint], EndpointPagination]:
+    feature = _get_feature(session, feature_id, user_id)
+    total = session.scalar(
+        select(func.count(Endpoint.id)).where(Endpoint.feature_id == feature_id)
+    ) or 0
+    offset = (page - 1) * ENDPOINTS_PAGE_SIZE
+    endpoints = list(session.scalars(
+        select(Endpoint)
+        .where(Endpoint.feature_id == feature_id)
+        .order_by(Endpoint.created_at, Endpoint.id)
+        .offset(offset)
+        .limit(ENDPOINTS_PAGE_SIZE)
+    ).all())
+    total_pages = max(1, ceil(total / ENDPOINTS_PAGE_SIZE))
+    pagination = EndpointPagination(
+        page=page,
+        page_size=ENDPOINTS_PAGE_SIZE,
+        total=total,
+        total_pages=total_pages
+    )
+    return endpoints, pagination
+
+
+def _build_feature_with_pagination(
+    session: Session,
+    feature: Feature,
+    page: int = 1
+) -> FeatureWithPagination:
+    total = session.scalar(
+        select(func.count(Endpoint.id)).where(Endpoint.feature_id == feature.id)
+    ) or 0
+    enabled_count = session.scalar(
+        select(func.count(Endpoint.id)).where(
+            and_(Endpoint.feature_id == feature.id, Endpoint.agent_enabled == True)
+        )
+    ) or 0
+    enabled_state = _compute_enabled_state(enabled_count, total)
+    offset = (page - 1) * ENDPOINTS_PAGE_SIZE
+    endpoints = list(session.scalars(
+        select(Endpoint)
+        .where(Endpoint.feature_id == feature.id)
+        .order_by(Endpoint.created_at, Endpoint.id)
+        .offset(offset)
+        .limit(ENDPOINTS_PAGE_SIZE)
+    ).all())
+    total_pages = max(1, ceil(total / ENDPOINTS_PAGE_SIZE))
+    pagination = EndpointPagination(
+        page=page,
+        page_size=ENDPOINTS_PAGE_SIZE,
+        total=total,
+        total_pages=total_pages
+    )
+    return FeatureWithPagination(feature, endpoints, total, enabled_state, pagination)
+
+
+def _create_feature_record(session: Session, user_id: str, name: str) -> Feature:
     normalized = _normalize_name(name)
     if not normalized:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Feature name is required")
@@ -81,7 +259,12 @@ def create_feature(session: Session, user_id: str, name: str) -> Feature:
     return feature
 
 
-def update_feature(session: Session, feature_id: UUID, user_id: str, name: str) -> Feature:
+def create_feature(session: Session, user_id: str, name: str) -> FeatureWithPagination:
+    feature = _create_feature_record(session, user_id, name)
+    return _build_feature_with_pagination(session, feature)
+
+
+def update_feature(session: Session, feature_id: UUID, user_id: str, name: str) -> FeatureWithPagination:
     normalized = _normalize_name(name)
     if not normalized:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Feature name is required")
@@ -93,7 +276,7 @@ def update_feature(session: Session, feature_id: UUID, user_id: str, name: str) 
     feature.updated_at = func.now()
     session.flush()
     log_info("FeatureService", "update_feature", "Feature renamed", user_id=user_id, feature_id=str(feature_id))
-    return feature
+    return _build_feature_with_pagination(session, feature)
 
 
 def delete_feature(session: Session, feature_id: UUID, user_id: str) -> None:
@@ -108,7 +291,7 @@ def delete_feature(session: Session, feature_id: UUID, user_id: str) -> None:
     log_info("FeatureService", "delete_feature", "Feature deleted", user_id=user_id, feature_id=str(feature_id))
 
 
-def set_feature_enabled(session: Session, feature_id: UUID, user_id: str, enabled: bool) -> Feature:
+def set_feature_enabled(session: Session, feature_id: UUID, user_id: str, enabled: bool) -> FeatureWithPagination:
     feature = _get_feature(session, feature_id, user_id, load_endpoints=True)
     changes = 0
     for endpoint in feature.endpoints:
@@ -125,20 +308,20 @@ def set_feature_enabled(session: Session, feature_id: UUID, user_id: str, enable
         feature.updated_at = func.now()
         session.flush()
     log_info("FeatureService", "set_feature_enabled", "Feature toggled", user_id=user_id, feature_id=str(feature_id), enabled=enabled)
-    return feature
+    return _build_feature_with_pagination(session, feature)
 
 
 def resolve_feature(session: Session, user_id: str, selector: FeatureSelector, endpoint_payload: EndpointPayload) -> Feature:
     if selector.mode == "existing":
         return _get_feature(session, selector.id, user_id)
     if selector.mode == "new":
-        return create_feature(session, user_id, selector.name or "")
+        return _create_feature_record(session, user_id, selector.name or "")
     current = list(session.scalars(select(Feature).where(Feature.user_id == user_id)).all())
     feature_name = classify_feature_name(endpoint_payload.model_dump(mode="json"), [item.name for item in current])
     match = next((item for item in current if item.name.lower() == feature_name.lower()), None)
     if match:
         return match
-    return create_feature(session, user_id, feature_name)
+    return _create_feature_record(session, user_id, feature_name)
 
 
 def delete_feature_if_empty(session: Session, feature_id: UUID, user_id: str) -> None:
