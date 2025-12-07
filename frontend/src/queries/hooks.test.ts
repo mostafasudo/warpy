@@ -105,11 +105,11 @@ describe("react-query hooks", () => {
     expect(apiClient.listEndpoints).toHaveBeenCalledWith(1, 5, "test")
 
     ;(apiClient.createEndpoint as any).mockResolvedValue({ id: "1" })
-    await useCreateEndpoint().mutateAsync({ path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } } })
+    await useCreateEndpoint().mutateAsync({ path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true })
     expect(queryClient.invalidateQueries).toHaveBeenCalled()
 
     ;(apiClient.updateEndpoint as any).mockResolvedValue({ id: "1" })
-    await useUpdateEndpoint().mutateAsync({ id: "1", payload: { path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } } } })
+    await useUpdateEndpoint().mutateAsync({ id: "1", payload: { path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true } })
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
 
     ;(apiClient.deleteEndpoint as any).mockResolvedValue(undefined)

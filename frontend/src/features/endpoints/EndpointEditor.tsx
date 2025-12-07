@@ -40,6 +40,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
   const method = useEndpointBuilderStore(endpointBuilderSelectors.method)
   const name = useEndpointBuilderStore(endpointBuilderSelectors.name)
   const description = useEndpointBuilderStore(endpointBuilderSelectors.description)
+  const agentEnabled = useEndpointBuilderStore(endpointBuilderSelectors.agentEnabled)
   const pathParams = useEndpointBuilderStore(endpointBuilderSelectors.pathParams)
   const headers = useEndpointBuilderStore(endpointBuilderSelectors.headers)
   const queryParams = useEndpointBuilderStore(endpointBuilderSelectors.queryParams)
@@ -48,6 +49,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
   const setMethod = useEndpointBuilderStore(endpointBuilderActions.setMethod)
   const setName = useEndpointBuilderStore(endpointBuilderActions.setName)
   const setDescription = useEndpointBuilderStore(endpointBuilderActions.setDescription)
+  const setAgentEnabled = useEndpointBuilderStore(endpointBuilderActions.setAgentEnabled)
   const setPathParamFixed = useEndpointBuilderStore(endpointBuilderActions.setPathParamFixed)
   const setPathParamDescription = useEndpointBuilderStore(endpointBuilderActions.setPathParamDescription)
   const addFlatField = useEndpointBuilderStore(endpointBuilderActions.addFlatField)
@@ -66,12 +68,13 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
       method,
       name,
       description,
+      agentEnabled,
       pathParams,
       headers,
       queryParams,
       bodyFields
     }),
-    [path, method, name, description, pathParams, headers, queryParams, bodyFields]
+    [path, method, name, description, agentEnabled, pathParams, headers, queryParams, bodyFields]
   )
 
   const validation = useMemo(
@@ -177,6 +180,20 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
               validation?.invalid.description && "border-destructive focus-visible:ring-destructive"
             )}
           />
+        </div>
+        <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 p-3">
+          <div>
+            <p className="text-sm font-medium">Agent access</p>
+            <p className="text-xs text-muted-foreground">Control whether the agent has access to this endpoint.</p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Switch
+              checked={agentEnabled}
+              onCheckedChange={setAgentEnabled}
+              data-testid="agent-enabled-toggle"
+            />
+            {agentEnabled ? "Enabled" : "Disabled"}
+          </div>
         </div>
         <div className="rounded-xl border border-border/70 p-3">
           <div className="mb-2 flex items-center justify-between">

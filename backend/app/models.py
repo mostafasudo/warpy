@@ -2,7 +2,7 @@ import enum
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -83,6 +83,7 @@ class Endpoint(Base):
     path = Column(Text, nullable=False)
     method = Column(Enum(HttpMethod, name="http_method", native_enum=True, validate_strings=True), nullable=False)
     tool = Column(json_type, nullable=False)
+    agent_enabled = Column(Boolean, nullable=False, server_default=func.true(), default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

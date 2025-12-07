@@ -31,6 +31,7 @@ export type EndpointPayload = {
   path: string
   method: HttpMethod
   tool: EndpointTool
+  agentEnabled: boolean
 }
 
 export type EndpointResponse = EndpointPayload & {

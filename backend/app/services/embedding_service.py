@@ -3,14 +3,13 @@ import json
 from uuid import UUID
 
 from openai import OpenAI
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
 from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
 from ..models import Endpoint, EndpointEmbedding
-from .user_stats_service import get_endpoint_count
 
 
 def _get_openai_client() -> OpenAI:
@@ -45,6 +44,10 @@ def upsert_endpoint_embedding(session: Session, endpoint_id: UUID, user_id: str)
     endpoint = session.scalar(select(Endpoint).where(Endpoint.id == endpoint_id))
     if not endpoint:
         log_error("EmbeddingService", "upsert_endpoint_embedding", "Endpoint not found", endpoint_id=str(endpoint_id))
+        return None
+    if not endpoint.agent_enabled:
+        delete_endpoint_embedding(session, endpoint_id)
+        log_info("EmbeddingService", "upsert_endpoint_embedding", "Skipped disabled endpoint", endpoint_id=str(endpoint_id))
         return None
 
     text = _endpoint_to_text(endpoint)
@@ -91,7 +94,12 @@ def delete_endpoint_embedding(session: Session, endpoint_id: UUID) -> None:
 
 def search_similar_endpoints(session: Session, user_id: str, query: str, top_k: int | None = None) -> list[UUID]:
     if top_k is None:
-        total = get_endpoint_count(session, user_id)
+        total = session.scalar(
+            select(func.count()).select_from(Endpoint).where(
+                Endpoint.user_id == user_id,
+                Endpoint.agent_enabled.is_(True)
+            )
+        ) or 0
         top_k = llm_config.calculate_top_k(total)
 
     if top_k == 0:
@@ -105,7 +113,11 @@ def search_similar_endpoints(session: Session, user_id: str, query: str, top_k: 
 
     results = session.scalars(
         select(EndpointEmbedding.endpoint_id)
-        .where(EndpointEmbedding.user_id == user_id)
+        .join(Endpoint, Endpoint.id == EndpointEmbedding.endpoint_id)
+        .where(
+            EndpointEmbedding.user_id == user_id,
+            Endpoint.agent_enabled.is_(True)
+        )
         .order_by(EndpointEmbedding.embedding.cosine_distance(query_embedding))
         .limit(top_k)
     ).all()

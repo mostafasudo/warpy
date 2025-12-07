@@ -7,13 +7,16 @@ from ..models import HttpMethod
 
 
 class EndpointPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     path: str
     method: HttpMethod
     tool: dict[str, Any]
+    agent_enabled: bool = Field(default=True, alias="agentEnabled")
 
 
 class EndpointResponse(EndpointPayload):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
 

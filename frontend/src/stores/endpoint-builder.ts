@@ -36,6 +36,7 @@ export type EndpointBuilderState = {
   method: HttpMethod
   name: string
   description: string
+  agentEnabled: boolean
   pathParams: PathParam[]
   headers: FlatField[]
   queryParams: FlatField[]
@@ -47,6 +48,7 @@ type EndpointBuilderStore = EndpointBuilderState & {
   setMethod: (method: HttpMethod) => void
   setName: (name: string) => void
   setDescription: (description: string) => void
+  setAgentEnabled: (enabled: boolean) => void
   setPathParamFixed: (name: string, fixed?: string) => void
   setPathParamDescription: (name: string, description: string) => void
   addFlatField: (section: "headers" | "queryParams") => void
@@ -150,6 +152,7 @@ const defaultState: EndpointBuilderState = {
   method: "GET",
   name: "",
   description: "",
+  agentEnabled: true,
   pathParams: [],
   headers: [],
   queryParams: [],
@@ -169,6 +172,7 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
   setMethod: (method) => set({ method }),
   setName: (name) => set({ name }),
   setDescription: (description) => set({ description }),
+  setAgentEnabled: (enabled) => set({ agentEnabled: enabled }),
   setPathParamFixed: (name, fixed) =>
     set((state) => ({
       pathParams: state.pathParams.map((param) => (param.name === name ? { ...param, fixed } : param))
@@ -236,6 +240,7 @@ export const endpointBuilderSelectors = {
   method: (state: EndpointBuilderState) => state.method,
   name: (state: EndpointBuilderState) => state.name,
   description: (state: EndpointBuilderState) => state.description,
+  agentEnabled: (state: EndpointBuilderState) => state.agentEnabled,
   pathParams: (state: EndpointBuilderState) => state.pathParams,
   headers: (state: EndpointBuilderState) => state.headers,
   queryParams: (state: EndpointBuilderState) => state.queryParams,
@@ -247,6 +252,7 @@ export const endpointBuilderActions = {
   setMethod: (state: EndpointBuilderStore) => state.setMethod,
   setName: (state: EndpointBuilderStore) => state.setName,
   setDescription: (state: EndpointBuilderStore) => state.setDescription,
+  setAgentEnabled: (state: EndpointBuilderStore) => state.setAgentEnabled,
   setPathParamFixed: (state: EndpointBuilderStore) => state.setPathParamFixed,
   setPathParamDescription: (state: EndpointBuilderStore) => state.setPathParamDescription,
   addFlatField: (state: EndpointBuilderStore) => state.addFlatField,

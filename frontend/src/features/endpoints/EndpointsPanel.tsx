@@ -201,6 +201,7 @@ export const EndpointsPanel = () => {
                 <TableHead className="w-[260px]">Path</TableHead>
                 <TableHead className="w-[240px]">Tool name</TableHead>
                 <TableHead className="w-[360px]">Description</TableHead>
+                <TableHead className="w-28">Agent</TableHead>
                 <TableHead className="w-32 text-right" />
               </TableRow>
             </TableHeader>
@@ -219,6 +220,9 @@ export const EndpointsPanel = () => {
                     </TableCell>
                     <TableCell className="max-w-[360px]">
                       <Skeleton className="h-4 w-full max-w-[320px]" />
+                    </TableCell>
+                    <TableCell className="w-28">
+                      <Skeleton className="h-6 w-16" />
                     </TableCell>
                     <TableCell className="w-32">
                       <div className="flex justify-end">
@@ -249,6 +253,11 @@ export const EndpointsPanel = () => {
                       <div className="truncate text-muted-foreground" title={endpoint.tool.function.description}>
                         {endpoint.tool.function.description}
                       </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={endpoint.agentEnabled ? "default" : "secondary"} className="border">
+                        {endpoint.agentEnabled ? "On" : "Off"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="flex w-32 justify-end gap-2">
                       <ActionTooltip content="Edit endpoint">
@@ -305,7 +314,7 @@ export const EndpointsPanel = () => {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                     Add endpoints to give your agent access to them.
                   </TableCell>
                 </TableRow>

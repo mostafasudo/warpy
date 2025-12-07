@@ -58,7 +58,7 @@ def test_compute_hash_changes_with_text():
 
 
 def test_endpoint_to_text_includes_parts():
-    endpoint = Endpoint(id=UUID(int=1), user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}})
+    endpoint = Endpoint(id=UUID(int=1), user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}}, agent_enabled=True)
     text = _endpoint_to_text(endpoint)
     assert "GET" in text and "/p" in text and "n" in text
 
@@ -72,13 +72,13 @@ def test_generate_embedding_uses_client(monkeypatch: pytest.MonkeyPatch):
 def test_upsert_endpoint_embedding_creates_and_updates(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda text: [0.5])
     endpoint_id = UUID(int=2)
-    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}})
+    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}}, agent_enabled=True)
     session = FakeSession(scalar_results=[endpoint, None])
     created = upsert_endpoint_embedding(session, endpoint_id, "u")
     assert isinstance(created, EndpointEmbedding)
     assert session.added and session.flushed
 
-    updated_endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p2", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}})
+    updated_endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p2", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}}, agent_enabled=True)
     existing = EndpointEmbedding(endpoint_id=endpoint_id, user_id="u", embedding=[0.1], content_hash=_compute_hash(_endpoint_to_text(endpoint)))
     session2 = FakeSession(scalar_results=[updated_endpoint, existing])
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda text: [0.9])
@@ -89,7 +89,7 @@ def test_upsert_endpoint_embedding_creates_and_updates(monkeypatch: pytest.Monke
 
 def test_upsert_endpoint_embedding_returns_none_on_error(monkeypatch: pytest.MonkeyPatch):
     endpoint_id = UUID(int=3)
-    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}})
+    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}}, agent_enabled=True)
     session = FakeSession(scalar_results=[endpoint, None])
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda text: (_ for _ in ()).throw(RuntimeError("fail")))
     assert upsert_endpoint_embedding(session, endpoint_id, "u") is None
@@ -97,7 +97,7 @@ def test_upsert_endpoint_embedding_returns_none_on_error(monkeypatch: pytest.Mon
 
 def test_upsert_endpoint_embedding_returns_existing_when_unchanged(monkeypatch: pytest.MonkeyPatch):
     endpoint_id = UUID(int=8)
-    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}})
+    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}}, agent_enabled=True)
     existing = EndpointEmbedding(endpoint_id=endpoint_id, user_id="u", embedding=[0.1], content_hash=_compute_hash(_endpoint_to_text(endpoint)))
     session = FakeSession(scalar_results=[endpoint, existing])
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda text: [0.2])
@@ -118,12 +118,10 @@ def test_delete_endpoint_embedding_removes(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_search_similar_endpoints_handles_zero_and_errors(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(embedding_service, "get_endpoint_count", lambda _s, _u: 0)
-    session = FakeSession()
+    session = FakeSession(scalar_results=[0])
     assert search_similar_endpoints(session, "u", "q") == []
 
-    monkeypatch.setattr(embedding_service, "get_endpoint_count", lambda _s, _u: 1)
-    session2 = FakeSession(scalars_result=[UUID(int=5)])
+    session2 = FakeSession(scalar_results=[1], scalars_result=[UUID(int=5)])
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: (_ for _ in ()).throw(RuntimeError("fail")))
     assert search_similar_endpoints(session2, "u", "q") == []
 
@@ -138,3 +136,14 @@ def test_search_similar_endpoints_success(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: [0.1])
     result = search_similar_endpoints(session, "u", "q", top_k=1)
     assert result == [UUID(int=7)]
+
+
+def test_upsert_endpoint_embedding_skips_disabled(monkeypatch: pytest.MonkeyPatch):
+    endpoint_id = UUID(int=9)
+    endpoint = Endpoint(id=endpoint_id, user_id="u", path="/p", method=HttpMethod.get, tool={"function": {"name": "n", "description": "d", "parameters": {}}}, agent_enabled=False)
+    existing = EndpointEmbedding(endpoint_id=endpoint_id, user_id="u", embedding=[0.1], content_hash="hash")
+    session = FakeSession(scalar_results=[endpoint, existing])
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda text: [0.5])
+    result = upsert_endpoint_embedding(session, endpoint_id, "u")
+    assert result is None
+    assert existing in session.deleted

@@ -78,7 +78,7 @@ class AgentExecutor:
     def _get_endpoint_by_tool_name(self, tool_name: str) -> Endpoint | None:
         for endpoint_id in self.active_endpoint_ids:
             endpoint = self.session.get(Endpoint, endpoint_id)
-            if endpoint:
+            if endpoint and endpoint.agent_enabled:
                 tool_spec = endpoint.tool or {}
                 function_spec = tool_spec.get("function", {})
                 name = function_spec.get("name", f"endpoint_{endpoint.id}")

@@ -39,6 +39,7 @@ describe("endpoint-builder store", () => {
       method: "POST" as const,
       name: "create_order",
       description: "Create order",
+      agentEnabled: false,
       pathParams: [{ name: "id", description: "order id" }],
       headers: [],
       queryParams: [],
@@ -48,6 +49,7 @@ describe("endpoint-builder store", () => {
     expect(useEndpointBuilderStore.getState().name).toBe("create_order")
     useEndpointBuilderStore.getState().reset()
     expect(useEndpointBuilderStore.getState().name).toBe("")
+    expect(useEndpointBuilderStore.getState().agentEnabled).toBe(true)
   })
 
   it("normalizes path input utility", () => {

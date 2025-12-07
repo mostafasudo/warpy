@@ -77,23 +77,35 @@ def list_endpoints(session: Session, user_id: str, page: int, page_size: int, se
 
 def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) -> Endpoint:
     _validate_tool(payload.tool)
-    endpoint = Endpoint(user_id=user_id, path=payload.path, method=payload.method, tool=payload.tool)
+    endpoint = Endpoint(
+        user_id=user_id,
+        path=payload.path,
+        method=payload.method,
+        tool=payload.tool,
+        agent_enabled=payload.agent_enabled
+    )
     session.add(endpoint)
     session.flush()
     adjust_endpoint_count(session, user_id, 1)
-    upsert_endpoint_embedding(session, endpoint.id, user_id)
+    if endpoint.agent_enabled:
+        upsert_endpoint_embedding(session, endpoint.id, user_id)
     return endpoint
 
 
 def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: EndpointPayload) -> Endpoint:
     _validate_tool(payload.tool)
     endpoint = _get_endpoint(session, endpoint_id, user_id)
+    previous_agent_enabled = endpoint.agent_enabled
     endpoint.path = payload.path
     endpoint.method = payload.method
     endpoint.tool = payload.tool
+    endpoint.agent_enabled = payload.agent_enabled
     endpoint.updated_at = func.now()
     session.flush()
-    upsert_endpoint_embedding(session, endpoint.id, user_id)
+    if endpoint.agent_enabled:
+        upsert_endpoint_embedding(session, endpoint.id, user_id)
+    elif previous_agent_enabled:
+        delete_endpoint_embedding(session, endpoint.id)
     return endpoint
 
 

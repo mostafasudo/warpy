@@ -22,7 +22,15 @@ def create_get_endpoints_tool(session: Session, user_id: str) -> StructuredTool:
         endpoint_ids = search_similar_endpoints(session, user_id, query)
         if not endpoint_ids:
             return "No matching endpoints found. Try a different search query."
-        endpoints = session.scalars(select(Endpoint).where(Endpoint.id.in_(endpoint_ids))).all()
+        endpoints = session.scalars(
+            select(Endpoint).where(
+                Endpoint.id.in_(endpoint_ids),
+                Endpoint.user_id == user_id,
+                Endpoint.agent_enabled.is_(True)
+            )
+        ).all()
+        if not endpoints:
+            return "No matching endpoints found. Try a different search query."
         result = []
         for endpoint in endpoints:
             tool = endpoint.tool or {}
@@ -86,7 +94,11 @@ def get_endpoint_tools(
     if not endpoint_ids:
         return []
     endpoints = session.scalars(
-        select(Endpoint).where(Endpoint.id.in_(endpoint_ids), Endpoint.user_id == user_id)
+        select(Endpoint).where(
+            Endpoint.id.in_(endpoint_ids),
+            Endpoint.user_id == user_id,
+            Endpoint.agent_enabled.is_(True)
+        )
     ).all()
     factory = schema_factory or SchemaFactory()
     return [create_endpoint_tool(session, user_id, endpoint, factory) for endpoint in endpoints]

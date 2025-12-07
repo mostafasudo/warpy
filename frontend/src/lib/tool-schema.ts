@@ -241,7 +241,8 @@ export const buildEndpointPayload = (state: EndpointBuilderState): EndpointPaylo
   return {
     path: ensureApiPath(state.path),
     method: state.method,
-    tool
+    tool,
+    agentEnabled: state.agentEnabled
   }
 }
 
@@ -387,6 +388,7 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
     method: endpoint.method as HttpMethod,
     name: endpoint.tool?.function?.name ?? "",
     description: endpoint.tool?.function?.description ?? "",
+    agentEnabled: endpoint.agentEnabled ?? true,
     pathParams,
     headers,
     queryParams,

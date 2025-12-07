@@ -9,6 +9,7 @@ const baseState: EndpointBuilderState = {
   method: "GET",
   name: "get_user",
   description: "Fetch user",
+  agentEnabled: true,
   pathParams: [{ name: "id", description: "User id" }],
   headers: [{ id: "h1", name: "auth", type: "string", required: true, description: "Auth token" }],
   queryParams: [{ id: "q1", name: "verbose", type: "boolean", required: false, description: "Verbose flag" }],
@@ -120,6 +121,7 @@ describe("tool-schema", () => {
     expect(parameters.properties.body.properties.items.description).toBe("Items")
     expect(parameters.required).toContain("params")
     expect(parameters.required).toContain("body")
+    expect(payload.agentEnabled).toBe(true)
   })
 
   it("parses endpoint payloads with fixed and nested values", () => {
@@ -127,6 +129,7 @@ describe("tool-schema", () => {
       id: "endpoint-2",
       path: "/users/{id}",
       method: "POST",
+      agentEnabled: false,
       tool: {
         type: "function",
         function: {
@@ -189,6 +192,7 @@ describe("tool-schema", () => {
     const state = mapEndpointToBuilderState(endpoint)
 
     expect(state.path).toBe("/users/:id")
+    expect(state.agentEnabled).toBe(false)
     expect(state.pathParams[0].fixed).toBe("9")
     expect(state.headers[0].fixed).toBe("secret")
     expect(state.queryParams.find((q) => q.name === "limit")?.fixed).toBe(3)

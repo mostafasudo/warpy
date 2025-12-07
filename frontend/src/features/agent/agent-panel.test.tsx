@@ -38,6 +38,17 @@ const createWrapper = () => {
   )
 }
 
+const baseEndpoint = {
+  id: "1",
+  path: "/users",
+  method: "GET",
+  tool: {
+    type: "function",
+    function: { name: "getUsers", description: "desc", parameters: { type: "object", properties: {} } }
+  },
+  agentEnabled: true
+}
+
 describe("AgentPanel", () => {
   beforeEach(() => {
     useNavigationStore.setState({ section: "agent" })
@@ -109,7 +120,7 @@ describe("AgentPanel", () => {
       isPending: false
     })
     mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [{ id: "1" }], total: 1, page: 1, pageSize: 10 },
+      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -136,7 +147,7 @@ describe("AgentPanel", () => {
       isPending: false
     })
     mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [{ id: "1" }], total: 1, page: 1, pageSize: 10 },
+      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -161,7 +172,7 @@ describe("AgentPanel", () => {
       isPending: false
     })
     mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [{ id: "1" }], total: 1, page: 1, pageSize: 10 },
+      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -195,7 +206,7 @@ describe("AgentPanel", () => {
       isPending: false
     })
     mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [{ id: "1" }], total: 1, page: 1, pageSize: 10 },
+      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -210,4 +221,3 @@ describe("AgentPanel", () => {
     expect(mockMutate).toHaveBeenCalled()
   })
 })
-

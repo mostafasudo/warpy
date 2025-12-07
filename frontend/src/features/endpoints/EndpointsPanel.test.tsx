@@ -29,6 +29,7 @@ jest.mock("@/stores/endpoint-builder", () => {
     method: "GET",
     name: "get_users",
     description: "Fetch users",
+    agentEnabled: true,
     pathParams: [],
     headers: [],
     queryParams: [],
@@ -37,6 +38,7 @@ jest.mock("@/stores/endpoint-builder", () => {
     setMethod: jest.fn(),
     setName: jest.fn(),
     setDescription: jest.fn(),
+    setAgentEnabled: jest.fn(),
     setPathParamFixed: jest.fn(),
     setPathParamDescription: jest.fn(),
     addFlatField: jest.fn(),
@@ -61,6 +63,7 @@ jest.mock("@/stores/endpoint-builder", () => {
       method: (s: any) => s.method,
       name: (s: any) => s.name,
       description: (s: any) => s.description,
+      agentEnabled: (s: any) => s.agentEnabled,
       pathParams: (s: any) => s.pathParams,
       headers: (s: any) => s.headers,
       queryParams: (s: any) => s.queryParams,
@@ -80,7 +83,8 @@ jest.mock("@/stores/endpoint-builder", () => {
       setDescription: (s: any) => s.setDescription,
       setName: (s: any) => s.setName,
       setPath: (s: any) => s.setPath,
-      setMethod: (s: any) => s.setMethod
+      setMethod: (s: any) => s.setMethod,
+      setAgentEnabled: (s: any) => s.setAgentEnabled
     },
     endpointBuilderUtils: {
       isPrimitiveType: jest.fn(() => true),
@@ -102,13 +106,15 @@ jest.mock("@/lib/tool-schema", () => ({
   buildEndpointPayload: jest.fn(() => ({
     path: "/users",
     method: "GET",
-    tool: { type: "function", function: { name: "get_users", description: "desc", parameters: { type: "object", properties: {} } } }
+    tool: { type: "function", function: { name: "get_users", description: "desc", parameters: { type: "object", properties: {} } } },
+    agentEnabled: true
   })),
   mapEndpointToBuilderState: jest.fn(() => ({
     path: "/users",
     method: "GET",
     name: "get_users",
     description: "desc",
+    agentEnabled: true,
     pathParams: [],
     headers: [],
     queryParams: [],
@@ -227,6 +233,7 @@ describe("EndpointsPanel", () => {
             id: "endpoint-1",
             path: "/users/{id}",
             method: "GET",
+            agentEnabled: true,
             tool: {
               type: "function",
               function: { name: "get_user", description: "Fetch user", parameters: { type: "object", properties: {} } }
@@ -270,6 +277,7 @@ describe("EndpointsPanel", () => {
             id: "endpoint-2",
             path: "/orders",
             method: "POST",
+            agentEnabled: true,
             tool: {
               type: "function",
               function: { name: "create_order", description: "Create", parameters: { type: "object", properties: {} } }

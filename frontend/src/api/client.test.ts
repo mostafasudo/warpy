@@ -74,6 +74,7 @@ describe("apiClient", () => {
         id: "endpoint-1",
         path: "/users",
         method: "GET",
+        agentEnabled: true,
         tool: {
           type: "function",
           function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
@@ -83,6 +84,7 @@ describe("apiClient", () => {
         id: "endpoint-1",
         path: "/users",
         method: "GET",
+        agentEnabled: true,
         tool: {
           type: "function",
           function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
@@ -118,7 +120,8 @@ describe("apiClient", () => {
       tool: {
         type: "function",
         function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
-      }
+      },
+      agentEnabled: true
     }
 
     const created = await apiClient.createEndpoint(payload)
