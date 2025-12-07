@@ -10,12 +10,12 @@ jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
 }))
 
-jest.mock("@/queries/use-endpoints", () => ({
-  useEndpointsQuery: jest.fn()
+jest.mock("@/queries/use-features", () => ({
+  useFeaturesQuery: jest.fn()
 }))
 
 const mockedUseConfigQuery = require("@/queries/use-config").useConfigQuery as jest.Mock
-const mockedUseEndpointsQuery = require("@/queries/use-endpoints").useEndpointsQuery as jest.Mock
+const mockedUseFeaturesQuery = require("@/queries/use-features").useFeaturesQuery as jest.Mock
 
 describe("DashboardPanel", () => {
   beforeEach(() => {
@@ -27,28 +27,29 @@ describe("DashboardPanel", () => {
       data: { baseUrl: { local: "http" }, headers: { auth: { source: "cookies", key: "x" } } },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [], total: 3, page: 1, pageSize: 5 },
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: [
+        { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 2, endpoints: [] },
+        { id: "f2", name: "Billing", enabledState: "partial", endpointCount: 1, endpoints: [] }
+      ],
       isPending: false
     })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
 
     render(<DashboardPanel />)
 
-    expect(screen.getByText("3")).not.toBeNull()
-    expect(screen.getAllByText("1").length).toBeGreaterThan(1)
+    expect(screen.getByText("2")).not.toBeNull()
+    expect(screen.getByText("3 endpoints mapped.")).not.toBeNull()
 
-    await user.click(screen.getByRole("button", { name: "Go to base URLs" }))
-    expect(useNavigationStore.getState().section).toBe("base")
-    await user.click(screen.getByRole("button", { name: "Go to session headers" }))
-    expect(useNavigationStore.getState().section).toBe("headers")
-    await user.click(screen.getByRole("button", { name: "Go to endpoints" }))
-    expect(useNavigationStore.getState().section).toBe("endpoints")
+    await user.click(screen.getByRole("button", { name: "Configure API" }))
+    expect(useNavigationStore.getState().section).toBe("api")
+    await user.click(screen.getByRole("button", { name: "Go to features" }))
+    expect(useNavigationStore.getState().section).toBe("features")
   })
 
   it("renders loading skeletons when pending", () => {
     mockedUseConfigQuery.mockReturnValue({ data: null, isPending: true })
-    mockedUseEndpointsQuery.mockReturnValue({ data: null, isPending: true })
+    mockedUseFeaturesQuery.mockReturnValue({ data: null, isPending: true })
 
     render(<DashboardPanel />)
 

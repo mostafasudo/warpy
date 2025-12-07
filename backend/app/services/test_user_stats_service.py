@@ -4,7 +4,7 @@ import pytest
 
 from app.core import database
 from app.core.config import get_settings
-from app.models import Base, Endpoint, HttpMethod
+from app.models import Base, Endpoint, Feature, HttpMethod
 from app.services.user_stats_service import adjust_endpoint_count, get_endpoint_count
 
 
@@ -27,11 +27,15 @@ def test_counts_seed_and_adjust():
     from app.core.database import session_scope
 
     with session_scope() as session:
+        feature = Feature(user_id="user-1", name="General")
+        session.add(feature)
+        session.flush()
         endpoint = Endpoint(
             user_id="user-1",
             path="/ping",
             method=HttpMethod.get,
-            tool={"function": {"name": "ping", "description": "Ping", "parameters": {}}}
+            tool={"function": {"name": "ping", "description": "Ping", "parameters": {}}},
+            feature_id=feature.id
         )
         session.add(endpoint)
         session.flush()

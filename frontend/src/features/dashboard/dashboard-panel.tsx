@@ -6,7 +6,7 @@ import { PanelShell } from "@/components/panel-shell"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useConfigQuery } from "@/queries/use-config"
-import { useEndpointsQuery } from "@/queries/use-endpoints"
+import { useFeaturesQuery } from "@/queries/use-features"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 
 type StatCardProps = {
@@ -36,12 +36,13 @@ const StatCard = ({ label, helper, icon, value, loading }: StatCardProps) => (
 
 export const DashboardPanel = () => {
   const { data: config, isPending: isConfigPending } = useConfigQuery()
-  const { data: endpoints, isPending: isEndpointsPending } = useEndpointsQuery(1, 1, "")
+  const { data: features, isPending: isFeaturesPending } = useFeaturesQuery("")
   const setSection = useNavigationStore(navigationSelectors.setSection)
 
   const environmentCount = Object.keys(config?.baseUrl ?? {}).length
   const headerCount = Object.keys(config?.headers ?? {}).length
-  const endpointCount = endpoints?.total ?? 0
+  const featureCount = features?.length ?? 0
+  const endpointCount = (features ?? []).reduce((total, feature) => total + (feature?.endpointCount ?? 0), 0)
 
   return (
     <PanelShell
@@ -50,11 +51,11 @@ export const DashboardPanel = () => {
     >
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
-          label="Endpoints"
-          helper="Endpoints your agent can call."
+          label="Features"
+          helper={`${endpointCount} endpoints mapped.`}
           icon={<Network className="h-5 w-5" />}
-          value={endpointCount}
-          loading={isEndpointsPending}
+          value={featureCount}
+          loading={isFeaturesPending}
         />
         <StatCard
           label="Environments"
@@ -81,23 +82,15 @@ export const DashboardPanel = () => {
         </p>
         <div className="flex flex-wrap gap-3">
           <Button
-            onClick={() => setSection("base")}
+            onClick={() => setSection("api")}
             variant="secondary"
             className="justify-between bg-muted/60 hover:bg-muted"
           >
-            Go to base URLs
+            Configure API
             <ArrowRight className="h-4 w-4" />
           </Button>
-          <Button
-            onClick={() => setSection("headers")}
-            variant="secondary"
-            className="justify-between bg-muted/60 hover:bg-muted"
-          >
-            Go to session headers
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-          <Button onClick={() => setSection("endpoints")} className="justify-between">
-            Go to endpoints
+          <Button onClick={() => setSection("features")} className="justify-between">
+            Go to features
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>

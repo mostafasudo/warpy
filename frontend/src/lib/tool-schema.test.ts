@@ -10,6 +10,9 @@ const baseState: EndpointBuilderState = {
   name: "get_user",
   description: "Fetch user",
   agentEnabled: true,
+  featureMode: "auto",
+  featureId: null,
+  featureName: "",
   pathParams: [{ name: "id", description: "User id" }],
   headers: [{ id: "h1", name: "auth", type: "string", required: true, description: "Auth token" }],
   queryParams: [{ id: "q1", name: "verbose", type: "boolean", required: false, description: "Verbose flag" }],
@@ -53,7 +56,7 @@ describe("tool-schema", () => {
   })
 
   it("maps endpoint response to builder state with fixed values", () => {
-    const payload = buildEndpointPayload({
+    const { feature: _feature, ...payload } = buildEndpointPayload({
       ...baseState,
       pathParams: [{ name: "id", fixed: "42" }],
       headers: [{ id: "h1", name: "auth", type: "string", required: false, description: "", fixed: "token" }],
@@ -63,7 +66,13 @@ describe("tool-schema", () => {
 
     const state = mapEndpointToBuilderState({
       id: "endpoint-1",
-      ...payload
+      ...payload,
+      feature: {
+        id: "feature-1",
+        name: "Feature 1",
+        enabledState: "enabled",
+        endpointCount: 1
+      }
     })
 
     expect(state.path).toBe("/users/:id")
@@ -130,6 +139,12 @@ describe("tool-schema", () => {
       path: "/users/{id}",
       method: "POST",
       agentEnabled: false,
+      feature: {
+        id: "feature-2",
+        name: "Feature 2",
+        enabledState: "enabled",
+        endpointCount: 2
+      },
       tool: {
         type: "function",
         function: {
@@ -202,5 +217,40 @@ describe("tool-schema", () => {
     const items = state.bodyFields.find((f) => f.name === "items")
     expect(items?.type).toBe("array:object")
     expect(items?.children?.find((child) => child.name === "active")?.fixed).toBe(false)
+  })
+
+  it("keeps existing feature selection when backend omits mode", () => {
+    const endpoint: EndpointResponse = {
+      id: "endpoint-3",
+      path: "/orders/{id}",
+      method: "GET",
+      agentEnabled: true,
+      tool: {
+        type: "function",
+        function: {
+          name: "get_order",
+          description: "",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: []
+          }
+        }
+      },
+      feature: {
+        id: "feature-1",
+        name: "Orders",
+        enabledState: "enabled",
+        endpointCount: 4
+      }
+    }
+
+    const state = mapEndpointToBuilderState(endpoint)
+    const payload = buildEndpointPayload(state)
+
+    expect(state.featureMode).toBe("existing")
+    expect(state.featureId).toBe("feature-1")
+    expect(state.featureName).toBe("Orders")
+    expect(payload.feature).toEqual({ mode: "existing", id: "feature-1" })
   })
 })

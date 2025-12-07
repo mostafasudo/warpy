@@ -20,6 +20,11 @@ export type EndpointValidationResult = {
     name: boolean
     namePattern: boolean
     description: boolean
+    feature: {
+      mode: boolean
+      id: boolean
+      name: boolean
+    }
     pathParams: PathParamValidation[]
     headers: Record<string, FieldValidation>
     queryParams: Record<string, FieldValidation>
@@ -134,6 +139,7 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
     name: false,
     namePattern: false,
     description: false,
+    feature: { mode: false, id: false, name: false },
     pathParams,
     headers: {},
     queryParams: {},
@@ -145,7 +151,7 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
     invalid.path = true
   }
 
-  const trimmedName = state.name.trim()
+  const trimmedName = state.name?.trim()
   if (!trimmedName) {
     errors.push("Endpoint name cannot be empty")
     invalid.name = true
@@ -155,9 +161,19 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
     invalid.namePattern = true
   }
 
-  if (!state.description.trim()) {
+  if (!state.description?.trim()) {
     errors.push("Endpoint description cannot be empty")
     invalid.description = true
+  }
+
+  if (state.featureMode === "existing" && !state.featureId) {
+    errors.push("Select a feature")
+    invalid.feature.id = true
+  } else if (state.featureMode === "new") {
+    if (!state.featureName?.trim()) {
+      errors.push("Feature name cannot be empty")
+      invalid.feature.name = true
+    }
   }
 
   state.pathParams.forEach((param, index) => {

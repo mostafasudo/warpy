@@ -4,7 +4,7 @@ from ..models import AuthType, StorageSource
 
 
 class SessionHeaderPayload(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, exclude_none=True)
 
     source: StorageSource
     key: str
@@ -17,4 +17,4 @@ class ConfigPayload(BaseModel):
 
 
 class ConfigResponse(ConfigPayload):
-    pass
+    model_config = ConfigDict(populate_by_name=True, exclude_none=True)

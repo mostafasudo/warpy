@@ -4,13 +4,13 @@ import { apiClient } from "@/api/client"
 import { featuresQueryKey } from "@/queries/use-features"
 import { endpointsQueryKey } from "@/queries/use-endpoints"
 
-export const useCreateEndpoint = () => {
+export const useDeleteFeature = () => {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: apiClient.createEndpoint,
+    mutationFn: (id: string) => apiClient.deleteFeature(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: endpointsQueryKey })
       queryClient.invalidateQueries({ queryKey: featuresQueryKey })
+      queryClient.invalidateQueries({ queryKey: endpointsQueryKey })
     }
   })
 }

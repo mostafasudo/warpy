@@ -4,7 +4,7 @@ from uuid import UUID
 
 from openai import OpenAI
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..core.config import get_settings
 from ..core.llm_config import llm_config
@@ -23,7 +23,8 @@ def _endpoint_to_text(endpoint: Endpoint) -> str:
     name = function.get("name", "")
     description = function.get("description", "")
     parameters = json.dumps(function.get("parameters", {}), sort_keys=True)
-    return f"{endpoint.method.value} {endpoint.path}\n{name}: {description}\nParameters: {parameters}"
+    feature_name = endpoint.feature.name if endpoint.feature else ""
+    return f"{endpoint.method.value} {endpoint.path}\nFeature: {feature_name}\n{name}: {description}\nParameters: {parameters}"
 
 
 def _compute_hash(text: str) -> str:
@@ -41,9 +42,16 @@ def generate_embedding(text: str) -> list[float]:
 
 
 def upsert_endpoint_embedding(session: Session, endpoint_id: UUID, user_id: str) -> EndpointEmbedding | None:
-    endpoint = session.scalar(select(Endpoint).where(Endpoint.id == endpoint_id))
+    endpoint = session.scalar(
+        select(Endpoint)
+        .where(Endpoint.id == endpoint_id)
+        .options(selectinload(Endpoint.feature))
+    )
     if not endpoint:
         log_error("EmbeddingService", "upsert_endpoint_embedding", "Endpoint not found", endpoint_id=str(endpoint_id))
+        return None
+    if endpoint.user_id != user_id:
+        log_error("EmbeddingService", "upsert_endpoint_embedding", "User ID mismatch", endpoint_id=str(endpoint_id), user_id=user_id, owner=endpoint.user_id)
         return None
     if not endpoint.agent_enabled:
         delete_endpoint_embedding(session, endpoint_id)
@@ -52,6 +60,7 @@ def upsert_endpoint_embedding(session: Session, endpoint_id: UUID, user_id: str)
 
     text = _endpoint_to_text(endpoint)
     content_hash = _compute_hash(text)
+    owner_id = endpoint.user_id
 
     existing = session.scalar(select(EndpointEmbedding).where(EndpointEmbedding.endpoint_id == endpoint_id))
     if existing and existing.content_hash == content_hash:
@@ -67,14 +76,14 @@ def upsert_endpoint_embedding(session: Session, endpoint_id: UUID, user_id: str)
     if existing:
         existing.embedding = embedding_vector
         existing.content_hash = content_hash
-        existing.user_id = user_id
+        existing.user_id = owner_id
         session.flush()
         log_info("EmbeddingService", "upsert_endpoint_embedding", "Embedding updated", endpoint_id=str(endpoint_id))
         return existing
 
     embedding = EndpointEmbedding(
         endpoint_id=endpoint_id,
-        user_id=user_id,
+        user_id=owner_id,
         embedding=embedding_vector,
         content_hash=content_hash
     )
@@ -115,7 +124,7 @@ def search_similar_endpoints(session: Session, user_id: str, query: str, top_k: 
         select(EndpointEmbedding.endpoint_id)
         .join(Endpoint, Endpoint.id == EndpointEmbedding.endpoint_id)
         .where(
-            EndpointEmbedding.user_id == user_id,
+            Endpoint.user_id == user_id,
             Endpoint.agent_enabled.is_(True)
         )
         .order_by(EndpointEmbedding.embedding.cosine_distance(query_embedding))

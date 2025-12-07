@@ -25,6 +25,40 @@ class AuthType(str, enum.Enum):
     none = "none"
 
 
+class Feature(Base):
+    __tablename__ = "features"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_feature_user_name"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    name = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    endpoints = relationship(
+        "Endpoint",
+        back_populates="feature",
+        cascade="all, delete-orphan",
+        order_by="Endpoint.created_at"
+    )
+
+    @property
+    def enabled_state(self):
+        enabled_flags = [endpoint.agent_enabled for endpoint in self.endpoints]
+        if not enabled_flags:
+            return "disabled"
+        if all(enabled_flags):
+            return "enabled"
+        if any(enabled_flags):
+            return "partial"
+        return "disabled"
+
+    @property
+    def endpoint_count(self):
+        return len(self.endpoints)
+
+
 class HttpMethod(str, enum.Enum):
     get = "GET"
     post = "POST"
@@ -83,10 +117,12 @@ class Endpoint(Base):
     path = Column(Text, nullable=False)
     method = Column(Enum(HttpMethod, name="http_method", native_enum=True, validate_strings=True), nullable=False)
     tool = Column(json_type, nullable=False)
+    feature_id = Column(UUID(as_uuid=True), ForeignKey("features.id", ondelete="CASCADE"), nullable=False, index=True)
     agent_enabled = Column(Boolean, nullable=False, server_default=func.true(), default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    feature = relationship("Feature", back_populates="endpoints")
     embedding = relationship("EndpointEmbedding", back_populates="endpoint", uselist=False, cascade="all, delete-orphan")
 
 

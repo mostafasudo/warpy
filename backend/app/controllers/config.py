@@ -11,7 +11,7 @@ from ..services.config_service import get_config, upsert_config
 router = APIRouter()
 
 
-@router.get("/config", response_model=ConfigResponse)
+@router.get("/config", response_model=ConfigResponse, response_model_exclude_none=True)
 def read_config(
     session: Session = Depends(get_session),
     clerk_session: ClerkSession = Depends(require_clerk_session)
@@ -25,7 +25,7 @@ def read_config(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch config")
 
 
-@router.put("/config", response_model=ConfigResponse)
+@router.put("/config", response_model=ConfigResponse, response_model_exclude_none=True)
 def replace_config(
     payload: ConfigPayload,
     session: Session = Depends(get_session),

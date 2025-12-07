@@ -212,8 +212,15 @@ export const SessionHeadersPanel = () => {
                 sortedHeaders.map(([name, header]) => (
                   <TableRow key={name}>
                     <TableCell className="w-48">
-                      <div className="truncate font-medium" title={name}>
-                        {name}
+                      <div className="flex items-center gap-2">
+                        <div className="truncate font-medium" title={name}>
+                          {name}
+                        </div>
+                        {name.toLowerCase() === "authorization" ? (
+                          <Badge variant="secondary" className="whitespace-nowrap text-[11px]">
+                            {authLabels[header.authType ?? "bearer"]}
+                          </Badge>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell className="w-40">
@@ -222,15 +229,8 @@ export const SessionHeadersPanel = () => {
                       </div>
                     </TableCell>
                     <TableCell className="max-w-[320px]">
-                      <div className="flex items-center gap-2 truncate text-muted-foreground">
-                        <span className="truncate" title={header.key}>
-                          {header.key}
-                        </span>
-                        {name.toLowerCase() === "authorization" ? (
-                          <Badge variant="secondary" className="whitespace-nowrap text-[11px]">
-                            {authLabels[header.authType ?? "bearer"]}
-                          </Badge>
-                        ) : null}
+                      <div className="truncate text-muted-foreground" title={header.key}>
+                        {header.key}
                       </div>
                     </TableCell>
                     <TableCell className="flex w-32 justify-end gap-2">

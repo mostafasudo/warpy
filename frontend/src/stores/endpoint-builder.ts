@@ -37,6 +37,9 @@ export type EndpointBuilderState = {
   name: string
   description: string
   agentEnabled: boolean
+  featureMode: "existing" | "new" | "auto"
+  featureId: string | null
+  featureName: string
   pathParams: PathParam[]
   headers: FlatField[]
   queryParams: FlatField[]
@@ -49,6 +52,9 @@ type EndpointBuilderStore = EndpointBuilderState & {
   setName: (name: string) => void
   setDescription: (description: string) => void
   setAgentEnabled: (enabled: boolean) => void
+  setFeatureMode: (mode: "existing" | "new" | "auto") => void
+  setFeatureId: (id: string | null) => void
+  setFeatureName: (name: string) => void
   setPathParamFixed: (name: string, fixed?: string) => void
   setPathParamDescription: (name: string, description: string) => void
   addFlatField: (section: "headers" | "queryParams") => void
@@ -153,6 +159,9 @@ const defaultState: EndpointBuilderState = {
   name: "",
   description: "",
   agentEnabled: true,
+  featureMode: "auto",
+  featureId: null,
+  featureName: "",
   pathParams: [],
   headers: [],
   queryParams: [],
@@ -173,6 +182,19 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
   setName: (name) => set({ name }),
   setDescription: (description) => set({ description }),
   setAgentEnabled: (enabled) => set({ agentEnabled: enabled }),
+  setFeatureMode: (mode) =>
+    set((state) => ({
+      featureMode: mode,
+      featureId: mode === "existing" ? state.featureId : null,
+      featureName: mode === "new" ? state.featureName : ""
+    })),
+  setFeatureId: (id) => set({ featureId: id, featureName: "", featureMode: id === null ? "auto" : "existing" }),
+  setFeatureName: (name) =>
+    set((state) => ({
+      featureId: null,
+      featureName: name,
+      featureMode: name === "" && state.featureMode === "new" ? "new" : name === "" ? "auto" : "new"
+    })),
   setPathParamFixed: (name, fixed) =>
     set((state) => ({
       pathParams: state.pathParams.map((param) => (param.name === name ? { ...param, fixed } : param))
@@ -241,6 +263,9 @@ export const endpointBuilderSelectors = {
   name: (state: EndpointBuilderState) => state.name,
   description: (state: EndpointBuilderState) => state.description,
   agentEnabled: (state: EndpointBuilderState) => state.agentEnabled,
+  featureMode: (state: EndpointBuilderState) => state.featureMode,
+  featureId: (state: EndpointBuilderState) => state.featureId,
+  featureName: (state: EndpointBuilderState) => state.featureName,
   pathParams: (state: EndpointBuilderState) => state.pathParams,
   headers: (state: EndpointBuilderState) => state.headers,
   queryParams: (state: EndpointBuilderState) => state.queryParams,
@@ -253,6 +278,9 @@ export const endpointBuilderActions = {
   setName: (state: EndpointBuilderStore) => state.setName,
   setDescription: (state: EndpointBuilderStore) => state.setDescription,
   setAgentEnabled: (state: EndpointBuilderStore) => state.setAgentEnabled,
+  setFeatureMode: (state: EndpointBuilderStore) => state.setFeatureMode,
+  setFeatureId: (state: EndpointBuilderStore) => state.setFeatureId,
+  setFeatureName: (state: EndpointBuilderStore) => state.setFeatureName,
   setPathParamFixed: (state: EndpointBuilderStore) => state.setPathParamFixed,
   setPathParamDescription: (state: EndpointBuilderStore) => state.setPathParamDescription,
   addFlatField: (state: EndpointBuilderStore) => state.addFlatField,

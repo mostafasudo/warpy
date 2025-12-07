@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
@@ -22,7 +22,7 @@ import {
   endpointBuilderSelectors,
   useEndpointBuilderStore
 } from "@/stores/endpoint-builder"
-import { type HttpMethod } from "@/types"
+import { type FeatureSummary, type HttpMethod } from "@/types"
 import { BodyFieldRow } from "./BodyFieldRow"
 import { FlatFieldList } from "./FlatFieldList"
 import { endpointNamePattern } from "./constants"
@@ -33,14 +33,18 @@ type EndpointEditorProps = {
   isSaving: boolean
   onSave: () => void
   onClose: () => void
+  features: FeatureSummary[]
 }
 
-export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointEditorProps) => {
+export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }: EndpointEditorProps) => {
   const path = useEndpointBuilderStore(endpointBuilderSelectors.path)
   const method = useEndpointBuilderStore(endpointBuilderSelectors.method)
   const name = useEndpointBuilderStore(endpointBuilderSelectors.name)
   const description = useEndpointBuilderStore(endpointBuilderSelectors.description)
   const agentEnabled = useEndpointBuilderStore(endpointBuilderSelectors.agentEnabled)
+  const featureMode = useEndpointBuilderStore(endpointBuilderSelectors.featureMode)
+  const featureId = useEndpointBuilderStore(endpointBuilderSelectors.featureId)
+  const featureName = useEndpointBuilderStore(endpointBuilderSelectors.featureName)
   const pathParams = useEndpointBuilderStore(endpointBuilderSelectors.pathParams)
   const headers = useEndpointBuilderStore(endpointBuilderSelectors.headers)
   const queryParams = useEndpointBuilderStore(endpointBuilderSelectors.queryParams)
@@ -50,6 +54,9 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
   const setName = useEndpointBuilderStore(endpointBuilderActions.setName)
   const setDescription = useEndpointBuilderStore(endpointBuilderActions.setDescription)
   const setAgentEnabled = useEndpointBuilderStore(endpointBuilderActions.setAgentEnabled)
+  const setFeatureMode = useEndpointBuilderStore(endpointBuilderActions.setFeatureMode)
+  const setFeatureId = useEndpointBuilderStore(endpointBuilderActions.setFeatureId)
+  const setFeatureName = useEndpointBuilderStore(endpointBuilderActions.setFeatureName)
   const setPathParamFixed = useEndpointBuilderStore(endpointBuilderActions.setPathParamFixed)
   const setPathParamDescription = useEndpointBuilderStore(endpointBuilderActions.setPathParamDescription)
   const addFlatField = useEndpointBuilderStore(endpointBuilderActions.addFlatField)
@@ -69,18 +76,28 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
       name,
       description,
       agentEnabled,
+      featureMode,
+      featureId,
+      featureName,
       pathParams,
       headers,
       queryParams,
       bodyFields
     }),
-    [path, method, name, description, agentEnabled, pathParams, headers, queryParams, bodyFields]
+    [path, method, name, description, agentEnabled, featureMode, featureId, featureName, pathParams, headers, queryParams, bodyFields]
   )
 
   const validation = useMemo(
     () => (showValidation ? validateEndpointState(builderState) : null),
     [builderState, showValidation]
   )
+
+  useEffect(() => {
+    if (!features.length && featureMode === "existing") {
+      setFeatureMode("auto")
+      setFeatureId(null)
+    }
+  }, [features.length, featureMode, setFeatureMode, setFeatureId])
 
   const handleSave = () => {
     const result = validateEndpointState(builderState)
@@ -92,6 +109,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
   }
 
   const isNameValid = Boolean(name.trim() && endpointNamePattern.test(name))
+  const hasExistingFeatures = features.length > 0
 
   return (
     <div className="rounded-2xl bg-card/50 p-4">
@@ -123,6 +141,69 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose }: EndpointE
         </div>
       ) : null}
       <div className="space-y-4">
+        <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Feature</p>
+              <p className="text-xs text-muted-foreground">Choose how to classify this endpoint.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={featureMode === "auto" ? "default" : "outline"}
+                onClick={() => setFeatureMode("auto")}
+              >
+                Auto-classify
+              </Button>
+              {hasExistingFeatures ? (
+                <Button
+                  size="sm"
+                  variant={featureMode === "existing" ? "default" : "outline"}
+                  onClick={() => setFeatureMode("existing")}
+                >
+                  Existing feature
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                variant={featureMode === "new" ? "default" : "outline"}
+                onClick={() => setFeatureMode("new")}
+              >
+                New feature
+              </Button>
+            </div>
+          </div>
+          {featureMode === "existing" && hasExistingFeatures ? (
+            <div className="space-y-2">
+              <Label>Choose feature</Label>
+              <Select value={featureId ?? undefined} onValueChange={(value) => setFeatureId(value)}>
+                <SelectTrigger className={cn(validation?.invalid.feature?.id && "border-destructive focus-visible:ring-destructive")}>
+                  <SelectValue placeholder="Select a feature" />
+                </SelectTrigger>
+                <SelectContent>
+                  {features.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : featureMode === "new" ? (
+            <div className="space-y-2">
+              <Label>Feature name</Label>
+              <Input
+                placeholder="User Management"
+                value={featureName}
+                onChange={(event) => setFeatureName(event.target.value)}
+                data-testid="feature-name"
+                className={cn(validation?.invalid.feature?.name && "border-destructive focus-visible:ring-destructive")}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">We will assign this endpoint to the best feature automatically.</p>
+          )}
+        </div>
         <div className="grid gap-3 sm:grid-cols-[1.1fr_1fr_140px]">
           <div className="space-y-2">
             <Label>Path</Label>

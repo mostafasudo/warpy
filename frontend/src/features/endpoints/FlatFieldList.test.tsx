@@ -28,7 +28,7 @@ describe("FlatFieldList", () => {
       onRemove: jest.fn()
     })
 
-    expect(screen.getByText(/Add a field/i)).not.toBeNull()
+    expect(screen.getByText(/Add headers\./i)).not.toBeNull()
   })
 
   it("supports add, change, and remove", async () => {

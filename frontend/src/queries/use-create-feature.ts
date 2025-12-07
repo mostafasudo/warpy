@@ -3,14 +3,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/api/client"
 import { featuresQueryKey } from "@/queries/use-features"
 import { endpointsQueryKey } from "@/queries/use-endpoints"
+import type { FeaturePayload } from "@/types"
 
-export const useCreateEndpoint = () => {
+export const useCreateFeature = () => {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: apiClient.createEndpoint,
+    mutationFn: (payload: FeaturePayload) => apiClient.createFeature(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: endpointsQueryKey })
       queryClient.invalidateQueries({ queryKey: featuresQueryKey })
+      queryClient.invalidateQueries({ queryKey: endpointsQueryKey })
     }
   })
 }

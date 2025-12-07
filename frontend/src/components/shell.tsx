@@ -1,13 +1,12 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, LayoutDashboard, Link2, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { Braces, LayoutDashboard, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
 import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
-import { BaseUrlsPanel } from "@/features/base-urls/base-urls-panel"
+import { ApiConfigPanel } from "@/features/api-config/api-config-panel"
 import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
-import { SessionHeadersPanel } from "@/features/session-headers/session-headers-panel"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -121,8 +120,8 @@ export const Shell = () => {
                 sidebarCollapsed ? "max-w-0 opacity-0" : "max-w-[200px] opacity-100"
               )}
             >
-              <p className="text-sm font-semibold">API configurator</p>
-              <p className="text-xs text-muted-foreground">Configure your API surface</p>
+              <p className="text-sm font-semibold">Chat to API</p>
+              <p className="text-xs text-muted-foreground">Configure your API surface and create features</p>
             </div>
           </div>
           <nav className="mt-8 flex flex-col gap-2">
@@ -134,25 +133,18 @@ export const Shell = () => {
               onClick={() => setSection("dashboard")}
             />
             <NavButton
-              active={section === "base"}
-              label="Base URLs"
-              icon={<Link2 className="h-4 w-4" />}
-              collapsed={sidebarCollapsed}
-              onClick={() => setSection("base")}
-            />
-            <NavButton
-              active={section === "headers"}
-              label="Session Headers"
+              active={section === "api"}
+              label="API config"
               icon={<Braces className="h-4 w-4" />}
               collapsed={sidebarCollapsed}
-              onClick={() => setSection("headers")}
+              onClick={() => setSection("api")}
             />
             <NavButton
-              active={section === "endpoints"}
-              label="Endpoints"
+              active={section === "features"}
+              label="Features"
               icon={<Network className="h-4 w-4" />}
               collapsed={sidebarCollapsed}
-              onClick={() => setSection("endpoints")}
+              onClick={() => setSection("features")}
             />
             <NavButton
               active={section === "agent"}
@@ -178,24 +170,20 @@ export const Shell = () => {
               <h1 className="text-2xl font-semibold tracking-tight">
                 {section === "dashboard"
                   ? "API configuration"
-                  : section === "base"
-                    ? "Base URLs"
-                    : section === "headers"
-                      ? "Session headers"
-                      : section === "endpoints"
-                        ? "Endpoints"
-                        : "Agent"}
+                  : section === "api"
+                    ? "API config"
+                    : section === "features"
+                      ? "Features"
+                      : "Agent"}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {section === "dashboard"
                   ? "See setup progress and jump to what matters next."
-                  : section === "base"
-                    ? "Map each environment to a base URL."
-                    : section === "headers"
-                      ? "Send session headers with every request."
-                      : section === "endpoints"
-                        ? "Design and publish your endpoints."
-                        : "Publish your agent."}
+                  : section === "api"
+                    ? "Configure base URLs and session headers for every request."
+                    : section === "features"
+                      ? "Create endpoints to empower your agent with features."
+                      : "Publish your agent."}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -206,9 +194,8 @@ export const Shell = () => {
             </div>
           </header>
           {section === "dashboard" && <DashboardPanel />}
-          {section === "base" && <BaseUrlsPanel />}
-          {section === "headers" && <SessionHeadersPanel />}
-          {section === "endpoints" && <EndpointsPanel />}
+          {section === "api" && <ApiConfigPanel />}
+          {section === "features" && <EndpointsPanel />}
           {section === "agent" && <AgentPanel />}
         </div>
       </div>

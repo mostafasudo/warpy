@@ -35,8 +35,8 @@ describe("navigation store", () => {
 
   it("updates section selection", async () => {
     const { navigationSelectors, useNavigationStore } = await loadNavigationStore()
-    navigationSelectors.setSection(useNavigationStore.getState())("headers")
-    expect(navigationSelectors.section(useNavigationStore.getState())).toBe("headers")
+    navigationSelectors.setSection(useNavigationStore.getState())("api")
+    expect(navigationSelectors.section(useNavigationStore.getState())).toBe("api")
   })
 
   it("toggles and persists sidebar collapse state", async () => {

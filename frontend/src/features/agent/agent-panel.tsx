@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAgentQuery } from "@/queries/use-agent"
 import { useConfigQuery } from "@/queries/use-config"
-import { useEndpointsQuery } from "@/queries/use-endpoints"
+import { useFeaturesQuery } from "@/queries/use-features"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 
@@ -31,11 +31,11 @@ const EmptyState = () => {
       <h3 className="mb-2 text-xl font-semibold">Activate Your Agent</h3>
       <p className="mb-6 max-w-md text-sm text-muted-foreground">
         Your agent will be able to access any endpoint on behalf of the user. For that to work, we
-        need you to define your endpoints in the Endpoints tab.
+        need you to define your endpoints in the Features tab.
       </p>
-      <Button onClick={() => setSection("endpoints")}>
+      <Button onClick={() => setSection("features")}>
         <Link2 className="mr-2 h-4 w-4" />
-        Configure Endpoints
+        Configure Features
       </Button>
     </div>
   )
@@ -131,7 +131,7 @@ const ScriptDisplay = ({ agentId, baseUrl }: ScriptDisplayProps) => {
 }
 
 export const AgentPanel = () => {
-  const { data: endpoints, isPending: isEndpointsPending } = useEndpointsQuery(1, 1, "")
+  const { data: features, isPending: isFeaturesPending } = useFeaturesQuery("")
   const { data: config, isPending: isConfigPending } = useConfigQuery()
   const { data: agent, isPending: isAgentPending, error: agentError } = useAgentQuery()
   const { mutate: createAgent, isPending: isCreating } = useCreateAgent()
@@ -152,8 +152,9 @@ export const AgentPanel = () => {
     }
   }, [agentError, agent, isCreating, createAgent])
 
-  const isPending = isEndpointsPending || isConfigPending || isAgentPending
-  const hasEndpoints = (endpoints?.total ?? 0) > 0
+  const isPending = isFeaturesPending || isConfigPending || isAgentPending
+  const endpointTotal = (features ?? []).reduce((total, feature) => total + (feature.endpointCount ?? 0), 0)
+  const hasEndpoints = endpointTotal > 0
 
   if (isPending || isCreating) {
     return (
@@ -190,5 +191,3 @@ export const AgentPanel = () => {
     </PanelShell>
   )
 }
-
-

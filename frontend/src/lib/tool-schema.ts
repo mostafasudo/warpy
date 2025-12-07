@@ -5,7 +5,14 @@ import type {
   FlatField,
   PathParam
 } from "@/stores/endpoint-builder"
-import type { EndpointPayload, EndpointResponse, EndpointTool, HttpMethod, ToolParameters } from "@/types"
+import type {
+  EndpointPayload,
+  EndpointResponse,
+  EndpointTool,
+  FeatureSelector,
+  HttpMethod,
+  ToolParameters
+} from "@/types"
 
 type PrimitiveType = "string" | "number" | "boolean"
 type PrimitiveValue = string | number | boolean
@@ -238,11 +245,22 @@ export const buildEndpointPayload = (state: EndpointBuilderState): EndpointPaylo
     }
   }
 
+  const feature: FeatureSelector = (() => {
+    if (state.featureMode === "existing" && state.featureId) {
+      return { mode: "existing", id: state.featureId }
+    }
+    if (state.featureMode === "new" && state.featureName?.trim()) {
+      return { mode: "new", name: state.featureName.trim() }
+    }
+    return { mode: "auto" }
+  })()
+
   return {
     path: ensureApiPath(state.path),
     method: state.method,
     tool,
-    agentEnabled: state.agentEnabled
+    agentEnabled: state.agentEnabled,
+    feature
   }
 }
 
@@ -356,6 +374,9 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
   const parameters = normalizeToolParameters(endpoint.tool?.function?.parameters)
   const path = formatPathForDisplay(endpoint.path)
   const pathNames = endpointBuilderUtils.extractPathParams(path)
+  const feature = endpoint.feature as
+    | (EndpointResponse["feature"] & Partial<FeatureSelector>)
+    | undefined
 
   const paramsSchema = (parameters.properties as any)?.params
   const paramsProperties = paramsSchema?.properties ?? {}
@@ -383,12 +404,25 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
       parseBodyField(name, schema, bodyRequired.includes(name))
     ) ?? []
 
+  const featureMode: EndpointBuilderState["featureMode"] = (() => {
+    if (feature?.mode === "existing" || (!feature?.mode && feature?.id)) {
+      return "existing"
+    }
+    if (feature?.mode === "new") {
+      return "new"
+    }
+    return "auto"
+  })()
+
   const state: EndpointBuilderState = {
     path,
     method: endpoint.method as HttpMethod,
     name: endpoint.tool?.function?.name ?? "",
     description: endpoint.tool?.function?.description ?? "",
     agentEnabled: endpoint.agentEnabled ?? true,
+    featureMode,
+    featureId: feature?.id ?? null,
+    featureName: feature?.name ?? "",
     pathParams,
     headers,
     queryParams,

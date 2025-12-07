@@ -11,8 +11,8 @@ jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
 }))
 
-jest.mock("@/queries/use-endpoints", () => ({
-  useEndpointsQuery: jest.fn()
+jest.mock("@/queries/use-features", () => ({
+  useFeaturesQuery: jest.fn()
 }))
 
 jest.mock("@/queries/use-agent", () => ({
@@ -25,7 +25,7 @@ jest.mock("@/mutations/use-create-agent", () => ({
 }))
 
 const mockedUseConfigQuery = require("@/queries/use-config").useConfigQuery as jest.Mock
-const mockedUseEndpointsQuery = require("@/queries/use-endpoints").useEndpointsQuery as jest.Mock
+const mockedUseFeaturesQuery = require("@/queries/use-features").useFeaturesQuery as jest.Mock
 const mockedUseAgentQuery = require("@/queries/use-agent").useAgentQuery as jest.Mock
 const mockedUseCreateAgent = require("@/mutations/use-create-agent").useCreateAgent as jest.Mock
 
@@ -38,16 +38,9 @@ const createWrapper = () => {
   )
 }
 
-const baseEndpoint = {
-  id: "1",
-  path: "/users",
-  method: "GET",
-  tool: {
-    type: "function",
-    function: { name: "getUsers", description: "desc", parameters: { type: "object", properties: {} } }
-  },
-  agentEnabled: true
-}
+const baseFeatures = [
+  { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }
+]
 
 describe("AgentPanel", () => {
   beforeEach(() => {
@@ -57,7 +50,7 @@ describe("AgentPanel", () => {
 
   it("shows loading skeleton when pending", () => {
     mockedUseConfigQuery.mockReturnValue({ data: null, isPending: true })
-    mockedUseEndpointsQuery.mockReturnValue({ data: null, isPending: true })
+    mockedUseFeaturesQuery.mockReturnValue({ data: null, isPending: true })
     mockedUseAgentQuery.mockReturnValue({ data: null, isPending: true, error: null })
     mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
@@ -71,8 +64,8 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost" }, headers: {} },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [], total: 0, page: 1, pageSize: 10 },
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: [],
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -93,10 +86,7 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost" }, headers: {} },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [], total: 0, page: 1, pageSize: 10 },
-      isPending: false
-    })
+    mockedUseFeaturesQuery.mockReturnValue({ data: [], isPending: false })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-1", userId: "user-1" },
       isPending: false,
@@ -107,8 +97,8 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByRole("button", { name: /configure endpoints/i }))
-    expect(useNavigationStore.getState().section).toBe("endpoints")
+    await user.click(screen.getByRole("button", { name: /configure features/i }))
+    expect(useNavigationStore.getState().section).toBe("features")
   })
 
   it("shows environment tabs and script when endpoints exist", () => {
@@ -119,8 +109,8 @@ describe("AgentPanel", () => {
       },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -146,8 +136,8 @@ describe("AgentPanel", () => {
       },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -171,8 +161,8 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -205,10 +195,7 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost" }, headers: {} },
       isPending: false
     })
-    mockedUseEndpointsQuery.mockReturnValue({
-      data: { items: [baseEndpoint], total: 1, page: 1, pageSize: 10 },
-      isPending: false
-    })
+    mockedUseFeaturesQuery.mockReturnValue({ data: baseFeatures, isPending: false })
     mockedUseAgentQuery.mockReturnValue({
       data: null,
       isPending: false,

@@ -11,6 +11,9 @@ describe("validateEndpointState", () => {
       name: "",
       description: "",
       agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
       pathParams: [{ name: "id", description: "" }],
       headers: [{ id: "header-1", name: "", type: "string", required: false, description: "" }],
       queryParams: [{ id: "query-1", name: "page", type: "number", required: false, description: "" }],
@@ -62,6 +65,9 @@ describe("validateEndpointState", () => {
       name: "get_user",
       description: "Fetch user",
       agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
       pathParams: [{ name: "id", fixed: "" }],
       headers: [{ id: "header-1", name: "auth", type: "string", required: false, description: "", fixed: "" }],
       queryParams: [{ id: "query-1", name: "verbose", type: "boolean", required: false, description: "", fixed: false }],
@@ -85,5 +91,27 @@ describe("validateEndpointState", () => {
     expect(result.invalid.queryParams["query-1"]).toBeUndefined()
     expect(result.invalid.bodyFields["body-1"]).toEqual({ fixed: true })
     expect(result.invalid.bodyFields["body-2"]).toBeUndefined()
+  })
+
+  it("requires feature name when creating a new feature", () => {
+    const state: EndpointBuilderState = {
+      path: "/users",
+      method: "GET",
+      name: "get_user",
+      description: "Fetch",
+      agentEnabled: true,
+      featureMode: "new",
+      featureId: null,
+      featureName: "",
+      pathParams: [],
+      headers: [],
+      queryParams: [],
+      bodyFields: []
+    }
+
+    const result = validateEndpointState(state)
+
+    expect(result.errors).toContain("Feature name cannot be empty")
+    expect(result.invalid.feature.name).toBe(true)
   })
 })

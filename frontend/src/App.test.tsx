@@ -23,9 +23,11 @@ jest.mock("@/queries/use-config", () => ({
   }))
 }))
 
-jest.mock("@/queries/use-endpoints", () => ({
-  useEndpointsQuery: jest.fn(() => ({
-    data: { items: [], total: 0, page: 1, pageSize: 5 },
+jest.mock("@/queries/use-features", () => ({
+  useFeaturesQuery: jest.fn(() => ({
+    data: [
+      { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 0, endpoints: [] }
+    ],
     isPending: false,
     isFetching: false
   }))
@@ -51,12 +53,13 @@ const renderApp = () => {
 
 describe("App", () => {
   it("renders shell when signed in", async () => {
-    useNavigationStore.getState().setSection("base")
+    useNavigationStore.getState().setSection("api")
 
     renderApp()
 
-    const headings = await screen.findAllByRole("heading", { name: "Base URLs" })
-    expect(headings.length).toBeGreaterThan(0)
+    const baseHeading = await screen.findByRole("heading", { name: "Base URLs" })
+    expect(baseHeading).not.toBeNull()
     expect(screen.getByText("local")).not.toBeNull()
+    expect(screen.getByRole("heading", { name: "Session Headers" })).not.toBeNull()
   })
 })

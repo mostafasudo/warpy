@@ -78,7 +78,8 @@ describe("apiClient", () => {
         tool: {
           type: "function",
           function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
-        }
+        },
+        feature: { id: "feature-1", name: "Users", enabledState: "enabled", endpointCount: 1 }
       }),
       jsonResponse({
         id: "endpoint-1",
@@ -88,7 +89,8 @@ describe("apiClient", () => {
         tool: {
           type: "function",
           function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
-        }
+        },
+        feature: { id: "feature-1", name: "Users", enabledState: "enabled", endpointCount: 1 }
       }),
       textResponse("", 204)
     ]
@@ -121,7 +123,8 @@ describe("apiClient", () => {
         type: "function",
         function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
       },
-      agentEnabled: true
+      agentEnabled: true,
+      feature: { mode: "auto" }
     }
 
     const created = await apiClient.createEndpoint(payload)
@@ -148,5 +151,34 @@ describe("apiClient", () => {
       new URL("/endpoints?page=1&page_size=10&search=users", "http://api.test"),
       expect.any(Object)
     )
+  })
+
+  it("supports feature operations", async () => {
+    const responses = [
+      jsonResponse([{ id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }]),
+      jsonResponse({ id: "f2", name: "Billing", enabledState: "enabled", endpointCount: 0, endpoints: [] }),
+      jsonResponse({ id: "f2", name: "Billing v2", enabledState: "enabled", endpointCount: 0, endpoints: [] }),
+      jsonResponse({ id: "f2", name: "Billing v2", enabledState: "disabled", endpointCount: 0, endpoints: [] }),
+      textResponse("", 204)
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.listFeatures(" users ")
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/features?search=users", "http://api.test"), expect.any(Object))
+
+    await apiClient.createFeature({ name: "Billing" })
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/features", "http://api.test"), expect.objectContaining({ method: "POST" }))
+
+    await apiClient.updateFeature("f2", { name: "Billing v2" })
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/features/f2", "http://api.test"), expect.objectContaining({ method: "PUT" }))
+
+    await apiClient.toggleFeature("f2", { agentEnabled: false })
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/features/f2/enabled", "http://api.test"), expect.objectContaining({ method: "POST" }))
+
+    await apiClient.deleteFeature("f2")
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/features/f2", "http://api.test"), expect.objectContaining({ method: "DELETE" }))
   })
 })

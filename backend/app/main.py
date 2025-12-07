@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from .controllers.agent import router as agent_router
 from .controllers.config import router as config_router
+from .controllers.features import router as features_router
 from .controllers.endpoints import router as endpoints_router
 from .controllers.health import router as health_router
 from .controllers.session import router as session_router
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(session_router)
     app.include_router(config_router)
+    app.include_router(features_router)
     app.include_router(endpoints_router)
     app.include_router(agent_router)
     app.include_router(widget_router)

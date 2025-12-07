@@ -3,11 +3,12 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, cast, func, or_, select, String
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from ..models import Endpoint
+from ..models import Endpoint, Feature
 from ..schemas.endpoint import EndpointPayload
 from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
+from .feature_service import resolve_feature
 from .user_stats_service import adjust_endpoint_count, get_endpoint_count
 
 
@@ -27,7 +28,11 @@ def _endpoint_condition(endpoint_id: UUID):
 
 
 def _get_endpoint(session: Session, endpoint_id: UUID, user_id: str) -> Endpoint:
-    endpoint = session.scalar(select(Endpoint).where(and_(_endpoint_condition(endpoint_id), Endpoint.user_id == user_id)))
+    endpoint = session.scalar(
+        select(Endpoint)
+        .where(and_(_endpoint_condition(endpoint_id), Endpoint.user_id == user_id))
+        .options(selectinload(Endpoint.feature))
+    )
     if not endpoint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found")
     return endpoint
@@ -39,6 +44,7 @@ def _search_condition(search: str | None):
     terms = [term.strip().lower() for term in search.split() if term.strip()]
     if not terms:
         return None
+    feature_name = func.lower(func.coalesce(Feature.name, ""))
     tool_name = cast(Endpoint.tool["function"]["name"], String)
     tool_description = cast(Endpoint.tool["function"]["description"], String)
     normalized_path = func.lower(func.coalesce(Endpoint.path, ""))
@@ -48,7 +54,12 @@ def _search_condition(search: str | None):
     for term in terms:
         pattern = f"%{term}%"
         predicates.append(
-            or_(normalized_path.like(pattern), normalized_name.like(pattern), normalized_description.like(pattern))
+            or_(
+                normalized_path.like(pattern),
+                normalized_name.like(pattern),
+                normalized_description.like(pattern),
+                Endpoint.feature.has(feature_name.like(pattern))
+            )
         )
     return and_(*predicates)
 
@@ -64,6 +75,7 @@ def list_endpoints(session: Session, user_id: str, page: int, page_size: int, se
         .order_by(Endpoint.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
+        .options(selectinload(Endpoint.feature).selectinload(Feature.endpoints))
     )
     if condition is not None:
         count_query = count_query.where(condition)
@@ -77,11 +89,13 @@ def list_endpoints(session: Session, user_id: str, page: int, page_size: int, se
 
 def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) -> Endpoint:
     _validate_tool(payload.tool)
+    feature = resolve_feature(session, user_id, payload.feature, payload)
     endpoint = Endpoint(
         user_id=user_id,
         path=payload.path,
         method=payload.method,
         tool=payload.tool,
+        feature_id=feature.id,
         agent_enabled=payload.agent_enabled
     )
     session.add(endpoint)
@@ -95,10 +109,12 @@ def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) ->
 def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: EndpointPayload) -> Endpoint:
     _validate_tool(payload.tool)
     endpoint = _get_endpoint(session, endpoint_id, user_id)
+    target_feature = resolve_feature(session, user_id, payload.feature, payload)
     previous_agent_enabled = endpoint.agent_enabled
     endpoint.path = payload.path
     endpoint.method = payload.method
     endpoint.tool = payload.tool
+    endpoint.feature_id = target_feature.id
     endpoint.agent_enabled = payload.agent_enabled
     endpoint.updated_at = func.now()
     session.flush()

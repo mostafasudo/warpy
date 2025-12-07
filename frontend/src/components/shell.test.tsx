@@ -16,12 +16,8 @@ jest.mock("@/features/dashboard/dashboard-panel", () => ({
   DashboardPanel: () => <div data-testid="dashboard-panel" />
 }))
 
-jest.mock("@/features/base-urls/base-urls-panel", () => ({
-  BaseUrlsPanel: () => <div data-testid="base-panel" />
-}))
-
-jest.mock("@/features/session-headers/session-headers-panel", () => ({
-  SessionHeadersPanel: () => <div data-testid="headers-panel" />
+jest.mock("@/features/api-config/api-config-panel", () => ({
+  ApiConfigPanel: () => <div data-testid="api-panel" />
 }))
 
 jest.mock("@/features/endpoints/EndpointsPanel", () => ({
@@ -58,8 +54,8 @@ describe("Shell", () => {
     })
 
     expect(screen.getByText("API configuration")).not.toBeNull()
-    await user.click(screen.getByRole("button", { name: "Base URLs" }))
-    expect(screen.getAllByText("Base URLs").length).toBeGreaterThan(0)
+    await user.click(screen.getByRole("button", { name: "API config" }))
+    expect(screen.getByTestId("api-panel")).not.toBeNull()
     await user.click(screen.getByRole("button", { name: /Collapse sidebar/i }))
     expect(useNavigationStore.getState().sidebarCollapsed).toBe(true)
   })
@@ -104,13 +100,13 @@ describe("Shell", () => {
       unmount = rendered.unmount
     })
 
-    await user.click(screen.getByRole("button", { name: "Session Headers" }))
-    expect(screen.getByTestId("headers-panel")).not.toBeNull()
-    await user.click(screen.getByRole("button", { name: "Endpoints" }))
+    await user.click(screen.getByRole("button", { name: "API config" }))
+    expect(screen.getByTestId("api-panel")).not.toBeNull()
+    await user.click(screen.getByRole("button", { name: "Features" }))
     expect(screen.getByTestId("endpoints-panel")).not.toBeNull()
 
     listeners[0]?.({ matches: true })
-    expect(useNavigationStore.getState().section).toBe("endpoints")
+    expect(useNavigationStore.getState().section).toBe("features")
     unmount()
     expect(removeListener).toHaveBeenCalled()
     window.matchMedia = original

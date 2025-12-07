@@ -10,7 +10,7 @@ const renderEditor = (onSave: () => void) => {
   const user = userEvent.setup({ pointerEventsCheck: 0 })
   render(
     <TooltipProvider>
-      <EndpointEditor editing={false} isSaving={false} onSave={onSave} onClose={() => {}} />
+      <EndpointEditor editing={false} isSaving={false} onSave={onSave} onClose={() => {}} features={[]} />
     </TooltipProvider>
   )
   return { user }

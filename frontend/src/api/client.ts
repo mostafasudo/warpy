@@ -1,4 +1,13 @@
-import type { AgentResponse, ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
+import type {
+  AgentResponse,
+  ConfigResponse,
+  EndpointPayload,
+  EndpointResponse,
+  FeaturePayload,
+  FeatureTogglePayload,
+  FeatureWithEndpoints,
+  PaginatedEndpoints
+} from "@/types"
 
 type RequestOptions = Omit<RequestInit, "signal"> & {
   timeoutMs?: number
@@ -74,7 +83,16 @@ export type HealthResponse = {
   status: string
 }
 
-export type { AgentResponse, ConfigResponse, EndpointPayload, EndpointResponse, PaginatedEndpoints } from "@/types"
+export type {
+  AgentResponse,
+  ConfigResponse,
+  EndpointPayload,
+  EndpointResponse,
+  FeaturePayload,
+  FeatureTogglePayload,
+  FeatureWithEndpoints,
+  PaginatedEndpoints
+} from "@/types"
 
 export const apiClient = {
   health: () => request<HealthResponse>("/health"),
@@ -104,6 +122,35 @@ export const apiClient = {
     }),
   deleteEndpoint: (id: string) =>
     request<void>(`/endpoints/${id}`, {
+      method: "DELETE"
+    }),
+  listFeatures: (search = "") => {
+    const params = new URLSearchParams()
+    const term = search.trim()
+    if (term) {
+      params.set("search", term)
+    }
+    const query = params.toString()
+    const path = query ? `/features?${query}` : "/features"
+    return request<FeatureWithEndpoints[]>(path)
+  },
+  createFeature: (payload: FeaturePayload) =>
+    request<FeatureWithEndpoints>("/features", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateFeature: (id: string, payload: FeaturePayload) =>
+    request<FeatureWithEndpoints>(`/features/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  toggleFeature: (id: string, payload: FeatureTogglePayload) =>
+    request<FeatureWithEndpoints>(`/features/${id}/enabled`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  deleteFeature: (id: string) =>
+    request<void>(`/features/${id}`, {
       method: "DELETE"
     }),
   getAgent: () => request<AgentResponse>("/agent"),

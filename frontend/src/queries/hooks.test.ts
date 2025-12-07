@@ -11,7 +11,12 @@ const apiClient: Record<string, any> = {
   listEndpoints: jest.fn(),
   createEndpoint: jest.fn(),
   updateEndpoint: jest.fn(),
-  deleteEndpoint: jest.fn()
+  deleteEndpoint: jest.fn(),
+  listFeatures: jest.fn(),
+  createFeature: jest.fn(),
+  updateFeature: jest.fn(),
+  toggleFeature: jest.fn(),
+  deleteFeature: jest.fn()
 }
 
 jest.mock("@/api/client", () => ({ apiClient }))
@@ -105,15 +110,60 @@ describe("react-query hooks", () => {
     expect(apiClient.listEndpoints).toHaveBeenCalledWith(1, 5, "test")
 
     ;(apiClient.createEndpoint as any).mockResolvedValue({ id: "1" })
-    await useCreateEndpoint().mutateAsync({ path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true })
-    expect(queryClient.invalidateQueries).toHaveBeenCalled()
+    await useCreateEndpoint().mutateAsync({ path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true, feature: { mode: "auto" } })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
 
     ;(apiClient.updateEndpoint as any).mockResolvedValue({ id: "1" })
-    await useUpdateEndpoint().mutateAsync({ id: "1", payload: { path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true } })
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
+    await useUpdateEndpoint().mutateAsync({ id: "1", payload: { path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true, feature: { mode: "auto" } } })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(4)
 
     ;(apiClient.deleteEndpoint as any).mockResolvedValue(undefined)
     await useDeleteEndpoint().mutateAsync("1")
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(3)
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(6)
+  })
+
+  it("handles feature queries and mutations", async () => {
+    queryMock.useQuery.mockImplementation((options: any) => {
+      options.queryFn()
+      return { data: [] }
+    })
+    queryMock.useMutation.mockImplementation((args: any) => {
+      const { mutationFn, onSuccess } = args
+      return {
+        mutateAsync: async (payload: any) => {
+          const result = await mutationFn(payload)
+          onSuccess?.()
+          return result
+        }
+      }
+    })
+    const queryClient = { invalidateQueries: jest.fn() }
+    queryMock.useQueryClient.mockReturnValue(queryClient)
+
+    const { useFeaturesQuery } = require("./use-features")
+    const { useCreateFeature } = require("./use-create-feature")
+    const { useUpdateFeature } = require("./use-update-feature")
+    const { useToggleFeature } = require("./use-toggle-feature")
+    const { useDeleteFeature } = require("./use-delete-feature")
+
+    ;(apiClient.listFeatures as any).mockResolvedValue([])
+    useFeaturesQuery("")
+    expect(apiClient.listFeatures).toHaveBeenCalled()
+
+    ;(apiClient.createFeature as any).mockResolvedValue({ id: "f1" })
+    await useCreateFeature().mutateAsync({ name: "Billing" })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
+
+    ;(apiClient.updateFeature as any).mockResolvedValue({ id: "f1" })
+    await useUpdateFeature().mutateAsync({ id: "f1", payload: { name: "Billing v2" } })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(4)
+
+    ;(apiClient.toggleFeature as any).mockResolvedValue({ id: "f1" })
+    await useToggleFeature().mutateAsync({ id: "f1", payload: { agentEnabled: false } })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(6)
+
+    ;(apiClient.deleteFeature as any).mockResolvedValue(undefined)
+    await useDeleteFeature().mutateAsync("f1")
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(8)
   })
 })
