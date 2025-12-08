@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
     clerk_secret_key: str = Field(default="")
     openai_api_key: str = Field(default="")
+    langsmith_tracing: bool = Field(default=False)
+    langsmith_endpoint: str = Field(default="")
+    langsmith_api_key: str = Field(default="")
+    langsmith_project: str = Field(default="")
 
 
 @lru_cache
