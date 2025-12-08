@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
     redis_url: str = Field(default="redis://localhost:6379/0")
     clerk_secret_key: str = Field(default="")
-    OPENAI_API_KEY: str = Field(default="")
+    openai_api_key: str = Field(default="")
 
 
 @lru_cache
