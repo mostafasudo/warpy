@@ -19,7 +19,7 @@ Rules:
 
 def _get_openai_client() -> OpenAI:
     settings = get_settings()
-    return OpenAI(api_key=settings.open_ai_key)
+    return OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 def _fallback_feature_name(endpoint: dict[str, Any]) -> str:

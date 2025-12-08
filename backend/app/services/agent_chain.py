@@ -57,7 +57,7 @@ class AgentExecutor:
         self.llm = llm_client or ChatOpenAI(
             model=llm_config.chat_model,
             temperature=llm_config.temperature,
-            api_key=settings.open_ai_key
+            api_key=settings.OPENAI_API_KEY
         )
         self.active_endpoint_ids: list[UUID] = []
 
