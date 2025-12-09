@@ -106,7 +106,7 @@ export const Shell = () => {
       <div className={cn("flex", isMobile && "pointer-events-none opacity-50 blur-sm")}>
         <aside
           className={cn(
-            "hidden min-h-screen flex-shrink-0 flex-col border-r border-border/80 bg-card/70 py-6 transition-[width] duration-300 ease-out md:flex",
+            "hidden flex-shrink-0 flex-col border-r border-border/80 bg-card/70 py-6 transition-[width] duration-300 ease-out md:sticky md:top-0 md:h-screen md:max-h-screen md:flex",
             sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"
           )}
         >
