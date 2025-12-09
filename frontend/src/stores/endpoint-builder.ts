@@ -19,6 +19,7 @@ export type FlatField = {
   required: boolean
   description: string
   fixed?: PrimitiveValue
+  enum?: string[]
 }
 
 export type BodyField = {
@@ -28,6 +29,7 @@ export type BodyField = {
   required: boolean
   description: string
   fixed?: PrimitiveValue
+  enum?: string[]
   children?: BodyField[]
 }
 
@@ -216,6 +218,13 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
         const updated = { ...field, ...payload }
         if (payload.type !== undefined && payload.type !== field.type) {
           updated.fixed = undefined
+          updated.enum = payload.type === "string" ? field.enum : undefined
+        }
+        if (payload.fixed !== undefined) {
+          updated.enum = undefined
+        }
+        if (payload.enum !== undefined) {
+          updated.fixed = undefined
         }
         return updated
       })
@@ -244,6 +253,15 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
           base.children = base.children ?? []
         }
         if (!isPrimitiveType(nextType) || (typeChanged && payload.fixed === undefined)) {
+          base.fixed = undefined
+        }
+        if (!isPrimitiveType(nextType)) {
+          base.enum = undefined
+        }
+        if (payload.fixed !== undefined) {
+          base.enum = undefined
+        }
+        if (payload.enum !== undefined) {
           base.fixed = undefined
         }
         return base

@@ -1,5 +1,5 @@
-import { type RefObject, useRef } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { type RefObject, useRef, useState } from "react"
+import { Plus, Trash2, X } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import {
@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -39,7 +40,9 @@ type BodyFieldRowProps = {
 
 export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove, focusRef }: BodyFieldRowProps) => {
   const actionRef = useRef<HTMLButtonElement>(null)
+  const [newEnumValue, setNewEnumValue] = useState("")
   const fixedEnabled = field.fixed !== undefined
+  const enumEnabled = field.type === "string" && field.enum !== undefined
   const canNest = field.type === "object" || field.type === "array:object"
   const isPrimitive = field.type === "string" || field.type === "number" || field.type === "boolean"
   const indent = depth * 16
@@ -47,6 +50,19 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
   const handleRemove = () => {
     onRemove(field.id)
     queueMicrotask(() => focusRef?.current?.focus())
+  }
+
+  const handleAddEnumValue = () => {
+    if (newEnumValue.trim()) {
+      const currentEnum = field.enum ?? []
+      onUpdate(field.id, { enum: [...currentEnum, newEnumValue.trim()] })
+      setNewEnumValue("")
+    }
+  }
+
+  const handleRemoveEnumValue = (index: number) => {
+    const currentEnum = field.enum ?? []
+    onUpdate(field.id, { enum: currentEnum.filter((_, i) => i !== index) })
   }
 
   const handleTypeChange = (type: BodyField["type"]) => {
@@ -63,7 +79,8 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
 
     onUpdate(field.id, {
       type,
-      fixed: newFixed
+      fixed: newFixed,
+      enum: type === "string" ? field.enum : undefined
     })
   }
 
@@ -119,29 +136,33 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
       style={{ marginLeft: indent }}
     >
       <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm min-w-[320px] sm:min-w-[520px]">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-start gap-3 md:flex-nowrap">
           <Input
             placeholder="Field name"
             value={field.name}
             onChange={(event) => onUpdate(field.id, { name: event.target.value })}
             className={cn(
+              "w-full min-w-[180px] sm:w-48 md:w-56",
               validation.name && "border-destructive focus-visible:ring-destructive"
             )}
           />
-          {isPrimitive && fixedEnabled ? (
-            renderFixedInput("w-full sm:w-48", validation.fixed)
-          ) : (
-            <Input
-              placeholder="Description"
-              value={field.description}
-              onChange={(event) => onUpdate(field.id, { description: event.target.value })}
-              className={cn(
-                "w-full sm:w-48",
-                validation.description && "border-destructive focus-visible:ring-destructive"
-              )}
-              data-testid={`body-field-${field.id}-description`}
-            />
-          )}
+
+          <div className="flex-1 min-w-[240px]">
+            {isPrimitive && fixedEnabled && !enumEnabled ? (
+              renderFixedInput("w-full", validation.fixed)
+            ) : (
+              <Input
+                placeholder="Description"
+                value={field.description}
+                onChange={(event) => onUpdate(field.id, { description: event.target.value })}
+                className={cn(
+                  validation.description && "border-destructive focus-visible:ring-destructive"
+                )}
+                data-testid={`body-field-${field.id}-description`}
+              />
+            )}
+          </div>
+
           <Select value={field.type} onValueChange={(value) => handleTypeChange(value as BodyField["type"])}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue />
@@ -157,6 +178,7 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
               <SelectItem value="array:object">array of object</SelectItem>
             </SelectContent>
           </Select>
+
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-2">
               <Switch
@@ -165,18 +187,34 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
               />
               Required
             </span>
-            {field.type === "string" || field.type === "number" || field.type === "boolean" ? (
+            {field.type === "string" ? (
+              <span className="inline-flex items-center gap-2">
+                <Switch
+                  checked={enumEnabled}
+                  onCheckedChange={(checked) =>
+                    onUpdate(field.id, {
+                      enum: checked ? [] : undefined,
+                      fixed: checked ? undefined : field.fixed
+                    })
+                  }
+                />
+                Use enum values
+              </span>
+            ) : null}
+            {!enumEnabled && (field.type === "string" || field.type === "number" || field.type === "boolean") ? (
               <span className="inline-flex items-center gap-2">
                 <Switch
                   checked={fixedEnabled}
                   onCheckedChange={(checked) =>
                     onUpdate(field.id, { fixed: checked ? (field.type === "boolean" ? false : "") : undefined })
                   }
+                  disabled={enumEnabled}
                 />
                 Fixed value
               </span>
             ) : null}
           </div>
+
           <div className="flex flex-wrap gap-2 sm:ml-auto">
             {canNest && (
               <ActionTooltip content="Add a nested field">
@@ -224,6 +262,50 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
             </AlertDialog>
           </div>
         </div>
+
+        {enumEnabled ? (
+          <div className="flex w-full flex-wrap items-start gap-2">
+            <Input
+              placeholder="Add enum value"
+              value={newEnumValue}
+              onChange={(event) => setNewEnumValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  handleAddEnumValue()
+                }
+              }}
+              className="h-10 w-full sm:w-auto sm:flex-1"
+              data-testid={`body-field-${field.id}-enum-input`}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleAddEnumValue}
+              disabled={!newEnumValue.trim()}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+            {field.enum && field.enum.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {field.enum.map((value, index) => (
+                  <Badge key={index} variant="secondary" className="gap-1">
+                    <span>{value}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEnumValue(index)}
+                      className="text-muted-foreground transition hover:text-destructive"
+                      data-testid={`body-field-${field.id}-enum-remove-${index}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
       {canNest && field.children?.length ? (
         <div className="space-y-2 border-l-2 border-border/60 pl-4">

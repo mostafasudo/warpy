@@ -38,12 +38,21 @@ const ensureApiPath = (path: string) =>
 const formatPathForDisplay = (path: string) =>
   endpointBuilderUtils.normalizePathInput(path.replace(/\{([^}]+)\}/g, ":$1"))
 
-const getPrimitiveSchema = (type: PrimitiveType, fixed?: PrimitiveValue, name?: string, description?: string) => {
+const getPrimitiveSchema = (
+  type: PrimitiveType,
+  fixed?: PrimitiveValue,
+  name?: string,
+  description?: string,
+  enumValues?: string[]
+) => {
   const schema: Record<string, unknown> = { type }
   if (fixed !== undefined) {
     schema.description = formatValueDescription(fixed)
   } else {
     schema.description = normalizeDescription(description, name || "Value")
+  }
+  if (enumValues && enumValues.length > 0 && type === "string") {
+    schema.enum = enumValues
   }
   return schema
 }
@@ -56,7 +65,13 @@ const buildFlatProperties = (fields: FlatField[]) => {
     if (!name) {
       return
     }
-    properties[name] = getPrimitiveSchema(field.type, field.fixed, name, field.description.trim())
+    properties[name] = getPrimitiveSchema(
+      field.type,
+      field.fixed,
+      name,
+      field.description.trim(),
+      field.enum
+    )
     if (field.required) {
       required.push(name)
     }
@@ -88,7 +103,7 @@ const buildBodyFieldSchema = (field: BodyField): Record<string, unknown> => {
   const name = field.name.trim()
   const description = field.description.trim()
   if (endpointBuilderUtils.isPrimitiveType(field.type)) {
-    return getPrimitiveSchema(field.type, field.fixed, name, description)
+    return getPrimitiveSchema(field.type, field.fixed, name, description, field.enum)
   }
   if (field.type === "object") {
     const properties: Record<string, unknown> = {}
@@ -292,13 +307,15 @@ const parseFlatFields = (schema: any) => {
     const rawDescription =
       typeof (definition as any)?.description === "string" ? (definition as any).description.trim() : ""
     const fixed = parseFixedValue((definition as any)?.description, resolvedType)
+    const enumValues = Array.isArray((definition as any)?.enum) ? (definition as any).enum : undefined
     return {
       id: name,
       name,
       type: resolvedType,
       required: required.includes(name),
       fixed,
-      description: fixed === undefined ? rawDescription : ""
+      description: fixed === undefined ? rawDescription : "",
+      enum: enumValues
     }
   })
 }
@@ -360,13 +377,15 @@ const parseBodyField = (name: string, schema: any, required: boolean): BodyField
     schema.type === "number" || schema.type === "boolean" ? schema.type : "string"
   const rawDescription = typeof schema.description === "string" ? schema.description.trim() : ""
   const fixed = parseFixedValue(schema.description, primitiveType)
+  const enumValues = Array.isArray(schema.enum) ? schema.enum : undefined
   return {
     id: name,
     name,
     type: primitiveType,
     required,
     fixed,
-    description: fixed === undefined ? rawDescription : ""
+    description: fixed === undefined ? rawDescription : "",
+    enum: enumValues
   }
 }
 
