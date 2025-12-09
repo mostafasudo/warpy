@@ -190,6 +190,7 @@
         overflow: hidden;
         z-index: 99998;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color-scheme: light;
       }
       .cta-widget-panel.open {
         display: flex;
@@ -270,6 +271,21 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
+        scrollbar-width: thin;
+        scrollbar-color: #d1d5db #f9fafb;
+      }
+      .cta-widget-messages::-webkit-scrollbar {
+        width: 8px;
+      }
+      .cta-widget-messages::-webkit-scrollbar-track {
+        background: #f9fafb;
+      }
+      .cta-widget-messages::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 999px;
+      }
+      .cta-widget-messages::-webkit-scrollbar-thumb:hover {
+        background: #c0c4cc;
       }
       .cta-widget-empty {
         flex: 1;
@@ -804,7 +820,7 @@
         .map((device, index) => {
           const label = device.label || `Microphone ${index + 1}`;
           const active = device.deviceId === selectedMicId ? "active" : "";
-          return `<button type="button" data-device-id="${device.deviceId}" class="${active}">${label}</button>`;
+          return `<button type="button" data-device-id="${escapeHtml(device.deviceId)}" class="${active}">${escapeHtml(label)}</button>`;
         })
         .join("");
     }

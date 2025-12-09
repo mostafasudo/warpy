@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, create_model
 
@@ -8,8 +8,36 @@ class SchemaFactory:
     def __init__(self):
         self._cache: dict[str, type[BaseModel]] = {}
 
+    def _literal_from_enum(self, values: list[Any]) -> type:
+        if not values:
+            raise ValueError("Cannot create Literal type from empty values list")
+        return Literal.__getitem__(tuple(values))
+
     def _type_from_schema(self, schema: dict[str, Any], model_name_prefix: str) -> type:
         schema_type = schema.get("type", "string")
+        enum_values = schema.get("enum")
+        if enum_values:
+            if schema_type in ("string", "number", "integer"):
+                unique: list[Any] = []
+                seen = set()
+                for value in enum_values:
+                    try:
+                        processed = value
+                        if schema_type == "string":
+                            processed = str(value)
+                        elif schema_type == "integer":
+                            processed = int(value)
+                        elif schema_type == "number":
+                            processed = float(value)
+                    except (ValueError, TypeError):
+                        continue
+                    key = json.dumps(processed, sort_keys=True)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    unique.append(processed)
+                if unique:
+                    return self._literal_from_enum(unique)
         if schema_type == "object":
             if "properties" in schema:
                 return self.model_from_schema(model_name_prefix, schema)

@@ -1,4 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
+import { useState } from "react"
 import { beforeAll, describe, expect, it, jest } from "@jest/globals"
 import { act, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -12,32 +13,46 @@ beforeAll(() => {
   ;(HTMLElement.prototype as any).releasePointerCapture = () => {}
 })
 
-const renderRow = (field: FlatField, handlers: any = {}) =>
-  render(
-    <TooltipProvider>
-      <FlatFieldRow
-        field={field}
-        onChange={handlers.onChange ?? jest.fn()}
-        onRemove={handlers.onRemove ?? jest.fn()}
-        focusRef={handlers.focusRef}
-      />
-    </TooltipProvider>
-  )
+const renderRow = (field: FlatField, handlers: any = {}) => {
+  const onChange = handlers.onChange ?? jest.fn()
+  const onRemove = handlers.onRemove ?? jest.fn()
+  const Wrapper = () => {
+    const [current, setCurrent] = useState(field)
+    return (
+      <TooltipProvider>
+        <FlatFieldRow
+          field={current}
+          onChange={(patch) => {
+            setCurrent((prev) => ({ ...prev, ...patch }))
+            onChange(patch)
+          }}
+          onRemove={onRemove}
+          focusRef={handlers.focusRef}
+        />
+      </TooltipProvider>
+    )
+  }
+
+  return render(<Wrapper />)
+}
 
 describe("FlatFieldRow", () => {
   it("edits descriptions, toggles switches, and removes fields", async () => {
     const onChange = jest.fn() as jest.Mock
     const onRemove = jest.fn()
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    renderRow({ id: "f1", name: "Auth", type: "string", required: false, description: "desc" }, { onChange, onRemove })
+    renderRow({ id: "f1", name: "Auth", type: "string", required: false, description: "desc", enumValues: [] }, { onChange, onRemove })
 
     await user.clear(screen.getByTestId("field-f1-name"))
     await user.type(screen.getByTestId("field-f1-name"), "Header")
     await user.type(screen.getByTestId("field-f1-description"), "x")
-    const switches = screen.getAllByRole("switch")
-    await user.click(switches[0])
-    await user.click(switches[1])
+    await user.click(screen.getByLabelText("Required"))
+    await user.type(screen.getByTestId("field-f1-enum"), "open")
+    await user.click(screen.getByTestId("field-f1-enum-add"))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ required: true }))
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ enumValues: ["open"] }))
+    await user.click(screen.getByRole("button", { name: "Remove open" }))
+    await user.click(screen.getByLabelText("Fixed value"))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fixed: "" }))
 
     await user.click(screen.getByTestId("remove-flat-field-f1"))

@@ -17,7 +17,7 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch):
 
 def test_transcribe_audio_success(monkeypatch: pytest.MonkeyPatch):
     class FakeTranscriptions:
-        async def create(self, file, model):
+        async def create(self, file, model, **_kwargs):
             return type("Resp", (), {"text": "hello world"})()
 
     class FakeAudio:
@@ -46,7 +46,7 @@ def test_transcribe_audio_missing_key(monkeypatch: pytest.MonkeyPatch):
 
 def test_transcribe_audio_failure(monkeypatch: pytest.MonkeyPatch):
     class FakeTranscriptions:
-        async def create(self, file, model):
+        async def create(self, file, model, **_kwargs):
             raise RuntimeError("boom")
 
     class FakeAudio:

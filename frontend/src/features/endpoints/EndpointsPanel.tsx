@@ -537,12 +537,10 @@ export const FeaturesPanel = () => {
     if (featureId) {
       setFeatureId(featureId);
       setFeatureMode("existing");
-    } else if (!features.length) {
-      setFeatureMode("new");
-      setFeatureName("");
     } else {
       setFeatureMode("auto");
       setFeatureId(null);
+      setFeatureName("");
     }
     openCreate();
   };

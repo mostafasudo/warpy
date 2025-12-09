@@ -5,11 +5,13 @@ import type { HttpMethod } from "@/types"
 type PrimitiveType = "string" | "number" | "boolean"
 type BodyFieldType = PrimitiveType | "object" | "array:string" | "array:number" | "array:boolean" | "array:object"
 type PrimitiveValue = string | number | boolean
+type EnumValue = string | number
 
 export type PathParam = {
   name: string
   description?: string
   fixed?: string
+  enumValues?: string[]
 }
 
 export type FlatField = {
@@ -19,6 +21,7 @@ export type FlatField = {
   required: boolean
   description: string
   fixed?: PrimitiveValue
+  enumValues?: EnumValue[]
 }
 
 export type BodyField = {
@@ -28,6 +31,7 @@ export type BodyField = {
   required: boolean
   description: string
   fixed?: PrimitiveValue
+  enumValues?: EnumValue[]
   children?: BodyField[]
 }
 
@@ -57,6 +61,7 @@ type EndpointBuilderStore = EndpointBuilderState & {
   setFeatureName: (name: string) => void
   setPathParamFixed: (name: string, fixed?: string) => void
   setPathParamDescription: (name: string, description: string) => void
+  setPathParamEnumValues: (name: string, enumValues?: string[]) => void
   addFlatField: (section: "headers" | "queryParams") => void
   updateFlatField: (section: "headers" | "queryParams", id: string, payload: Partial<FlatField>) => void
   removeFlatField: (section: "headers" | "queryParams", id: string) => void
@@ -105,6 +110,43 @@ const createFlatField = (): FlatField => ({
 const canHaveChildren = (type: BodyFieldType) => type === "object" || type === "array:object"
 const isPrimitiveType = (type: BodyFieldType): type is PrimitiveType =>
   type === "string" || type === "number" || type === "boolean"
+const isEnumSupported = (type: BodyFieldType | PrimitiveType) => type === "string" || type === "number"
+
+const coerceEnumValues = (values: EnumValue[] | undefined, type: PrimitiveType): EnumValue[] | undefined => {
+  if (!values) {
+    return undefined
+  }
+  if (!isEnumSupported(type)) {
+    return undefined
+  }
+  const seen = new Set<string>()
+  const result: EnumValue[] = []
+  values.forEach((value) => {
+    if (type === "number") {
+      const num = typeof value === "number" ? value : Number(value)
+      if (Number.isNaN(num)) {
+        return
+      }
+      const key = String(num)
+      if (seen.has(key)) {
+        return
+      }
+      seen.add(key)
+      result.push(num)
+      return
+    }
+    const text = typeof value === "string" ? value.trim() : String(value)
+    if (!text) {
+      return
+    }
+    if (seen.has(text)) {
+      return
+    }
+    seen.add(text)
+    result.push(text)
+  })
+  return result
+}
 
 const createBodyField = (type: BodyFieldType = "string"): BodyField => ({
   id: createId(),
@@ -178,7 +220,11 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
         pathParams: syncPathParams(normalized, state.pathParams)
       }
     }),
-  setMethod: (method) => set({ method }),
+  setMethod: (method) =>
+    set((state) => ({
+      method,
+      bodyFields: method === "GET" ? [] : state.bodyFields
+    })),
   setName: (name) => set({ name }),
   setDescription: (description) => set({ description }),
   setAgentEnabled: (enabled) => set({ agentEnabled: enabled }),
@@ -197,11 +243,30 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
     })),
   setPathParamFixed: (name, fixed) =>
     set((state) => ({
-      pathParams: state.pathParams.map((param) => (param.name === name ? { ...param, fixed } : param))
+      pathParams: state.pathParams.map((param) =>
+        param.name === name ? { ...param, fixed, enumValues: fixed !== undefined ? undefined : param.enumValues } : param
+      )
     })),
   setPathParamDescription: (name, description) =>
     set((state) => ({
       pathParams: state.pathParams.map((param) => (param.name === name ? { ...param, description } : param))
+    })),
+  setPathParamEnumValues: (name, enumValues) =>
+    set((state) => ({
+      pathParams: state.pathParams.map((param) => {
+        if (param.name !== name) {
+          return param
+        }
+        const nextValues =
+          enumValues === undefined
+            ? undefined
+            : (coerceEnumValues(enumValues, "string") as string[] | undefined)
+        return {
+          ...param,
+          fixed: enumValues !== undefined ? undefined : param.fixed,
+          enumValues: nextValues
+        }
+      })
     })),
   addFlatField: (section) =>
     set((state) => ({
@@ -213,9 +278,19 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
         if (field.id !== id) {
           return field
         }
-        const updated = { ...field, ...payload }
+        const nextType = payload.type ?? field.type
+        const updated: FlatField = { ...field, ...payload, type: nextType }
+        if (payload.enumValues !== undefined || payload.type !== undefined) {
+          updated.enumValues =
+            nextType === "boolean"
+              ? undefined
+              : coerceEnumValues(payload.enumValues ?? field.enumValues, nextType)
+        }
         if (payload.type !== undefined && payload.type !== field.type) {
           updated.fixed = undefined
+        }
+        if (updated.fixed !== undefined) {
+          updated.enumValues = undefined
         }
         return updated
       })
@@ -245,6 +320,14 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
         }
         if (!isPrimitiveType(nextType) || (typeChanged && payload.fixed === undefined)) {
           base.fixed = undefined
+        }
+        if (payload.enumValues !== undefined || typeChanged) {
+          base.enumValues = isEnumSupported(nextType)
+            ? coerceEnumValues(payload.enumValues ?? field.enumValues, nextType as PrimitiveType)
+            : undefined
+        }
+        if (base.fixed !== undefined) {
+          base.enumValues = undefined
         }
         return base
       })
@@ -283,6 +366,7 @@ export const endpointBuilderActions = {
   setFeatureName: (state: EndpointBuilderStore) => state.setFeatureName,
   setPathParamFixed: (state: EndpointBuilderStore) => state.setPathParamFixed,
   setPathParamDescription: (state: EndpointBuilderStore) => state.setPathParamDescription,
+  setPathParamEnumValues: (state: EndpointBuilderStore) => state.setPathParamEnumValues,
   addFlatField: (state: EndpointBuilderStore) => state.addFlatField,
   updateFlatField: (state: EndpointBuilderStore) => state.updateFlatField,
   removeFlatField: (state: EndpointBuilderStore) => state.removeFlatField,
@@ -296,5 +380,7 @@ export const endpointBuilderActions = {
 export const endpointBuilderUtils = {
   normalizePathInput,
   extractPathParams,
-  isPrimitiveType
+  isPrimitiveType,
+  isEnumSupported,
+  coerceEnumValues
 }

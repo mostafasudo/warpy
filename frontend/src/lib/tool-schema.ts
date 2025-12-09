@@ -29,6 +29,11 @@ const normalizeToolParameters = (parameters?: ToolParameters): ToolParameters =>
   required: parameters?.required ?? []
 })
 
+const sanitizeEnumValues = (values: (string | number)[] | undefined, type: PrimitiveType) => {
+  const clean = endpointBuilderUtils.coerceEnumValues(values, type)
+  return clean && clean.length ? clean : undefined
+}
+
 const ensureApiPath = (path: string) =>
   endpointBuilderUtils
     .normalizePathInput(path)
@@ -38,12 +43,21 @@ const ensureApiPath = (path: string) =>
 const formatPathForDisplay = (path: string) =>
   endpointBuilderUtils.normalizePathInput(path.replace(/\{([^}]+)\}/g, ":$1"))
 
-const getPrimitiveSchema = (type: PrimitiveType, fixed?: PrimitiveValue, name?: string, description?: string) => {
+const getPrimitiveSchema = (
+  type: PrimitiveType,
+  fixed?: PrimitiveValue,
+  name?: string,
+  description?: string,
+  enumValues?: (string | number)[]
+) => {
   const schema: Record<string, unknown> = { type }
   if (fixed !== undefined) {
     schema.description = formatValueDescription(fixed)
   } else {
     schema.description = normalizeDescription(description, name || "Value")
+    if (enumValues?.length) {
+      schema.enum = enumValues
+    }
   }
   return schema
 }
@@ -56,7 +70,8 @@ const buildFlatProperties = (fields: FlatField[]) => {
     if (!name) {
       return
     }
-    properties[name] = getPrimitiveSchema(field.type, field.fixed, name, field.description.trim())
+    const enumValues = field.fixed === undefined ? sanitizeEnumValues(field.enumValues, field.type) : undefined
+    properties[name] = getPrimitiveSchema(field.type, field.fixed, name, field.description.trim(), enumValues)
     if (field.required) {
       required.push(name)
     }
@@ -75,7 +90,8 @@ const buildPathParams = (params: PathParam[]) => {
   params.forEach((param) => {
     const name = param.name.trim()
     if (name) {
-      properties[name] = getPrimitiveSchema("string", param.fixed, name, param.description?.trim())
+      const enumValues = param.fixed === undefined ? sanitizeEnumValues(param.enumValues, "string") : undefined
+      properties[name] = getPrimitiveSchema("string", param.fixed, name, param.description?.trim(), enumValues)
     }
   })
   if (!Object.keys(properties).length) {
@@ -88,7 +104,11 @@ const buildBodyFieldSchema = (field: BodyField): Record<string, unknown> => {
   const name = field.name.trim()
   const description = field.description.trim()
   if (endpointBuilderUtils.isPrimitiveType(field.type)) {
-    return getPrimitiveSchema(field.type, field.fixed, name, description)
+    const enumValues =
+      field.fixed === undefined && endpointBuilderUtils.isEnumSupported(field.type)
+        ? sanitizeEnumValues(field.enumValues, field.type)
+        : undefined
+    return getPrimitiveSchema(field.type, field.fixed, name, description, enumValues)
   }
   if (field.type === "object") {
     const properties: Record<string, unknown> = {}
@@ -221,7 +241,7 @@ export const buildEndpointPayload = (state: EndpointBuilderState): EndpointPaylo
   }
 
   const body = buildBodySection(state.bodyFields)
-  if (body) {
+  if (body && state.method !== "GET") {
     body.description = "Body of the endpoint"
     topProperties.body = body
     const bodyRequired = Array.isArray((body as any).required) ? (body as any).required : []
@@ -283,6 +303,42 @@ const parseFixedValue = (description: unknown, type: PrimitiveType): PrimitiveVa
   return raw
 }
 
+const parseEnumValues = (raw: unknown, type: PrimitiveType) => {
+  if (!Array.isArray(raw)) {
+    return undefined
+  }
+  if (!endpointBuilderUtils.isEnumSupported(type)) {
+    return undefined
+  }
+  const seen = new Set<string>()
+  const values: (string | number)[] = []
+  raw.forEach((item) => {
+    if (type === "number") {
+      const num = Number(item)
+      if (Number.isNaN(num)) {
+        return
+      }
+      const key = String(num)
+      if (seen.has(key)) {
+        return
+      }
+      seen.add(key)
+      values.push(num)
+      return
+    }
+    const text = typeof item === "string" ? item.trim() : String(item)
+    if (!text) {
+      return
+    }
+    if (seen.has(text)) {
+      return
+    }
+    seen.add(text)
+    values.push(text)
+  })
+  return values.length ? values : undefined
+}
+
 const parseFlatFields = (schema: any) => {
   const properties = schema?.properties ?? {}
   const required: string[] = schema?.required ?? []
@@ -292,13 +348,15 @@ const parseFlatFields = (schema: any) => {
     const rawDescription =
       typeof (definition as any)?.description === "string" ? (definition as any).description.trim() : ""
     const fixed = parseFixedValue((definition as any)?.description, resolvedType)
+    const enumValues = fixed === undefined ? parseEnumValues((definition as any)?.enum, resolvedType) : undefined
     return {
       id: name,
       name,
       type: resolvedType,
       required: required.includes(name),
       fixed,
-      description: fixed === undefined ? rawDescription : ""
+      description: fixed === undefined ? rawDescription : "",
+      enumValues
     }
   })
 }
@@ -360,13 +418,15 @@ const parseBodyField = (name: string, schema: any, required: boolean): BodyField
     schema.type === "number" || schema.type === "boolean" ? schema.type : "string"
   const rawDescription = typeof schema.description === "string" ? schema.description.trim() : ""
   const fixed = parseFixedValue(schema.description, primitiveType)
+  const enumValues = fixed === undefined ? parseEnumValues((schema as any).enum, primitiveType) : undefined
   return {
     id: name,
     name,
     type: primitiveType,
     required,
     fixed,
-    description: fixed === undefined ? rawDescription : ""
+    description: fixed === undefined ? rawDescription : "",
+    enumValues
   }
 }
 
@@ -384,10 +444,12 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
     const definition = paramsProperties[name]
     const rawDescription = typeof definition?.description === "string" ? definition.description.trim() : ""
     const fixed = parseFixedValue(rawDescription, "string")?.toString()
+    const enumValues = fixed === undefined ? (parseEnumValues(definition?.enum, "string") as string[] | undefined) : undefined
     return {
       name,
       fixed,
-      description: fixed === undefined ? rawDescription : ""
+      description: fixed === undefined ? rawDescription : "",
+      enumValues
     }
   })
 
@@ -399,10 +461,11 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
   const queryParams = parseFlatFields(querySchema ?? {})
 
   const bodyRequired: string[] = bodySchema?.required ?? []
-  const bodyFields =
+  const parsedBodyFields =
     Object.entries(bodySchema?.properties ?? {}).map(([name, schema]) =>
       parseBodyField(name, schema, bodyRequired.includes(name))
     ) ?? []
+  const bodyFields = endpoint.method === "GET" ? [] : parsedBodyFields
 
   const featureMode: EndpointBuilderState["featureMode"] = (() => {
     if (feature?.mode === "existing" || (!feature?.mode && feature?.id)) {

@@ -77,6 +77,7 @@ jest.mock("@/stores/endpoint-builder", () => {
     setFeatureName: jest.fn(),
     setPathParamFixed: jest.fn(),
     setPathParamDescription: jest.fn(),
+    setPathParamEnumValues: jest.fn(),
     addFlatField: jest.fn(),
     updateFlatField: jest.fn(),
     removeFlatField: jest.fn(),
@@ -118,6 +119,7 @@ jest.mock("@/stores/endpoint-builder", () => {
       updateBodyField: (s: any) => s.updateBodyField,
       removeBodyField: (s: any) => s.removeBodyField,
       setPathParamDescription: (s: any) => s.setPathParamDescription,
+      setPathParamEnumValues: (s: any) => s.setPathParamEnumValues,
       setPathParamFixed: (s: any) => s.setPathParamFixed,
       setDescription: (s: any) => s.setDescription,
       setName: (s: any) => s.setName,
@@ -477,6 +479,26 @@ describe("FeaturesPanel", () => {
     );
     await user.click(screen.getByTestId("editor-save"));
     expect(mutateUpdate).toHaveBeenCalled();
+  });
+
+  it("defaults to auto classify when no features exist", async () => {
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: [],
+      isPending: false,
+      isFetching: false,
+    });
+
+    const setFeatureModeMock =
+      require("@/stores/endpoint-builder").useEndpointBuilderStore.getState()
+        .setFeatureMode as jest.Mock;
+    setFeatureModeMock.mockClear();
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderPanel();
+
+    await user.click(screen.getByTestId("new-endpoint"));
+
+    expect(setFeatureModeMock).toHaveBeenCalledWith("auto");
   });
 
   it("deletes features and endpoints", async () => {

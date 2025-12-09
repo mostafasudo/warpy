@@ -50,10 +50,13 @@ def execute_endpoint(session: Session, user_id: str, endpoint: Endpoint, args: d
         return {"error": f"Invalid URL scheme: {parsed.scheme}. Only http and https are allowed."}
 
     method = endpoint.method.value.upper()
+    if method == "GET" and body_data:
+        log_error("AgentChain", "execute_endpoint", "GET request cannot include a body", endpoint_id=str(endpoint.id))
+        return {"error": "GET requests cannot include a body"}
     request_kwargs: dict[str, Any] = {"timeout": 30.0}
     if query_params:
         request_kwargs["params"] = query_params
-    if body_data and method != "GET":
+    if body_data:
         request_kwargs["json"] = body_data
     if header_data:
         request_kwargs["headers"] = header_data

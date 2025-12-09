@@ -43,6 +43,7 @@ export const DashboardPanel = () => {
   const headerCount = Object.keys(config?.headers ?? {}).length
   const featureCount = features?.length ?? 0
   const endpointCount = (features ?? []).reduce((total, feature) => total + (feature?.endpointCount ?? 0), 0)
+  const endpointHelper = `${endpointCount} endpoint${endpointCount === 1 ? "" : "s"} mapped.`
 
   return (
     <PanelShell
@@ -52,7 +53,7 @@ export const DashboardPanel = () => {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           label="Features"
-          helper={`${endpointCount} endpoints mapped.`}
+          helper={endpointHelper}
           icon={<Network className="h-5 w-5" />}
           value={featureCount}
           loading={isFeaturesPending}

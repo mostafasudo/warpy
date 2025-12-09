@@ -91,6 +91,19 @@ def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
     assert calls[0]["kwargs"]["headers"] == {"H": "1"}
 
 
+def test_execute_endpoint_rejects_get_body(monkeypatch: pytest.MonkeyPatch):
+    calls: list = []
+    client = DummyHttpClient(DummyResponse(200, {"ok": True}), calls)
+    monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
+
+    session = DummySession(environment=DummyEnvironment("http://api.test"))
+    endpoint = DummyEndpoint("/products", HttpMethod.get)
+    result = execute_endpoint(session, "user", endpoint, {"body": {"ping": "pong"}})
+
+    assert result["error"] == "GET requests cannot include a body"
+    assert calls == []
+
+
 def test_dummy_response_json_returns_value():
     response = DummyResponse(200, {"k": "v"})
     assert response.json() == {"k": "v"}

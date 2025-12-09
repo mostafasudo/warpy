@@ -1,4 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
+import { useState } from "react"
 import { describe, expect, it, beforeAll } from "@jest/globals"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -13,19 +14,33 @@ beforeAll(() => {
   ;(Element.prototype as any).scrollIntoView = () => {}
 })
 
-const renderField = (field: BodyField, handlers: any = {}) =>
-  render(
-    <TooltipProvider>
-      <BodyFieldRow
-        field={field}
-        depth={0}
-        invalid={{}}
-        onUpdate={handlers.onUpdate ?? jest.fn()}
-        onAdd={handlers.onAdd ?? jest.fn()}
-        onRemove={handlers.onRemove ?? jest.fn()}
-      />
-    </TooltipProvider>
-  )
+const renderField = (field: BodyField, handlers: any = {}) => {
+  const onUpdate = handlers.onUpdate ?? jest.fn()
+  const onAdd = handlers.onAdd ?? jest.fn()
+  const onRemove = handlers.onRemove ?? jest.fn()
+  const Wrapper = () => {
+    const [current, setCurrent] = useState(field)
+    return (
+      <TooltipProvider>
+        <BodyFieldRow
+          field={current}
+          depth={0}
+          invalid={{}}
+          onUpdate={(id, patch) => {
+            if (id === current.id) {
+              setCurrent((prev) => ({ ...prev, ...patch }))
+            }
+            onUpdate(id, patch)
+          }}
+          onAdd={onAdd}
+          onRemove={onRemove}
+        />
+      </TooltipProvider>
+    )
+  }
+
+  return render(<Wrapper />)
+}
 
 describe("BodyFieldRow", () => {
   it("handles primitive interactions and removal", async () => {
@@ -42,8 +57,12 @@ describe("BodyFieldRow", () => {
     await user.type(nameInput, "state")
     expect(onUpdate).toHaveBeenCalled()
 
-    const switches = screen.getAllByRole("switch")
-    await user.click(switches[1])
+    await user.click(screen.getByLabelText("Enum values"))
+    await user.type(screen.getByTestId("body-field-f1-enum"), "open")
+    await user.click(screen.getByTestId("body-field-f1-enum-add"))
+    expect(onUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ enumValues: ["open"] }))
+
+    await user.click(screen.getByLabelText("Fixed value"))
     expect(onUpdate).toHaveBeenCalledWith("f1", expect.objectContaining({ fixed: "" }))
 
     await user.click(screen.getByRole("combobox"))
@@ -112,9 +131,8 @@ describe("BodyFieldRow", () => {
     await user.type(screen.getByTestId("body-field-num-fixed"), "9")
     expect(onUpdate.mock.calls.some(([_, patch]) => "fixed" in patch)).toBe(true)
 
-    const switches = screen.getAllByRole("switch")
-    await user.click(switches[0])
-    await user.click(switches[1])
+    await user.click(screen.getByLabelText("Required"))
+    await user.click(screen.getByLabelText("Fixed value"))
     expect(onUpdate).toHaveBeenCalledWith("num", expect.objectContaining({ required: false }))
     expect(onUpdate).toHaveBeenCalledWith("num", expect.objectContaining({ fixed: undefined }))
   })

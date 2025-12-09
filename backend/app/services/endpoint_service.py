@@ -5,14 +5,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, cast, func, or_, select, String
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import Endpoint, Feature
+from ..models import Endpoint, Feature, HttpMethod
 from ..schemas.endpoint import EndpointPayload
 from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
 from .feature_service import resolve_feature
 from .user_stats_service import adjust_endpoint_count, get_endpoint_count
 
 
-def _validate_tool(tool: dict[str, Any]) -> None:
+def _validate_tool(tool: dict[str, Any], method: HttpMethod) -> None:
     function = tool.get("function") if isinstance(tool, dict) else None
     name = function.get("name") if isinstance(function, dict) else None
     description = function.get("description") if isinstance(function, dict) else None
@@ -21,6 +21,15 @@ def _validate_tool(tool: dict[str, Any]) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tool name and description are required"
         )
+    if method == HttpMethod.get:
+        parameters = function.get("parameters") if isinstance(function, dict) else None
+        properties = parameters.get("properties") if isinstance(parameters, dict) else {}
+        body_schema = properties.get("body") if isinstance(properties, dict) else None
+        if body_schema:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="GET endpoints cannot include a body"
+            )
 
 
 def _endpoint_condition(endpoint_id: UUID):
@@ -88,7 +97,7 @@ def list_endpoints(session: Session, user_id: str, page: int, page_size: int, se
 
 
 def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) -> Endpoint:
-    _validate_tool(payload.tool)
+    _validate_tool(payload.tool, payload.method)
     feature = resolve_feature(session, user_id, payload.feature, payload)
     endpoint = Endpoint(
         user_id=user_id,
@@ -107,7 +116,7 @@ def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) ->
 
 
 def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: EndpointPayload) -> Endpoint:
-    _validate_tool(payload.tool)
+    _validate_tool(payload.tool, payload.method)
     endpoint = _get_endpoint(session, endpoint_id, user_id)
     target_feature = resolve_feature(session, user_id, payload.feature, payload)
     previous_agent_enabled = endpoint.agent_enabled

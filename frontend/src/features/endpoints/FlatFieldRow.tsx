@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { type FlatField } from "@/stores/endpoint-builder"
+import { EnumValuesInput } from "./EnumValuesInput"
 import type { FieldValidation } from "./validation"
 
 type FlatFieldRowProps = {
@@ -32,6 +33,8 @@ type FlatFieldRowProps = {
 export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: FlatFieldRowProps) => {
   const actionRef = useRef<HTMLButtonElement>(null)
   const fixedEnabled = field.fixed !== undefined
+  const enumEnabled = field.enumValues !== undefined
+  const showEnum = (field.type === "string" || field.type === "number") && !fixedEnabled
   const fixedInputValue = String(field.fixed ?? "")
   const validation = invalid ?? {}
   const handleRemove = () => {
@@ -123,17 +126,41 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
       </div>
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-2">
-          <Switch checked={field.required} onCheckedChange={(checked) => onChange({ required: checked })} />
+          <Switch
+            checked={field.required}
+            onCheckedChange={(checked) => onChange({ required: checked })}
+            aria-label="Required"
+          />
           Required
         </span>
         <span className="inline-flex items-center gap-2">
           <Switch
             checked={fixedEnabled}
             onCheckedChange={(checked) => onChange({ fixed: checked ? "" : undefined })}
+            aria-label="Fixed value"
           />
           Fixed value
         </span>
+        {showEnum ? (
+          <span className="inline-flex items-center gap-2">
+            <Switch
+              checked={enumEnabled}
+              onCheckedChange={(checked) => onChange({ enumValues: checked ? [] : undefined })}
+              aria-label="Enum values"
+            />
+            Enum
+          </span>
+        ) : null}
       </div>
+      {showEnum && enumEnabled ? (
+        <EnumValuesInput
+          values={field.enumValues ?? []}
+          type={field.type as "string" | "number"}
+          onChange={(values) => onChange({ enumValues: values })}
+          inputTestId={`field-${field.id}-enum`}
+          invalid={validation.enum}
+        />
+      ) : null}
     </div>
   )
 }

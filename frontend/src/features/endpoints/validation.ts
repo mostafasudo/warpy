@@ -6,11 +6,13 @@ export type FieldValidation = {
   name?: boolean
   description?: boolean
   fixed?: boolean
+  enum?: boolean
 }
 
 type PathParamValidation = {
   description?: boolean
   fixed?: boolean
+  enum?: boolean
 }
 
 export type EndpointValidationResult = {
@@ -53,6 +55,28 @@ const isPrimitiveFixedMissing = (
   return false
 }
 
+const validateEnumValues = (
+  values: (string | number)[] | undefined,
+  type: "string" | "number",
+  label: string,
+  entry: FieldValidation,
+  errors: string[]
+) => {
+  if (values === undefined) {
+    return
+  }
+  if (!values.length) {
+    errors.push(`${label} enum requires at least one value`)
+    entry.enum = true
+    return
+  }
+  const normalized = endpointBuilderUtils.coerceEnumValues(values, type)
+  if (!normalized || normalized.length !== values.length) {
+    errors.push(`${label} enum contains invalid or duplicate values`)
+    entry.enum = true
+  }
+}
+
 const validateFlatFields = (fields: FlatField[], label: "Header" | "Query param") => {
   const issues: Record<string, FieldValidation> = {}
   const errors: string[] = []
@@ -73,12 +97,17 @@ const validateFlatFields = (fields: FlatField[], label: "Header" | "Query param"
         errors.push(`${displayName} fixed value cannot be empty`)
         entry.fixed = true
       }
-    } else if (isTextEmpty(field.description)) {
-      errors.push(`${displayName} description cannot be empty`)
-      entry.description = true
+    } else {
+      if (isTextEmpty(field.description)) {
+        errors.push(`${displayName} description cannot be empty`)
+        entry.description = true
+      }
+      if (endpointBuilderUtils.isEnumSupported(field.type)) {
+        validateEnumValues(field.enumValues, field.type, displayName, entry, errors)
+      }
     }
 
-    if (entry.name || entry.description || entry.fixed) {
+    if (entry.name || entry.description || entry.fixed || entry.enum) {
       issues[field.id] = entry
     }
   })
@@ -111,16 +140,21 @@ const validateBodyFields = (
           errors.push(`${label} fixed value cannot be empty`)
           entry.fixed = true
         }
-      } else if (isTextEmpty(field.description)) {
-        errors.push(`${label} description cannot be empty`)
-        entry.description = true
+      } else {
+        if (isTextEmpty(field.description)) {
+          errors.push(`${label} description cannot be empty`)
+          entry.description = true
+        }
+        if (endpointBuilderUtils.isEnumSupported(field.type)) {
+          validateEnumValues(field.enumValues, field.type, label, entry, errors)
+        }
       }
     } else if (isTextEmpty(field.description)) {
       errors.push(`${label} description cannot be empty`)
       entry.description = true
     }
 
-    if (entry.name || entry.description || entry.fixed) {
+    if (entry.name || entry.description || entry.fixed || entry.enum) {
       invalid[field.id] = entry
     }
 
@@ -187,9 +221,12 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
         errors.push(`${label} fixed value cannot be empty`)
         entry.fixed = true
       }
-    } else if (isTextEmpty(param.description)) {
-      errors.push(`${label} description cannot be empty`)
-      entry.description = true
+    } else {
+      if (isTextEmpty(param.description)) {
+        errors.push(`${label} description cannot be empty`)
+        entry.description = true
+      }
+      validateEnumValues(param.enumValues, "string", label, entry, errors)
     }
   })
 
@@ -200,7 +237,11 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
   invalid.headers = headerResult.issues
   invalid.queryParams = queryResult.issues
 
-  validateBodyFields(state.bodyFields, [], invalid.bodyFields, errors)
+  if (state.method === "GET" && state.bodyFields.length) {
+    errors.push("GET endpoints cannot include a body")
+  } else {
+    validateBodyFields(state.bodyFields, [], invalid.bodyFields, errors)
+  }
 
   return { errors, invalid }
 }

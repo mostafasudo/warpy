@@ -46,6 +46,7 @@ describe("EndpointEditor validation UI", () => {
       const store = useEndpointBuilderStore.getState()
       store.reset()
       store.setPath("/users/:id")
+      store.setMethod("POST")
       store.setName("get_user")
       store.setDescription("Fetch user")
       store.addFlatField("headers")
@@ -88,5 +89,45 @@ describe("EndpointEditor validation UI", () => {
 
     await waitFor(() => expect(screen.queryByTestId(`remove-flat-field-${headerId}`)).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("add-headers")))
+  })
+
+  it("clears path param enum values when enabling fixed", async () => {
+    act(() => {
+      const store = useEndpointBuilderStore.getState()
+      store.reset()
+      store.setPath("/items/:id")
+      store.setName("get_item")
+      store.setDescription("desc")
+      store.setPathParamEnumValues("id", ["open", "open", "closed"])
+    })
+
+    const { user } = renderEditor(jest.fn())
+
+    await user.click(screen.getByTestId("path-param-id-fixed-toggle"))
+
+    const param = useEndpointBuilderStore.getState().pathParams[0]
+    expect(param.fixed).toBe("")
+    expect(param.enumValues).toBeUndefined()
+  })
+
+  it("clears path param fixed value when enabling enum", async () => {
+    act(() => {
+      const store = useEndpointBuilderStore.getState()
+      store.reset()
+      store.setPath("/items/:id")
+      store.setName("get_item")
+      store.setDescription("desc")
+      store.setPathParamFixed("id", "123")
+    })
+
+    const { user } = renderEditor(jest.fn())
+
+    await user.click(screen.getByTestId("path-param-id-fixed-toggle"))
+    const enumToggle = await screen.findByLabelText("Enum values")
+    await user.click(enumToggle)
+
+    const param = useEndpointBuilderStore.getState().pathParams[0]
+    expect(param.enumValues).toEqual([])
+    expect(param.fixed).toBeUndefined()
   })
 })

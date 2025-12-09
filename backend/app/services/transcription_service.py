@@ -16,7 +16,11 @@ async def transcribe_audio(data: bytes, filename: str | None = None) -> str:
     try:
         stream = BytesIO(data)
         name = filename or "audio.webm"
-        response = await client.audio.transcriptions.create(file=(name, stream), model=llm_config.whisper_model)
+        response = await client.audio.transcriptions.create(
+            file=(name, stream),
+            model=llm_config.whisper_model,
+            timeout=30.0
+        )
         text = getattr(response, "text", "") or ""
         if not text:
             raise ValueError("Empty transcription")

@@ -25,6 +25,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { type BodyField } from "@/stores/endpoint-builder"
+import { EnumValuesInput } from "./EnumValuesInput"
 import type { FieldValidation } from "./validation"
 
 type BodyFieldRowProps = {
@@ -42,6 +43,8 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
   const fixedEnabled = field.fixed !== undefined
   const canNest = field.type === "object" || field.type === "array:object"
   const isPrimitive = field.type === "string" || field.type === "number" || field.type === "boolean"
+  const enumEnabled = field.enumValues !== undefined
+  const showEnum = (field.type === "string" || field.type === "number") && !fixedEnabled
   const indent = depth * 16
   const validation = invalid?.[field.id] ?? {}
   const handleRemove = () => {
@@ -157,30 +160,42 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
               <SelectItem value="array:object">array of object</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-2">
+            <Switch
+              checked={field.required}
+              onCheckedChange={(checked) => onUpdate(field.id, { required: checked })}
+              aria-label="Required"
+            />
+            Required
+          </span>
+          {field.type === "string" || field.type === "number" || field.type === "boolean" ? (
             <span className="inline-flex items-center gap-2">
               <Switch
-                checked={field.required}
-                onCheckedChange={(checked) => onUpdate(field.id, { required: checked })}
+                checked={fixedEnabled}
+                onCheckedChange={(checked) =>
+                  onUpdate(field.id, { fixed: checked ? (field.type === "boolean" ? false : "") : undefined })
+                }
+                aria-label="Fixed value"
               />
-              Required
+              Fixed value
             </span>
-            {field.type === "string" || field.type === "number" || field.type === "boolean" ? (
-              <span className="inline-flex items-center gap-2">
-                <Switch
-                  checked={fixedEnabled}
-                  onCheckedChange={(checked) =>
-                    onUpdate(field.id, { fixed: checked ? (field.type === "boolean" ? false : "") : undefined })
-                  }
-                />
-                Fixed value
-              </span>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2 sm:ml-auto">
-            {canNest && (
-              <ActionTooltip content="Add a nested field">
-                <Button size="sm" variant="outline" onClick={() => onAdd(field.id, "string")}>
+          ) : null}
+          {showEnum ? (
+            <span className="inline-flex items-center gap-2">
+              <Switch
+                checked={enumEnabled}
+                onCheckedChange={(checked) => onUpdate(field.id, { enumValues: checked ? [] : undefined })}
+                aria-label="Enum values"
+              />
+              Enum
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          {canNest && (
+            <ActionTooltip content="Add a nested field">
+              <Button size="sm" variant="outline" onClick={() => onAdd(field.id, "string")}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add child
                 </Button>
@@ -224,6 +239,15 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
             </AlertDialog>
           </div>
         </div>
+        {showEnum && enumEnabled ? (
+          <EnumValuesInput
+            values={field.enumValues ?? []}
+            type={field.type as "string" | "number"}
+            onChange={(values) => onUpdate(field.id, { enumValues: values })}
+            inputTestId={`body-field-${field.id}-enum`}
+            invalid={validation.enum}
+          />
+        ) : null}
       </div>
       {canNest && field.children?.length ? (
         <div className="space-y-2 border-l-2 border-border/60 pl-4">

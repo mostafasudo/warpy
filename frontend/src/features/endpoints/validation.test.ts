@@ -7,7 +7,7 @@ describe("validateEndpointState", () => {
   it("flags empty names and descriptions", () => {
     const state: EndpointBuilderState = {
       path: "/",
-      method: "GET",
+      method: "POST",
       name: "",
       description: "",
       agentEnabled: true,
@@ -61,7 +61,7 @@ describe("validateEndpointState", () => {
   it("requires fixed values when enabled and ignores valid booleans", () => {
     const state: EndpointBuilderState = {
       path: "/users/:id",
-      method: "GET",
+      method: "POST",
       name: "get_user",
       description: "Fetch user",
       agentEnabled: true,
@@ -96,7 +96,7 @@ describe("validateEndpointState", () => {
   it("requires feature name when creating a new feature", () => {
     const state: EndpointBuilderState = {
       path: "/users",
-      method: "GET",
+      method: "POST",
       name: "get_user",
       description: "Fetch",
       agentEnabled: true,
@@ -113,5 +113,64 @@ describe("validateEndpointState", () => {
 
     expect(result.errors).toContain("Feature name cannot be empty")
     expect(result.invalid.feature.name).toBe(true)
+  })
+
+  it("rejects bodies when method is GET", () => {
+    const state: EndpointBuilderState = {
+      path: "/users",
+      method: "GET",
+      name: "get_user",
+      description: "Fetch",
+      agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
+      pathParams: [],
+      headers: [],
+      queryParams: [],
+      bodyFields: [{ id: "b1", name: "payload", type: "object", required: false, description: "desc", children: [] }]
+    }
+
+    const result = validateEndpointState(state)
+
+    expect(result.errors).toContain("GET endpoints cannot include a body")
+  })
+
+  it("validates enum selections when enabled", () => {
+    const state: EndpointBuilderState = {
+      path: "/users/:id",
+      method: "POST",
+      name: "get_user",
+      description: "Fetch",
+      agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
+      pathParams: [{ name: "id", description: "User id", enumValues: [] }],
+      headers: [
+        { id: "header-1", name: "state", type: "string", required: false, description: "States", enumValues: ["open", "open"] }
+      ],
+      queryParams: [
+        { id: "query-1", name: "count", type: "number", required: false, description: "Count", enumValues: [Number.NaN] }
+      ],
+      bodyFields: [
+        { id: "body-1", name: "status", type: "string", required: true, description: "", enumValues: ["open"] }
+      ]
+    }
+
+    const result = validateEndpointState(state)
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        "id enum requires at least one value",
+        "state enum contains invalid or duplicate values",
+        "count enum contains invalid or duplicate values"
+      ])
+    )
+    expect(result.invalid.pathParams[0].enum).toBe(true)
+    expect(result.invalid.headers["header-1"].enum).toBe(true)
+    expect(result.invalid.queryParams["query-1"].enum).toBe(true)
+    expect(result.invalid.bodyFields["body-1"].description).toBe(true)
+    expect(result.invalid.bodyFields["body-1"].enum).toBeUndefined()
   })
 })

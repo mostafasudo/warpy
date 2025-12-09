@@ -6,7 +6,7 @@ import type { EndpointResponse } from "@/types"
 
 const baseState: EndpointBuilderState = {
   path: "/users/:id",
-  method: "GET",
+  method: "POST",
   name: "get_user",
   description: "Fetch user",
   agentEnabled: true,
@@ -79,6 +79,45 @@ describe("tool-schema", () => {
     expect(state.pathParams[0].fixed).toBe("42")
     expect(state.headers[0].fixed).toBe("token")
     expect(state.headers[0].description).toBe("")
+  })
+
+  it("preserves enum values across build and parse", () => {
+    const { feature: _feature, ...payload } = buildEndpointPayload({
+      ...baseState,
+      pathParams: [{ name: "id", description: "User id", enumValues: ["one", "two"] }],
+      headers: [
+        { id: "h1", name: "status", type: "string", required: false, description: "", enumValues: ["open", "closed"] }
+      ],
+      queryParams: [{ id: "q1", name: "limit", type: "number", required: false, description: "Limit", enumValues: [1, 2] }],
+      bodyFields: [
+        { id: "b1", name: "status", type: "string", required: true, description: "", enumValues: ["open", "closed"] },
+        { id: "b2", name: "score", type: "number", required: false, description: "", enumValues: [1, 2] }
+      ]
+    })
+
+    const parameters = payload.tool.function.parameters as any
+    expect(parameters.properties.params.properties.id.enum).toEqual(["one", "two"])
+    expect(parameters.properties.headers.properties.status.enum).toEqual(["open", "closed"])
+    expect(parameters.properties.query.properties.limit.enum).toEqual([1, 2])
+    expect(parameters.properties.body.properties.status.enum).toEqual(["open", "closed"])
+    expect(parameters.properties.body.properties.score.enum).toEqual([1, 2])
+
+    const state = mapEndpointToBuilderState({
+      id: "endpoint-enum",
+      ...payload,
+      feature: {
+        id: "feature-1",
+        name: "Feature",
+        enabledState: "enabled",
+        endpointCount: 1
+      }
+    })
+
+    expect(state.pathParams[0].enumValues).toEqual(["one", "two"])
+    expect(state.headers[0].enumValues).toEqual(["open", "closed"])
+    expect(state.queryParams[0].enumValues).toEqual([1, 2])
+    expect(state.bodyFields.find((f) => f.name === "status")?.enumValues).toEqual(["open", "closed"])
+    expect(state.bodyFields.find((f) => f.name === "score")?.enumValues).toEqual([1, 2])
   })
 
   it("normalizes paths and builds nested schemas", () => {
@@ -252,5 +291,11 @@ describe("tool-schema", () => {
     expect(state.featureId).toBe("feature-1")
     expect(state.featureName).toBe("Orders")
     expect(payload.feature).toEqual({ mode: "existing", id: "feature-1" })
+  })
+
+  it("omits body when method is GET", () => {
+    const payload = buildEndpointPayload({ ...baseState, method: "GET", bodyFields: complexBody })
+    const parameters = payload.tool.function.parameters as any
+    expect(parameters.properties.body).toBeUndefined()
   })
 })

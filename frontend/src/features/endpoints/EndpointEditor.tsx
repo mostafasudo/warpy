@@ -23,6 +23,7 @@ import {
   useEndpointBuilderStore
 } from "@/stores/endpoint-builder"
 import { type FeatureSummary, type HttpMethod } from "@/types"
+import { EnumValuesInput } from "./EnumValuesInput"
 import { BodyFieldRow } from "./BodyFieldRow"
 import { FlatFieldList } from "./FlatFieldList"
 import { endpointNamePattern } from "./constants"
@@ -59,6 +60,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
   const setFeatureName = useEndpointBuilderStore(endpointBuilderActions.setFeatureName)
   const setPathParamFixed = useEndpointBuilderStore(endpointBuilderActions.setPathParamFixed)
   const setPathParamDescription = useEndpointBuilderStore(endpointBuilderActions.setPathParamDescription)
+  const setPathParamEnumValues = useEndpointBuilderStore(endpointBuilderActions.setPathParamEnumValues)
   const addFlatField = useEndpointBuilderStore(endpointBuilderActions.addFlatField)
   const updateFlatField = useEndpointBuilderStore(endpointBuilderActions.updateFlatField)
   const removeFlatField = useEndpointBuilderStore(endpointBuilderActions.removeFlatField)
@@ -201,7 +203,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
               />
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">We will assign this endpoint to the best feature automatically.</p>
+            <p className="text-xs text-muted-foreground">We will auto-assign this endpoint or create a feature if nothing fits.</p>
           )}
         </div>
         <div className="grid gap-3 sm:grid-cols-[1.1fr_1fr_140px]">
@@ -285,6 +287,8 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
             <div className="space-y-2">
               {pathParams.map((param, index) => {
                 const fixedEnabled = param.fixed !== undefined
+                const enumEnabled = param.enumValues !== undefined
+                const showEnum = !fixedEnabled
                 const pathParamIssue = validation?.invalid.pathParams[index]
                 return (
                   <div
@@ -298,13 +302,36 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
                         </Badge>
                         <span className="text-xs text-muted-foreground">string</span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Switch
-                          checked={fixedEnabled}
-                          data-testid={`path-param-${param.name}-fixed-toggle`}
-                          onCheckedChange={(checked) => setPathParamFixed(param.name, checked ? "" : undefined)}
-                        />
-                        Fixed value
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <Switch
+                            checked={fixedEnabled}
+                            data-testid={`path-param-${param.name}-fixed-toggle`}
+                            onCheckedChange={(checked) => {
+                              setPathParamFixed(param.name, checked ? "" : undefined)
+                              if (checked) {
+                                setPathParamEnumValues(param.name, undefined)
+                              }
+                            }}
+                            aria-label="Fixed value"
+                          />
+                          Fixed value
+                        </span>
+                        {showEnum ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Switch
+                              checked={enumEnabled}
+                              onCheckedChange={(checked) => {
+                                setPathParamEnumValues(param.name, checked ? [] : undefined)
+                                if (checked) {
+                                  setPathParamFixed(param.name, undefined)
+                                }
+                              }}
+                              aria-label="Enum values"
+                            />
+                            Enum
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     {fixedEnabled ? (
@@ -329,6 +356,15 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
                         )}
                       />
                     )}
+                    {showEnum && enumEnabled ? (
+                      <EnumValuesInput
+                        values={param.enumValues ?? []}
+                        type="string"
+                        onChange={(values) => setPathParamEnumValues(param.name, values as string[])}
+                        inputTestId={`path-param-${param.name}-enum`}
+                        invalid={pathParamIssue?.enum}
+                      />
+                    ) : null}
                   </div>
                 )
               })}
@@ -355,37 +391,39 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
             invalidFields={validation?.invalid.queryParams}
           />
         </div>
-        <div className="rounded-xl border border-border/70 p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-medium">Body</p>
-            <ActionTooltip content="Add a top-level body field">
-              <Button ref={addBodyFieldRef} size="sm" variant="outline" onClick={() => addBodyField(null)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add field
-              </Button>
-            </ActionTooltip>
+        {method === "GET" ? null : (
+          <div className="rounded-xl border border-border/70 p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-medium">Body</p>
+              <ActionTooltip content="Add a top-level body field">
+                <Button ref={addBodyFieldRef} size="sm" variant="outline" onClick={() => addBodyField(null)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add field
+                </Button>
+              </ActionTooltip>
+            </div>
+            {bodyFields.length ? (
+              <ScrollArea className="h-[70vh] min-h-[320px] pr-2">
+                <div className="space-y-2">
+                  {bodyFields.map((field) => (
+                    <BodyFieldRow
+                      key={field.id}
+                      field={field}
+                      depth={0}
+                      invalid={validation?.invalid.bodyFields}
+                      onUpdate={updateBodyField}
+                      onAdd={addBodyField}
+                      onRemove={removeBodyField}
+                      focusRef={addBodyFieldRef}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            ) : (
+              <p className="text-xs text-muted-foreground">Add body fields.</p>
+            )}
           </div>
-          {bodyFields.length ? (
-            <ScrollArea className="h-[70vh] min-h-[320px] pr-2">
-              <div className="space-y-2">
-                {bodyFields.map((field) => (
-                  <BodyFieldRow
-                    key={field.id}
-                    field={field}
-                    depth={0}
-                    invalid={validation?.invalid.bodyFields}
-                    onUpdate={updateBodyField}
-                    onAdd={addBodyField}
-                    onRemove={removeBodyField}
-                    focusRef={addBodyFieldRef}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
-          ) : (
-            <p className="text-xs text-muted-foreground">Add body fields.</p>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )

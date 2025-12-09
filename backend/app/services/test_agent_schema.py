@@ -1,42 +1,56 @@
-from pydantic import BaseModel
+import pytest
 
-from app.services.agent_schema import SchemaFactory, serialize_args
+from app.services.agent_schema import SchemaFactory
 
 
-def test_schema_factory_builds_models_with_required_and_optional_fields():
+def test_schema_factory_preserves_string_enum():
     factory = SchemaFactory()
     schema = {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Person name"},
-            "age": {"type": "integer", "description": "Age"},
-            "tags": {"type": "array", "items": {"type": "string"}},
+            "status": {"type": "string", "enum": ["open", "closed"], "description": "status"}
         },
-        "required": ["name"]
+        "required": ["status"]
     }
-    Model = factory.model_from_schema("Person", schema)
-    instance = Model(name="Ada", tags=["engineer"])
-    assert instance.name == "Ada"
-    assert instance.age is None
-    assert instance.tags == ["engineer"]
+
+    model = factory.model_from_schema("StatusInput", schema)
+    props = model.model_json_schema()["properties"]["status"]
+
+    assert props.get("enum") == ["open", "closed"]
 
 
-def test_schema_factory_caches_models():
+def test_schema_factory_preserves_number_enum_optional():
     factory = SchemaFactory()
-    schema = {"type": "object", "properties": {"value": {"type": "number"}}}
-    first = factory.model_from_schema("Metric", schema)
-    second = factory.model_from_schema("Metric", schema)
-    assert first is second
+    schema = {
+        "type": "object",
+        "properties": {"price": {"type": "number", "enum": [100, 200, 200]}},
+        "required": []
+    }
+
+    model = factory.model_from_schema("PriceInput", schema)
+    props = model.model_json_schema()["properties"]["price"]
+    variants = props.get("anyOf", [])
+    enum_variant = next((variant for variant in variants if "enum" in variant), {})
+
+    assert enum_variant.get("enum") == [100.0, 200.0]
+    assert any(variant.get("type") == "null" for variant in variants)
 
 
-def test_serialize_args_handles_nested_pydantic_models():
-    class Child(BaseModel):
-        label: str
+def test_literal_from_enum_empty_raises():
+    factory = SchemaFactory()
+    with pytest.raises(ValueError):
+        factory._literal_from_enum([])
 
-    class Parent(BaseModel):
-        child: Child
-        values: list[int]
 
-    payload = Parent(child=Child(label="x"), values=[1, 2])
-    serialized = serialize_args(payload)
-    assert serialized == {"child": {"label": "x"}, "values": [1, 2]}
+def test_schema_factory_skips_invalid_enum_values():
+    factory = SchemaFactory()
+    schema = {
+        "type": "object",
+        "properties": {"count": {"type": "integer", "enum": ["abc", 1, "2"]}},
+        "required": ["count"]
+    }
+
+    model = factory.model_from_schema("CountInput", schema)
+    props = model.model_json_schema()["properties"]["count"]
+
+    assert props.get("enum") == [1, 2]

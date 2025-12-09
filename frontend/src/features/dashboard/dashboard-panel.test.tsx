@@ -47,6 +47,21 @@ describe("DashboardPanel", () => {
     expect(useNavigationStore.getState().section).toBe("features")
   })
 
+  it("uses singular endpoint when only one mapped", () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: {}, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: [{ id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }],
+      isPending: false
+    })
+
+    render(<DashboardPanel />)
+
+    expect(screen.getByText("1 endpoint mapped.")).not.toBeNull()
+  })
+
   it("renders loading skeletons when pending", () => {
     mockedUseConfigQuery.mockReturnValue({ data: null, isPending: true })
     mockedUseFeaturesQuery.mockReturnValue({ data: null, isPending: true })
