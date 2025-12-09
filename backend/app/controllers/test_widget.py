@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.llm_config import LLMConfig
 from app.main import create_app
 from app.schemas.auth import ClerkSession
 from app.services.agent_chain import StepResult
@@ -212,3 +213,115 @@ def test_widget_chat_accepts_tool_results(client: TestClient, monkeypatch: pytes
     assert response.json()["done"] is True
 
 
+def test_widget_transcribe_success(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    async def fake_transcribe(data, filename):
+        return "spoken text"
+
+    monkeypatch.setattr("app.controllers.widget.transcribe_audio", fake_transcribe)
+
+    response = client.post(
+        f"/widget/transcribe?agentId={agent_id}",
+        content=b"123",
+        headers={"Content-Type": "audio/webm", "x-audio-filename": "audio.webm"}
+    )
+    assert response.status_code == 200
+    assert response.json()["text"] == "spoken text"
+
+
+def test_widget_transcribe_agent_not_found(client: TestClient):
+    response = client.post(
+        f"/widget/transcribe?agentId={uuid4()}",
+        content=b"123",
+        headers={"Content-Type": "audio/webm"}
+    )
+    assert response.status_code == 404
+
+
+def test_widget_transcribe_empty_audio(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    response = client.post(
+        f"/widget/transcribe?agentId={agent_id}",
+        content=b"",
+        headers={"Content-Type": "audio/webm"}
+    )
+    assert response.status_code == 400
+
+
+def test_widget_transcribe_invalid_content_type(client: TestClient):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    response = client.post(
+        f"/widget/transcribe?agentId={agent_id}",
+        content=b"123",
+        headers={"Content-Type": "text/plain"}
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid content type"
+
+
+def test_widget_transcribe_sanitizes_filename(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    captured = {"name": None}
+
+    async def fake_transcribe(data, filename):
+        captured["name"] = filename
+        return "ok"
+
+    monkeypatch.setattr("app.controllers.widget.transcribe_audio", fake_transcribe)
+
+    response = client.post(
+        f"/widget/transcribe?agentId={agent_id}",
+        content=b"123",
+        headers={"Content-Type": "audio/webm", "x-audio-filename": "..\\path/voice.webm"}
+    )
+    assert response.status_code == 200
+    assert captured["name"] == "voice.webm"
+
+
+def test_widget_transcribe_rejects_large_audio(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    monkeypatch.setattr("app.controllers.widget.llm_config", LLMConfig(max_audio_bytes=2))
+
+    response = client.post(
+        f"/widget/transcribe?agentId={agent_id}",
+        content=b"1234",
+        headers={"Content-Type": "audio/webm"}
+    )
+    assert response.status_code == 413
+
+
+def test_widget_transcribe_stream_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    monkeypatch.setattr("app.controllers.widget.llm_config", LLMConfig(max_audio_bytes=4))
+
+    called = {"count": 0}
+
+    async def fake_transcribe(data, filename):
+        called["count"] += 1
+        return "ok"
+
+    monkeypatch.setattr("app.controllers.widget.transcribe_audio", fake_transcribe)
+
+    def stream():
+        yield b"aaa"
+        yield b"bbb"
+
+    response = client.post(
+        f"/widget/transcribe?agentId={agent_id}",
+        content=stream(),
+        headers={"Content-Type": "audio/webm"}
+    )
+    assert response.status_code == 413
+    assert called["count"] == 0

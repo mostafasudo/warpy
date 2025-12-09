@@ -3,12 +3,14 @@ import pickle
 from base64 import b64decode, b64encode
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from ..core.database import get_session
 from ..core.logger import log_error, log_info
+from ..core.llm_config import llm_config
 from ..schemas.widget import (
+    TranscriptionResponse,
     ToolResultPayload,
     WidgetChatRequest,
     WidgetChatResponse,
@@ -16,6 +18,7 @@ from ..schemas.widget import (
     WidgetMessagePayload,
 )
 from ..services.agent_chain import AgentExecutor
+from ..services.transcription_service import transcribe_audio
 from ..services.widget_service import (
     create_widget_conversation,
     get_agent_by_id,
@@ -151,3 +154,37 @@ async def widget_chat(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process chat")
 
 
+@router.post("/transcribe", response_model=TranscriptionResponse)
+async def widget_transcribe(
+    request: Request,
+    agent_id: UUID = Query(..., alias="agentId"),
+    session: Session = Depends(get_session)
+) -> TranscriptionResponse:
+    try:
+        agent = get_agent_by_id(session, agent_id)
+        if not agent:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        content_type = (request.headers.get("content-type") or "").lower()
+        if not content_type.startswith("audio/"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid content type")
+        max_bytes = llm_config.max_audio_bytes
+        content_length = request.headers.get("content-length")
+        if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Audio too large")
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Audio too large")
+        if not data:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty audio")
+        raw_filename = request.headers.get("x-audio-filename", "audio.webm")
+        filename = raw_filename.split("/")[-1].split("\\")[-1] or "audio.webm"
+        text = await transcribe_audio(bytes(data), filename)
+        log_info("WidgetController", "transcribe", "Transcription completed", agent_id=str(agent_id))
+        return TranscriptionResponse(text=text)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("WidgetController", "transcribe", "Failed to transcribe", exc=error)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to transcribe audio")

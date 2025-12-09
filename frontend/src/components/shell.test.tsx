@@ -60,7 +60,7 @@ describe("Shell", () => {
     expect(useNavigationStore.getState().sidebarCollapsed).toBe(true)
   })
 
-  it("shows mobile guard when viewport is small", () => {
+  it("shows mobile guard when viewport is small", async () => {
     const original = window.matchMedia
     window.matchMedia = ((query: string) => ({
       matches: query === "(max-width: 767px)",
@@ -73,7 +73,9 @@ describe("Shell", () => {
       dispatchEvent: () => true
     })) as unknown as typeof window.matchMedia
 
-    renderShell()
+    await act(async () => {
+      renderShell()
+    })
 
     expect(screen.getByTestId("mobile-guard")).not.toBeNull()
     window.matchMedia = original
@@ -105,7 +107,9 @@ describe("Shell", () => {
     await user.click(screen.getByRole("button", { name: "Features" }))
     expect(screen.getByTestId("endpoints-panel")).not.toBeNull()
 
-    listeners[0]?.({ matches: true })
+    await act(async () => {
+      listeners[0]?.({ matches: true })
+    })
     expect(useNavigationStore.getState().section).toBe("features")
     unmount()
     expect(removeListener).toHaveBeenCalled()

@@ -65,3 +65,6 @@ class WidgetChatResponse(BaseModel):
     tool_calls: list[ToolCallPayload] = Field(default=[], alias="toolCalls")
     done: bool = False
 
+
+class TranscriptionResponse(BaseModel):
+    text: str

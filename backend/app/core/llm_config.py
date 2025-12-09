@@ -6,6 +6,8 @@ class LLMConfig:
     chat_model: str = "gpt-4o"
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
+    whisper_model: str = "whisper-1"
+    max_audio_bytes: int = 5_242_880
     temperature: float = 0.7
     top_k_ratio: float = 0.3
     top_k_min: int = 2
@@ -20,4 +22,3 @@ class LLMConfig:
 
 
 llm_config = LLMConfig()
-

@@ -258,6 +258,11 @@
         width: 20px;
         height: 20px;
       }
+      .cta-widget-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .cta-widget-messages {
         flex: 1;
         overflow-y: auto;
@@ -345,7 +350,7 @@
       .cta-widget-input-area {
         padding: 16px 20px;
         border-top: 1px solid #e5e7eb;
-        background: #fafafa;
+        background: #ffffff;
       }
       .cta-widget-input-row {
         display: flex;
@@ -357,6 +362,8 @@
         padding: 12px 16px;
         border: 1px solid #e5e7eb;
         border-radius: 12px;
+        background: #ffffff;
+        color: #111827;
         font-size: 14px;
         resize: none;
         outline: none;
@@ -394,21 +401,167 @@
         height: 20px;
         color: white;
       }
-      .cta-widget-new-chat {
-        margin-top: 8px;
+      .cta-voice-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        position: relative;
+      }
+      .cta-mic-group {
+        display: flex;
+        align-items: center;
+        gap: 0;
+      }
+      .cta-widget-mic {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+        flex-shrink: 0;
+      }
+      .cta-widget-mic svg {
+        width: 18px;
+        height: 18px;
+        color: #374151;
+      }
+      .cta-widget-mic.paired {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .cta-widget-mic-select {
+        width: 36px;
+        height: 44px;
+        border: 1px solid #e5e7eb;
+        border-left: none;
+        border-radius: 0 12px 12px 0;
+        margin-left: -1px;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+        flex-shrink: 0;
+      }
+      .cta-widget-mic-select svg {
+        width: 14px;
+        height: 14px;
+        color: #374151;
+      }
+      .cta-widget-mic:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+      .cta-widget-mic-select:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+      .cta-widget-mic:hover:not(:disabled),
+      .cta-widget-mic-select:hover:not(:disabled) {
+        border-color: #3b82f6;
+      }
+      .cta-widget-mic.recording {
+        background: #fee2e2;
+        border-color: #ef4444;
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+        animation: cta-pulse 1.2s ease-in-out infinite;
+      }
+      .cta-widget-mic.recording svg {
+        color: #b91c1c;
+      }
+      .cta-mic-dot {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ef4444;
+        box-shadow: 0 0 0 2px #fff;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .cta-widget-mic.recording .cta-mic-dot {
+        opacity: 1;
+      }
+      .cta-widget-mic-menu {
+        position: absolute;
+        bottom: 44px;
+        right: 0;
+        min-width: 200px;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+        display: none;
+        overflow: hidden;
+        z-index: 2;
+      }
+      .cta-widget-mic-menu.open {
+        display: block;
+      }
+      .cta-widget-mic-menu button {
         width: 100%;
-        padding: 8px;
+        padding: 10px 12px;
+        text-align: left;
         background: none;
-        border: 1px dashed #e5e7eb;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;
+        color: #111827;
+      }
+      .cta-widget-mic-menu button:hover {
+        background: #f3f4f6;
+      }
+      .cta-widget-mic-menu button.active {
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
+      .cta-voice-hint,
+      .cta-voice-error {
+        margin-top: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        line-height: 1.4;
+        text-align: center;
         border-radius: 8px;
+        display: none;
+        justify-content: center;
+      }
+      .cta-voice-hint {
+        color: #4b5563;
+        background: #f9fafb;
+      }
+      .cta-voice-error {
+        color: #b91c1c;
+        background: #fef2f2;
+      }
+      @keyframes cta-pulse {
+        0% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12); }
+        50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.08); }
+        100% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12); }
+      }
+      .cta-widget-new-chat {
+        padding: 8px 10px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
         cursor: pointer;
         font-size: 12px;
-        color: #6b7280;
-        transition: border-color 0.15s, color 0.15s;
+        color: #374151;
+        transition: border-color 0.15s, color 0.15s, background 0.15s;
       }
       .cta-widget-new-chat:hover {
         border-color: #3b82f6;
-        color: #3b82f6;
+        color: #1d4ed8;
+        background: #eff6ff;
       }
     `;
     return style;
@@ -416,10 +569,22 @@
 
   function createWidget(config) {
     const apiUrl = API_URL;
-    const state = loadState() || { messages: [], conversationId: null };
+    const state = loadState() || { messages: [], conversationId: null, voice: {} };
+    if (!state.voice) state.voice = {};
     let headerConfig = {};
     let isLoading = false;
     let isOpen = false;
+    let isRecording = false;
+    let isTranscribing = false;
+    let mediaRecorder = null;
+    let mediaStream = null;
+    let recordedChunks = [];
+    let micDevices = [];
+    let micMenuOpen = false;
+    let micPermissionDenied = false;
+    let selectedMicId = state.voice.deviceId || null;
+    let recordingTimeout = null;
+    let micAccessRequested = false;
 
     const container = document.createElement("div");
     container.id = "cta-widget-container";
@@ -452,23 +617,46 @@
             <p class="cta-widget-subtitle">Ready for your command</p>
           </div>
         </div>
-        <button class="cta-widget-close" aria-label="Close chat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
-        </button>
+        <div class="cta-widget-header-actions">
+          <button class="cta-widget-new-chat">New chat</button>
+          <button class="cta-widget-close" aria-label="Close chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="cta-widget-messages"></div>
       <div class="cta-widget-input-area">
         <div class="cta-widget-input-row">
           <input type="text" class="cta-widget-input" placeholder="Type a command..." />
+          <div class="cta-voice-controls">
+            <div class="cta-mic-group">
+              <button class="cta-widget-mic" aria-label="Start voice input" title="Start voice input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 3a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/>
+                  <path d="M19 11a7 7 0 0 1-14 0"/>
+                  <path d="M12 18v3"/>
+                  <path d="M8 21h8"/>
+                </svg>
+                <span class="cta-mic-dot"></span>
+              </button>
+      <button class="cta-widget-mic-select" aria-label="Select microphone" title="Select microphone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 15l6-6 6 6"/>
+        </svg>
+      </button>
+            </div>
+            <div class="cta-widget-mic-menu"></div>
+          </div>
           <button class="cta-widget-send" aria-label="Send message">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
             </svg>
           </button>
         </div>
-        <button class="cta-widget-new-chat">Start new conversation</button>
+        <div class="cta-voice-hint" aria-live="polite"></div>
+        <div class="cta-voice-error" aria-live="assertive"></div>
       </div>
     `;
 
@@ -480,6 +668,11 @@
     const sendEl = panel.querySelector(".cta-widget-send");
     const closeEl = panel.querySelector(".cta-widget-close");
     const newChatEl = panel.querySelector(".cta-widget-new-chat");
+    const micEl = panel.querySelector(".cta-widget-mic");
+    const micSelectEl = panel.querySelector(".cta-widget-mic-select");
+    const micMenuEl = panel.querySelector(".cta-widget-mic-menu");
+    const voiceHintEl = panel.querySelector(".cta-voice-hint");
+    const voiceErrorEl = panel.querySelector(".cta-voice-error");
 
     function renderMessages() {
       if (state.messages.length === 0) {
@@ -526,7 +719,248 @@
       isLoading = loading;
       sendEl.disabled = loading;
       inputEl.disabled = loading;
+      updateMicState();
       renderMessages();
+    }
+
+    function persistVoiceState() {
+      state.voice = {
+        deviceId: selectedMicId
+      };
+      saveState(state);
+    }
+
+    function setVoiceHint(message) {
+      voiceHintEl.textContent = message || "";
+      voiceHintEl.style.display = message ? "flex" : "none";
+    }
+
+    function setVoiceError(message) {
+      voiceErrorEl.textContent = message || "";
+      voiceErrorEl.style.display = message ? "flex" : "none";
+    }
+
+    function updateMicState() {
+      const hasMic = micDevices.length > 0;
+      micEl.classList.toggle("recording", isRecording);
+      micEl.disabled = !hasMic || micPermissionDenied || isTranscribing || isLoading;
+      micEl.setAttribute("aria-pressed", isRecording ? "true" : "false");
+      micEl.title = micPermissionDenied
+        ? "Microphone access blocked"
+        : hasMic
+          ? isRecording
+            ? "Stop and insert transcription"
+            : "Start voice input"
+          : "No microphone detected";
+      const showSelector = micDevices.length > 1 && !micPermissionDenied;
+      micSelectEl.style.display = showSelector ? "flex" : "none";
+      micSelectEl.disabled = !showSelector || micPermissionDenied || isTranscribing || isLoading;
+      micSelectEl.title = micPermissionDenied
+        ? "Microphone access blocked"
+        : showSelector
+          ? "Select microphone"
+          : "No alternate microphone";
+      micEl.classList.toggle("paired", showSelector);
+      if (!hasMic && !micPermissionDenied) {
+        setVoiceError("No microphone detected");
+      } else if (!isRecording && !isTranscribing && !micPermissionDenied && micDevices.length) {
+        setVoiceError("");
+      }
+      if (isRecording) {
+        setVoiceHint("Listening… press Enter or tap the mic to finish.");
+      } else if (isTranscribing) {
+        setVoiceHint("Transcribing…");
+      } else {
+        setVoiceHint("");
+      }
+    }
+
+    function closeMicMenu() {
+      micMenuOpen = false;
+      micMenuEl.classList.remove("open");
+      document.removeEventListener("click", handleOutsideMenuClick);
+    }
+
+    function openMicMenu() {
+      if (micPermissionDenied || micDevices.length < 2 || micMenuOpen) return;
+      micMenuOpen = true;
+      micMenuEl.classList.add("open");
+      document.addEventListener("click", handleOutsideMenuClick);
+    }
+
+    function handleOutsideMenuClick(event) {
+      if (!micMenuOpen) return;
+      if (micMenuEl.contains(event.target) || micSelectEl.contains(event.target) || micEl.contains(event.target)) return;
+      closeMicMenu();
+    }
+
+    function renderMicMenu() {
+      if (micDevices.length < 2 || micPermissionDenied) {
+        micMenuEl.innerHTML = "";
+        closeMicMenu();
+        return;
+      }
+      micMenuEl.innerHTML = micDevices
+        .map((device, index) => {
+          const label = device.label || `Microphone ${index + 1}`;
+          const active = device.deviceId === selectedMicId ? "active" : "";
+          return `<button type="button" data-device-id="${device.deviceId}" class="${active}">${label}</button>`;
+        })
+        .join("");
+    }
+
+    async function refreshDevices(requestAccess = false) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        micDevices = [];
+        micPermissionDenied = true;
+        updateMicState();
+        return;
+      }
+      if (requestAccess) {
+        try {
+          const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+          probe.getTracks().forEach((track) => track.stop());
+          micPermissionDenied = false;
+        } catch (error) {
+          micPermissionDenied = error && error.name === "NotAllowedError";
+          setVoiceError(micPermissionDenied ? "Microphone access blocked. Enable it in your browser settings to use voice input." : "Microphone unavailable");
+        }
+      }
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices();
+        micDevices = all.filter((d) => d.kind === "audioinput");
+        if (!micDevices.find((d) => d.deviceId === selectedMicId)) {
+          selectedMicId = micDevices[0] ? micDevices[0].deviceId : null;
+        }
+        persistVoiceState();
+        renderMicMenu();
+        updateMicState();
+      } catch {
+        micDevices = [];
+        updateMicState();
+      }
+    }
+
+    function cleanupStream() {
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        recordingTimeout = null;
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        mediaStream = null;
+      }
+      mediaRecorder = null;
+    }
+
+    function stopRecording() {
+      if (!isRecording) return;
+      isRecording = false;
+      updateMicState();
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      } else {
+        handleRecordingStop();
+      }
+    }
+
+    async function handleRecordingStop() {
+      cleanupStream();
+      const blob = recordedChunks.length ? new Blob(recordedChunks, { type: recordedChunks[0].type || "audio/webm" }) : null;
+      recordedChunks = [];
+      if (!blob || blob.size === 0) {
+        setVoiceError("We couldn't transcribe your speech. Please try again or type your message.");
+        updateMicState();
+        return;
+      }
+      await transcribeRecording(blob);
+    }
+
+    async function transcribeRecording(blob) {
+      if (isTranscribing) return;
+      isTranscribing = true;
+      updateMicState();
+      setVoiceError("");
+      const query = new URLSearchParams({ agentId: config.agentId });
+      if (selectedMicId) {
+        query.set("deviceId", selectedMicId);
+      }
+      let attempt = 0;
+      while (attempt < 2) {
+        attempt += 1;
+        try {
+          const response = await fetchWithTimeout(`${apiUrl}/widget/transcribe?${query.toString()}`, {
+            method: "POST",
+            body: blob,
+            headers: {
+              "Content-Type": blob.type || "audio/webm",
+              "x-audio-filename": "audio.webm"
+            }
+          });
+          if (!response.ok) {
+            throw new Error("Transcription failed");
+          }
+          const data = await response.json();
+          const text = data && data.text ? String(data.text) : "";
+          if (!text.trim()) {
+            throw new Error("Empty transcription");
+          }
+          insertTranscription(text);
+          isTranscribing = false;
+          updateMicState();
+          return;
+        } catch (error) {
+          if (attempt >= 2) {
+            setVoiceError("We couldn't transcribe your speech. Please try again or type your message.");
+          }
+        }
+      }
+      isTranscribing = false;
+      updateMicState();
+    }
+
+    async function startRecording() {
+      if (isRecording || isTranscribing) return;
+      setVoiceError("");
+      if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setVoiceError("Microphone unavailable");
+        micPermissionDenied = true;
+        updateMicState();
+        return;
+      }
+      try {
+        const constraints = selectedMicId ? { audio: { deviceId: { exact: selectedMicId } } } : { audio: true };
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        micPermissionDenied = false;
+        await refreshDevices(false);
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(mediaStream);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+        mediaRecorder.onstop = handleRecordingStop;
+        mediaRecorder.start();
+        isRecording = true;
+        updateMicState();
+        recordingTimeout = setTimeout(() => stopRecording(), 45000);
+      } catch (error) {
+        micPermissionDenied = error && error.name === "NotAllowedError";
+        setVoiceError(micPermissionDenied ? "Microphone access blocked. Enable it in your browser settings to use voice input." : "Microphone unavailable");
+        updateMicState();
+      }
+    }
+
+    function insertTranscription(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      const current = inputEl.value;
+      const needsSpace = current && !current.endsWith(" ");
+      inputEl.value = needsSpace ? `${current} ${trimmed}` : `${current}${trimmed}`;
+      inputEl.focus();
+      inputEl.selectionStart = inputEl.value.length;
+      inputEl.selectionEnd = inputEl.value.length;
     }
 
     async function fetchConfig() {
@@ -624,19 +1058,53 @@
       if (isOpen) {
         inputEl.focus();
         renderMessages();
+      } else {
+        closeMicMenu();
+        stopRecording();
       }
     }
 
     function startNewChat() {
       state.messages = [];
       state.conversationId = null;
-      clearState();
+      saveState(state);
       renderMessages();
     }
 
     toggle.addEventListener("click", togglePanel);
     closeEl.addEventListener("click", togglePanel);
     newChatEl.addEventListener("click", startNewChat);
+    micEl.addEventListener("click", (event) => {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    });
+    micSelectEl.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (micSelectEl.disabled) return;
+      if (micMenuOpen) {
+        closeMicMenu();
+        return;
+      }
+      if (!micAccessRequested) {
+        micAccessRequested = true;
+        await refreshDevices(true);
+      } else {
+        await refreshDevices(false);
+      }
+      renderMicMenu();
+      openMicMenu();
+    });
+    micMenuEl.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-device-id]");
+      if (!button) return;
+      selectedMicId = button.getAttribute("data-device-id");
+      persistVoiceState();
+      renderMicMenu();
+      closeMicMenu();
+    });
 
     sendEl.addEventListener("click", () => {
       sendMessage(inputEl.value);
@@ -646,12 +1114,18 @@
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
+        if (isRecording) {
+          stopRecording();
+          return;
+        }
         sendMessage(inputEl.value);
         inputEl.value = "";
       }
     });
 
     fetchConfig();
+    refreshDevices(false);
+    updateMicState();
     renderMessages();
 
     return container;
