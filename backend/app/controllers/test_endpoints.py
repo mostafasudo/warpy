@@ -25,6 +25,7 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     engine = database.get_engine()
     Base.metadata.create_all(engine)
     try:
+        monkeypatch.setattr("app.services.endpoint_service.enqueue_endpoint_embedding", lambda *_args, **_kwargs: None)
         yield get_settings()
     finally:
         engine.dispose()

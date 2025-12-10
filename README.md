@@ -49,6 +49,13 @@ Run the API server:
 uvicorn app.main:app --reload
 ```
 
+Run the background worker (local Redis/Postgres):
+```sh
+cd backend
+. .venv/bin/activate
+rq worker default --url "${REDIS_URL:-redis://localhost:6379/0}"
+```
+
 Run tests:
 ```sh
 python3 -m pytest app/controllers/test_config.py app/controllers/test_endpoints.py -q

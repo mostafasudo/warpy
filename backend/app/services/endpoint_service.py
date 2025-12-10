@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..models import Endpoint, Feature, HttpMethod
 from ..schemas.endpoint import EndpointPayload
-from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
+from .embedding_service import delete_endpoint_embedding
+from ..workers.embedding_jobs import enqueue_endpoint_embedding
 from .feature_service import resolve_feature
 from .user_stats_service import adjust_endpoint_count, get_endpoint_count
 
@@ -111,7 +112,7 @@ def create_endpoint(session: Session, user_id: str, payload: EndpointPayload) ->
     session.flush()
     adjust_endpoint_count(session, user_id, 1)
     if endpoint.agent_enabled:
-        upsert_endpoint_embedding(session, endpoint.id, user_id)
+        enqueue_endpoint_embedding(endpoint.id, user_id)
     return endpoint
 
 
@@ -128,7 +129,7 @@ def update_endpoint(session: Session, endpoint_id: UUID, user_id: str, payload: 
     endpoint.updated_at = func.now()
     session.flush()
     if endpoint.agent_enabled:
-        upsert_endpoint_embedding(session, endpoint.id, user_id)
+        enqueue_endpoint_embedding(endpoint.id, user_id)
     elif previous_agent_enabled:
         delete_endpoint_embedding(session, endpoint.id)
     return endpoint

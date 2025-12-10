@@ -9,9 +9,10 @@ from ..core.logger import log_info
 from ..models import Endpoint, Feature
 from ..schemas.endpoint import EndpointPayload
 from ..schemas.feature import EndpointPagination, FeatureSelector
-from .embedding_service import delete_endpoint_embedding, upsert_endpoint_embedding
+from .embedding_service import delete_endpoint_embedding
 from .feature_classifier import classify_feature_name
 from .user_stats_service import adjust_endpoint_count
+from ..workers.embedding_jobs import enqueue_endpoint_embedding
 
 ENDPOINTS_PAGE_SIZE = 5
 
@@ -301,7 +302,7 @@ def set_feature_enabled(session: Session, feature_id: UUID, user_id: str, enable
         endpoint.updated_at = func.now()
         changes += 1
         if enabled:
-            upsert_endpoint_embedding(session, endpoint.id, user_id)
+            enqueue_endpoint_embedding(endpoint.id, user_id)
         else:
             delete_endpoint_embedding(session, endpoint.id)
     if changes:

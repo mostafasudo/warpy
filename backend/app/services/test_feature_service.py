@@ -56,7 +56,7 @@ def test_set_feature_enabled_updates_endpoints(configure_db, monkeypatch: pytest
     from app.core.database import session_scope
 
     calls: list[str] = []
-    monkeypatch.setattr(feature_service, "upsert_endpoint_embedding", lambda _s, _i, _u: calls.append("upsert"))
+    monkeypatch.setattr(feature_service, "enqueue_endpoint_embedding", lambda _i, _u: calls.append("enqueue"))
     monkeypatch.setattr(feature_service, "delete_endpoint_embedding", lambda _s, _i: calls.append("delete"))
 
     with session_scope() as session:
@@ -67,7 +67,7 @@ def test_set_feature_enabled_updates_endpoints(configure_db, monkeypatch: pytest
         updated = set_feature_enabled(session, feature.id, "user-1", True)
         assert len(updated.endpoints) > 0
         assert updated.endpoints[0].agent_enabled is True
-        assert calls == ["upsert"]
+        assert calls == ["enqueue"]
 
 
 def test_resolve_feature_auto_reuses_existing(configure_db, monkeypatch: pytest.MonkeyPatch):
