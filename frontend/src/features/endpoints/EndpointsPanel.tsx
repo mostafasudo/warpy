@@ -538,7 +538,7 @@ export const FeaturesPanel = () => {
       setFeatureId(featureId);
       setFeatureMode("existing");
     } else {
-      setFeatureMode("auto");
+      setFeatureMode(features.length ? "auto" : "new");
       setFeatureId(null);
       setFeatureName("");
     }

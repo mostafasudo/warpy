@@ -96,7 +96,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
 
   useEffect(() => {
     if (!features.length && featureMode === "existing") {
-      setFeatureMode("auto")
+      setFeatureMode("new")
       setFeatureId(null)
     }
   }, [features.length, featureMode, setFeatureMode, setFeatureId])

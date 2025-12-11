@@ -481,7 +481,7 @@ describe("FeaturesPanel", () => {
     expect(mutateUpdate).toHaveBeenCalled();
   });
 
-  it("defaults to auto classify when no features exist", async () => {
+  it("defaults to new feature when no features exist", async () => {
     mockedUseFeaturesQuery.mockReturnValue({
       data: [],
       isPending: false,
@@ -498,7 +498,7 @@ describe("FeaturesPanel", () => {
 
     await user.click(screen.getByTestId("new-endpoint"));
 
-    expect(setFeatureModeMock).toHaveBeenCalledWith("auto");
+    expect(setFeatureModeMock).toHaveBeenCalledWith("new");
   });
 
   it("deletes features and endpoints", async () => {

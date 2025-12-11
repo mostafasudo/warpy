@@ -234,7 +234,7 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
       featureId: mode === "existing" ? state.featureId : null,
       featureName: mode === "new" ? state.featureName : ""
     })),
-  setFeatureId: (id) => set({ featureId: id, featureName: "", featureMode: id === null ? "auto" : "existing" }),
+  setFeatureId: (id) => set((state) => ({ featureId: id, featureName: "", featureMode: id === null ? state.featureMode : "existing" })),
   setFeatureName: (name) =>
     set((state) => ({
       featureId: null,
