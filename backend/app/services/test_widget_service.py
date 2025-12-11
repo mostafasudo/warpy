@@ -9,9 +9,12 @@ from app.models import Agent, AuthType, SessionHeader, StorageSource
 from app.services.widget_service import (
     create_widget_conversation,
     get_agent_by_id,
+    get_pending_state,
+    get_tool_context,
     get_widget_config,
     get_widget_conversation,
     get_widget_messages,
+    save_tool_context,
     save_widget_message,
 )
 
@@ -153,5 +156,65 @@ def test_save_and_get_widget_messages(db_session: Session):
     assert messages[1].content == "hi there"
 
 
+def test_save_and_get_tool_context(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
 
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_tool_context(db_session, conversation.id, "serialized_context")
+
+    result = get_tool_context(db_session, conversation.id)
+    assert result == "serialized_context"
+
+
+def test_save_tool_context_updates_existing(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_tool_context(db_session, conversation.id, "first")
+    save_tool_context(db_session, conversation.id, "second")
+
+    result = get_tool_context(db_session, conversation.id)
+    assert result == "second"
+
+
+def test_get_tool_context_not_found(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    result = get_tool_context(db_session, conversation.id)
+    assert result is None
+
+
+def test_get_pending_state_returns_latest(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_widget_message(db_session, conversation.id, "user", "hello")
+    save_widget_message(db_session, conversation.id, "pending_state", "state_data")
+
+    result = get_pending_state(db_session, conversation.id)
+    assert result == "state_data"
+
+
+def test_get_pending_state_not_found(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    result = get_pending_state(db_session, conversation.id)
+    assert result is None
 

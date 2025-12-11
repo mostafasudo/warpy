@@ -58,4 +58,36 @@ def get_widget_messages(session: Session, conversation_id: UUID) -> list[Message
     ).all())
 
 
+def get_pending_state(session: Session, conversation_id: UUID) -> str | None:
+    msg = session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.role == "pending_state"
+        ).order_by(Message.created_at.desc())
+    )
+    return msg.content if msg else None
+
+
+def save_tool_context(session: Session, conversation_id: UUID, content: str) -> None:
+    existing = session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.role == "tool_context"
+        ).with_for_update()
+    )
+    if existing:
+        existing.content = content
+    else:
+        session.add(Message(conversation_id=conversation_id, role="tool_context", content=content))
+    session.flush()
+
+
+def get_tool_context(session: Session, conversation_id: UUID) -> str | None:
+    msg = session.scalar(
+        select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.role == "tool_context"
+        )
+    )
+    return msg.content if msg else None
 

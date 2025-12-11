@@ -13,6 +13,8 @@ class LLMConfig:
     top_k_min: int = 2
     top_k_max: int = 10
     max_iterations: int = 20
+    max_cached_tools: int = 24
+    tool_cache_ttl: int = 86400
 
     def calculate_top_k(self, total_endpoints: int) -> int:
         if total_endpoints <= 0:

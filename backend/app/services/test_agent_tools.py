@@ -5,7 +5,7 @@ import pytest
 
 from app.models import HttpMethod
 from app.services import agent_tools
-from app.services.agent_tools import create_endpoint_tool, create_get_endpoints_tool
+from app.services.agent_tools import create_endpoint_tool, create_find_actions_tool
 
 
 class DummyFeature:
@@ -91,7 +91,7 @@ def test_create_endpoint_tool_invokes_executor(monkeypatch: pytest.MonkeyPatch):
     assert captured["args"] == {"params": {"id": "9"}}
 
 
-def test_create_get_endpoints_tool_formats_results(monkeypatch: pytest.MonkeyPatch):
+def test_create_find_actions_tool_formats_results(monkeypatch: pytest.MonkeyPatch):
     endpoint = DummyEndpoint(
         "22222222-2222-2222-2222-222222222222",
         "/orders",
@@ -102,7 +102,7 @@ def test_create_get_endpoints_tool_formats_results(monkeypatch: pytest.MonkeyPat
     session = DummySession([endpoint])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [endpoint.id])
 
-    tool = create_get_endpoints_tool(session, "user_1")
+    tool = create_find_actions_tool(session, "user_1")
     response = json.loads(tool.invoke("order"))
     assert response[0]["id"] == str(endpoint.id)
     assert response[0]["name"] == "createOrder"
@@ -110,15 +110,15 @@ def test_create_get_endpoints_tool_formats_results(monkeypatch: pytest.MonkeyPat
     assert response[0]["feature"] == "Orders"
 
 
-def test_create_get_endpoints_tool_handles_empty(monkeypatch: pytest.MonkeyPatch):
+def test_create_find_actions_tool_handles_empty(monkeypatch: pytest.MonkeyPatch):
     session = DummySession([])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [])
-    tool = create_get_endpoints_tool(session, "user_1")
+    tool = create_find_actions_tool(session, "user_1")
     response = tool.invoke("none")
-    assert "No matching endpoints" in response
+    assert "No matching actions" in response
 
 
-def test_create_get_endpoints_tool_returns_empty_when_all_disabled(monkeypatch: pytest.MonkeyPatch):
+def test_create_find_actions_tool_returns_empty_when_all_disabled(monkeypatch: pytest.MonkeyPatch):
     disabled = DummyEndpoint(
         "99999999-9999-9999-9999-999999999999",
         "/disabled",
@@ -128,12 +128,12 @@ def test_create_get_endpoints_tool_returns_empty_when_all_disabled(monkeypatch: 
     )
     session = DummySession([disabled])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [disabled.id])
-    tool = create_get_endpoints_tool(session, "user_1")
+    tool = create_find_actions_tool(session, "user_1")
     response = tool.invoke("anything")
-    assert "No matching endpoints" in response
+    assert "No matching actions" in response
 
 
-def test_create_get_endpoints_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch):
+def test_create_find_actions_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch):
     enabled = DummyEndpoint(
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "/active",
@@ -151,7 +151,7 @@ def test_create_get_endpoints_tool_ignores_disabled(monkeypatch: pytest.MonkeyPa
     session = DummySession([enabled, disabled])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [enabled.id, disabled.id])
 
-    tool = create_get_endpoints_tool(session, "user_1")
+    tool = create_find_actions_tool(session, "user_1")
     response = json.loads(tool.invoke("anything"))
     assert len(response) == 1
     assert response[0]["id"] == str(enabled.id)

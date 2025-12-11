@@ -32,14 +32,14 @@ def build_tool(name: str, payload: str):
 def test_agent_executor_runs_with_tool_calls(monkeypatch):
     import asyncio
     responses = [
-        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "get_endpoints", "args": {"query": "test"}}]),
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_actions", "args": {"query": "test"}}]),
         AIMessage(content="done", tool_calls=[])
     ]
     llm = DummyLLM(responses)
 
     endpoint_id = UUID("33333333-3333-3333-3333-333333333333")
     tool_result = json.dumps([{"id": str(endpoint_id)}])
-    get_tool = build_tool("get_endpoints", tool_result)
+    get_tool = build_tool("find_actions", tool_result)
 
     endpoint_calls: list[list[UUID]] = []
 
@@ -47,7 +47,7 @@ def test_agent_executor_runs_with_tool_calls(monkeypatch):
         endpoint_calls.append(list(endpoint_ids))
         return []
 
-    monkeypatch.setattr("app.services.agent_chain.create_get_endpoints_tool", lambda *_args, **_kwargs: get_tool)
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: get_tool)
     monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", fake_get_endpoint_tools)
 
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
@@ -71,7 +71,7 @@ def test_agent_executor_handles_tool_error(monkeypatch):
         description="broken",
         args_schema=DummyArgs
     )
-    monkeypatch.setattr("app.services.agent_chain.create_get_endpoints_tool", lambda *_args, **_kwargs: broken_tool)
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: broken_tool)
     monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", []))
@@ -93,7 +93,7 @@ def test_agent_executor_parses_history_and_missing_tool(monkeypatch):
             self.calls += 1
             return AIMessage(content="", tool_calls=[{"id": f"call-{self.calls}", "name": "missing", "args": {}}])
     llm = LoopLLM()
-    monkeypatch.setattr("app.services.agent_chain.create_get_endpoints_tool", lambda *_args, **_kwargs: build_tool("get_endpoints", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
     monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", history))

@@ -13,15 +13,15 @@ from .agent_execution import execute_endpoint
 from .agent_schema import SchemaFactory, serialize_args
 
 
-class GetEndpointsInput(BaseModel):
-    query: str = Field(description="Natural language description of what API functionality you're looking for")
+class FindActionsInput(BaseModel):
+    query: str = Field(description="What the user wants to accomplish")
 
 
-def create_get_endpoints_tool(session: Session, user_id: str) -> StructuredTool:
-    def get_endpoints(query: str) -> str:
+def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
+    def find_actions(query: str) -> str:
         endpoint_ids = search_similar_endpoints(session, user_id, query)
         if not endpoint_ids:
-            return "No matching endpoints found. Try a different search query."
+            return "No matching actions found. Try describing the task differently."
         endpoints = session.scalars(
             select(Endpoint).where(
                 Endpoint.id.in_(endpoint_ids),
@@ -30,7 +30,7 @@ def create_get_endpoints_tool(session: Session, user_id: str) -> StructuredTool:
             ).options(selectinload(Endpoint.feature))
         ).all()
         if not endpoints:
-            return "No matching endpoints found. Try a different search query."
+            return "No matching actions found. Try describing the task differently."
         result = []
         for endpoint in endpoints:
             tool = endpoint.tool or {}
@@ -48,13 +48,13 @@ def create_get_endpoints_tool(session: Session, user_id: str) -> StructuredTool:
         return json.dumps(result, indent=2)
 
     return StructuredTool.from_function(
-        func=get_endpoints,
-        name="get_endpoints",
+        func=find_actions,
+        name="find_actions",
         description=(
-            "Search for relevant API endpoints based on what you want to accomplish. "
-            "Returns a list of matching endpoints with their IDs, methods, paths, and descriptions."
+            "Discover available actions based on what the user wants to do. "
+            "Returns a list of actions that can be executed to fulfill the request."
         ),
-        args_schema=GetEndpointsInput
+        args_schema=FindActionsInput
     )
 
 

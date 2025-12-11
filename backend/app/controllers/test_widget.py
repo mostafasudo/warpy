@@ -39,7 +39,7 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
 
 
 class FakeExecutor:
-    def __init__(self, session, user_id):
+    def __init__(self, session, user_id, conversation_id=None, redis_client=None):
         self.calls = []
         self.responses = []
 
@@ -57,6 +57,7 @@ class FakeExecutor:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutor)
+    monkeypatch.setattr("app.controllers.widget.get_redis_connection", lambda: None)
     app = create_app()
     with TestClient(app) as client:
         yield client
@@ -151,7 +152,7 @@ def test_widget_chat_returns_tool_calls(client: TestClient, monkeypatch: pytest.
     )
 
     class FakeExecutorWithTools:
-        def __init__(self, session, user_id):
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
@@ -179,7 +180,7 @@ def test_widget_chat_accepts_tool_results(client: TestClient, monkeypatch: pytes
     call_count = {"count": 0}
 
     class FakeExecutorWithToolResults:
-        def __init__(self, session, user_id):
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):

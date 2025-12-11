@@ -5,6 +5,7 @@ from uuid import UUID
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
+from redis import Redis
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,23 +15,28 @@ from ..core.logger import log_error, log_info
 from ..models import Endpoint
 from ..schemas.widget import ToolCallPayload, ToolResultPayload
 from .agent_schema import SchemaFactory, serialize_args
-from .agent_tools import create_get_endpoints_tool, get_endpoint_tools
+from .agent_tools import create_find_actions_tool, get_endpoint_tools
+from .tool_cache import ToolCache
 
-SYSTEM_PROMPT = """You are an intelligent API assistant that helps users interact with their APIs.
+SYSTEM_PROMPT = """You are a helpful dashboard assistant that can perform actions on behalf of the user.
 
-Your capabilities:
-1. Search for relevant API endpoints using the get_endpoints tool
-2. Execute API endpoints to fulfill user requests
-3. Handle multi-step workflows that require multiple API calls
+Your role:
+- You help users accomplish tasks by discovering and executing available actions
+- You communicate in a friendly, non-technical way
+- You stay strictly within the scope of dashboard actions
 
-When a user makes a request:
-1. First, analyze what they want to accomplish
-2. Use get_endpoints to find relevant API endpoints
-3. Once you have the endpoints, use the appropriate endpoint tools to make API calls
-4. If an API call fails or you need different endpoints, you can search again
-5. Compose a helpful response summarizing what was done
+When a user asks you to do something:
+1. Use the find_actions tool to discover what actions are available for their request
+2. Before executing any action, ensure you have gathered ALL required information from the user in a natural, conversational way
+3. Never guess or assume values for required fields - always ask the user
+4. Execute actions only when you have complete information matching the expected format
+5. Summarize what you accomplished in simple terms
 
-Always be helpful and explain what you're doing. If you encounter errors, explain them clearly."""
+Important guidelines:
+- Only execute actions that are available to you - do not invent capabilities
+- If an action requires specific values, ask for them clearly without using technical terminology
+- If something goes wrong, explain the issue in plain language and suggest next steps
+- You cannot perform actions outside of what has been configured for this dashboard"""
 
 
 @dataclass
@@ -47,11 +53,14 @@ class AgentExecutor:
         self,
         session: Session,
         user_id: str,
+        conversation_id: UUID | None = None,
+        redis_client: Redis | None = None,
         llm_client: Any | None = None,
         schema_factory: SchemaFactory | None = None
     ):
         self.session = session
         self.user_id = user_id
+        self.conversation_id = conversation_id
         self.schema_factory = schema_factory or SchemaFactory()
         settings = get_settings()
         self.llm = llm_client or ChatOpenAI(
@@ -60,6 +69,9 @@ class AgentExecutor:
             api_key=settings.openai_api_key
         )
         self.active_endpoint_ids: list[UUID] = []
+        self._tool_cache: ToolCache | None = None
+        if conversation_id:
+            self._tool_cache = ToolCache(redis_client, conversation_id)
 
     def _parse_endpoint_ids_from_response(self, content: str) -> list[UUID]:
         try:
@@ -70,8 +82,40 @@ class AgentExecutor:
             return []
         return []
 
+    def _get_valid_endpoint_ids(self) -> set[UUID]:
+        if not self.active_endpoint_ids:
+            return set()
+        endpoints = self.session.scalars(
+            select(Endpoint).where(
+                Endpoint.id.in_(self.active_endpoint_ids),
+                Endpoint.user_id == self.user_id,
+                Endpoint.agent_enabled.is_(True)
+            )
+        ).all()
+        return {e.id for e in endpoints}
+
+    def _sync_cache(self) -> None:
+        if not self._tool_cache:
+            return
+        self._tool_cache.load()
+        cached_ids = self._tool_cache.get_endpoint_ids()
+        for eid in cached_ids:
+            if eid not in self.active_endpoint_ids:
+                self.active_endpoint_ids.append(eid)
+        valid_ids = self._get_valid_endpoint_ids()
+        self._tool_cache.remove_invalid(valid_ids)
+        self.active_endpoint_ids = [eid for eid in self.active_endpoint_ids if eid in valid_ids]
+
+    def _update_cache_after_discovery(self, new_ids: list[UUID]) -> None:
+        if not self._tool_cache:
+            return
+        self._tool_cache.add_tools(new_ids)
+        self._tool_cache.update_used(new_ids)
+        self._tool_cache.enforce_cap(llm_config.max_cached_tools)
+        self._tool_cache.save()
+
     def _get_tools(self):
-        tools = [create_get_endpoints_tool(self.session, self.user_id)]
+        tools = [create_find_actions_tool(self.session, self.user_id)]
         tools.extend(get_endpoint_tools(self.session, self.user_id, self.active_endpoint_ids, self.schema_factory))
         return tools
 
@@ -112,8 +156,12 @@ class AgentExecutor:
         if active_endpoint_ids:
             self.active_endpoint_ids = list(active_endpoint_ids)
 
+        self._sync_cache()
+
         if pending_messages:
             messages = list(pending_messages)
+            if user_message:
+                messages.append(HumanMessage(content=user_message))
         else:
             messages = self._build_messages_from_history(user_message, conversation_history)
 
@@ -149,17 +197,21 @@ class AgentExecutor:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
                 
-                if tool_name == "get_endpoints":
-                    tool = next((t for t in tools if t.name == "get_endpoints"), None)
+                if tool_name == "find_actions":
+                    tool = next((t for t in tools if t.name == "find_actions"), None)
                     if tool:
                         try:
                             tool_result = tool.invoke(tool_args)
                             new_ids = self._parse_endpoint_ids_from_response(tool_result)
+                            added_ids: list[UUID] = []
                             for endpoint_id in new_ids:
                                 if endpoint_id not in self.active_endpoint_ids:
                                     self.active_endpoint_ids.append(endpoint_id)
+                                    added_ids.append(endpoint_id)
+                            if added_ids:
+                                self._update_cache_after_discovery(added_ids)
                         except Exception as error:
-                            log_error("AgentExecutor", "run_step", "get_endpoints failed", exc=error)
+                            log_error("AgentExecutor", "run_step", "find_actions failed", exc=error)
                             tool_result = f"Error: {str(error)}"
                     else:
                         tool_result = "Tool not found"
@@ -203,6 +255,8 @@ class AgentExecutor:
         )
 
     async def run(self, user_message: str, conversation_history: list[dict[str, str]]):
+        self._sync_cache()
+
         messages = [SystemMessage(content=SYSTEM_PROMPT)]
         for message in conversation_history:
             if message["role"] == "user":
@@ -233,11 +287,15 @@ class AgentExecutor:
                     except Exception as error:
                         log_error("AgentExecutor", "run", f"Tool execution failed: {tool_name}", exc=error)
                         tool_result = f"Error executing tool: {str(error)}"
-                if tool_name == "get_endpoints":
+                if tool_name == "find_actions":
                     new_ids = self._parse_endpoint_ids_from_response(tool_result)
+                    added_ids: list[UUID] = []
                     for endpoint_id in new_ids:
                         if endpoint_id not in self.active_endpoint_ids:
                             self.active_endpoint_ids.append(endpoint_id)
+                            added_ids.append(endpoint_id)
+                    if added_ids:
+                        self._update_cache_after_discovery(added_ids)
                 messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
         log_info("AgentExecutor", "run", "Max iterations reached")
         return "I've reached the maximum number of steps. Here's what I found so far based on our conversation."

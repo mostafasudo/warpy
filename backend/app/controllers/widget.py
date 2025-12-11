@@ -1,9 +1,8 @@
 import json
-import pickle
-from base64 import b64decode, b64encode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from langchain_core.messages import messages_from_dict, messages_to_dict
 from sqlalchemy.orm import Session
 
 from ..core.database import get_session
@@ -19,36 +18,49 @@ from ..schemas.widget import (
 )
 from ..services.agent_chain import AgentExecutor
 from ..services.transcription_service import transcribe_audio
+from ..workers.queue import get_redis_connection
 from ..services.widget_service import (
     create_widget_conversation,
     get_agent_by_id,
+    get_pending_state,
+    get_tool_context,
     get_widget_config,
     get_widget_conversation,
     get_widget_messages,
+    save_tool_context,
     save_widget_message,
 )
 
 router = APIRouter(prefix="/widget", tags=["widget"])
 
 
+def serialize_messages(messages: list) -> str:
+    return json.dumps(messages_to_dict(messages))
+
+
+def deserialize_messages(data: str) -> list:
+    try:
+        return messages_from_dict(json.loads(data))
+    except (json.JSONDecodeError, TypeError, KeyError) as exc:
+        log_error("WidgetController", "deserialize_messages", "Failed to deserialize", exc=exc)
+        return []
+
+
 def serialize_state(messages: list, active_endpoint_ids: list[UUID]) -> str:
-    data = {
-        "messages": pickle.dumps(messages),
+    return json.dumps({
+        "messages": messages_to_dict(messages),
         "endpoint_ids": [str(eid) for eid in active_endpoint_ids]
-    }
-    return b64encode(json.dumps({
-        "messages": b64encode(data["messages"]).decode(),
-        "endpoint_ids": data["endpoint_ids"]
-    }).encode()).decode()
+    })
 
 
 def deserialize_state(state: str) -> tuple[list, list[UUID]]:
     try:
-        data = json.loads(b64decode(state))
-        messages = pickle.loads(b64decode(data["messages"]))
+        data = json.loads(state)
+        messages = messages_from_dict(data["messages"])
         endpoint_ids = [UUID(eid) for eid in data["endpoint_ids"]]
         return messages, endpoint_ids
-    except Exception:
+    except (json.JSONDecodeError, TypeError, KeyError) as exc:
+        log_error("WidgetController", "deserialize_state", "Failed to deserialize", exc=exc)
         return [], []
 
 
@@ -89,7 +101,11 @@ async def widget_chat(
             conversation = create_widget_conversation(session, payload.agent_id)
 
         db_messages = get_widget_messages(session, conversation.id)
-        history = [{"role": m.role, "content": m.content} for m in db_messages]
+        history = [
+            {"role": m.role, "content": m.content}
+            for m in db_messages
+            if m.role in ("user", "assistant")
+        ]
 
         pending_messages = None
         active_endpoint_ids = None
@@ -100,11 +116,24 @@ async def widget_chat(
 
         if payload.tool_results:
             tool_results = payload.tool_results
-            last_msg = db_messages[-1] if db_messages else None
-            if last_msg and last_msg.role == "pending_state":
-                pending_messages, active_endpoint_ids = deserialize_state(last_msg.content)
+            pending_state = get_pending_state(session, conversation.id)
+            if pending_state:
+                pending_messages, active_endpoint_ids = deserialize_state(pending_state)
+        else:
+            tool_context_data = get_tool_context(session, conversation.id)
+            if tool_context_data:
+                pending_messages = deserialize_messages(tool_context_data)
 
-        executor = AgentExecutor(session, agent.user_id)
+        try:
+            redis_client = get_redis_connection()
+        except Exception:
+            redis_client = None
+        executor = AgentExecutor(
+            session,
+            agent.user_id,
+            conversation_id=conversation.id,
+            redis_client=redis_client
+        )
         result = await executor.run_step(
             user_message=payload.message,
             conversation_history=history,
@@ -118,6 +147,7 @@ async def widget_chat(
         if result.done and result.response:
             save_widget_message(session, conversation.id, "assistant", result.response)
             response_messages.append(WidgetMessagePayload(role="assistant", content=result.response))
+            save_tool_context(session, conversation.id, serialize_messages(result.messages))
             session.commit()
             log_info("WidgetController", "widget_chat", "Chat completed", conversation_id=str(conversation.id))
             return WidgetChatResponse(
@@ -139,6 +169,8 @@ async def widget_chat(
                 done=False
             )
 
+        if result.messages:
+            save_tool_context(session, conversation.id, serialize_messages(result.messages))
         session.commit()
         return WidgetChatResponse(
             conversationId=conversation.id,
