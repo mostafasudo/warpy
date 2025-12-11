@@ -57,3 +57,5 @@ def get_widget_messages(session: Session, conversation_id: UUID) -> list[Message
         .order_by(Message.created_at)
     ).all())
 
+
+

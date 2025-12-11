@@ -160,42 +160,10 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
               <SelectItem value="array:object">array of object</SelectItem>
             </SelectContent>
           </Select>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-2">
-            <Switch
-              checked={field.required}
-              onCheckedChange={(checked) => onUpdate(field.id, { required: checked })}
-              aria-label="Required"
-            />
-            Required
-          </span>
-          {field.type === "string" || field.type === "number" || field.type === "boolean" ? (
-            <span className="inline-flex items-center gap-2">
-              <Switch
-                checked={fixedEnabled}
-                onCheckedChange={(checked) =>
-                  onUpdate(field.id, { fixed: checked ? (field.type === "boolean" ? false : "") : undefined })
-                }
-                aria-label="Fixed value"
-              />
-              Fixed value
-            </span>
-          ) : null}
-          {showEnum ? (
-            <span className="inline-flex items-center gap-2">
-              <Switch
-                checked={enumEnabled}
-                onCheckedChange={(checked) => onUpdate(field.id, { enumValues: checked ? [] : undefined })}
-                aria-label="Enum values"
-              />
-              Enum
-            </span>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2 sm:ml-auto">
-          {canNest && (
-            <ActionTooltip content="Add a nested field">
-              <Button size="sm" variant="outline" onClick={() => onAdd(field.id, "string")}>
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            {canNest && (
+              <ActionTooltip content="Add a nested field">
+                <Button size="sm" variant="outline" onClick={() => onAdd(field.id, "string")}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add child
                 </Button>
@@ -238,6 +206,38 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
               </AlertDialogContent>
             </AlertDialog>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-2">
+            <Switch
+              checked={field.required}
+              onCheckedChange={(checked) => onUpdate(field.id, { required: checked })}
+              aria-label="Required"
+            />
+            Required
+          </span>
+          {field.type === "string" || field.type === "number" || field.type === "boolean" ? (
+            <span className="inline-flex items-center gap-2">
+              <Switch
+                checked={fixedEnabled}
+                onCheckedChange={(checked) =>
+                  onUpdate(field.id, { fixed: checked ? (field.type === "boolean" ? false : "") : undefined })
+                }
+                aria-label="Fixed value"
+              />
+              Fixed value
+            </span>
+          ) : null}
+          {showEnum ? (
+            <span className="inline-flex items-center gap-2">
+              <Switch
+                checked={enumEnabled}
+                onCheckedChange={(checked) => onUpdate(field.id, { enumValues: checked ? [] : undefined })}
+                aria-label="Enum values"
+              />
+              Enum
+            </span>
+          ) : null}
         </div>
         {showEnum && enumEnabled ? (
           <EnumValuesInput

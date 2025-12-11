@@ -17,3 +17,5 @@ export const useFeatureEndpointsQuery = (
     enabled,
     retry: 1,
   });
+
+
