@@ -16,7 +16,13 @@ from ..models import Endpoint
 from ..schemas.widget import ToolCallPayload, ToolResultPayload
 from .agent_schema import SchemaFactory, serialize_args
 from .agent_tools import create_find_actions_tool, get_endpoint_tools
+from .hallucination_checker import HallucinationChecker
 from .tool_cache import ToolCache
+
+MAX_CHECKER_ITERATIONS = 3
+BLOCKED_RESPONSE = "I can only help with dashboard actions. Please ask me to perform a specific action available in your dashboard."
+BLOCKED_SYSTEM_NOTE = "Your previous response was blocked because it did not align with your role as a dashboard assistant. Stay focused on discovering and executing dashboard actions only."
+MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
 
 SYSTEM_PROMPT = """You are a helpful dashboard assistant that can perform actions on behalf of the user.
 
@@ -56,7 +62,8 @@ class AgentExecutor:
         conversation_id: UUID | None = None,
         redis_client: Redis | None = None,
         llm_client: Any | None = None,
-        schema_factory: SchemaFactory | None = None
+        schema_factory: SchemaFactory | None = None,
+        hallucination_checker: HallucinationChecker | None = None
     ):
         self.session = session
         self.user_id = user_id
@@ -70,6 +77,7 @@ class AgentExecutor:
         )
         self.active_endpoint_ids: list[UUID] = []
         self._tool_cache: ToolCache | None = None
+        self._hallucination_checker = hallucination_checker or HallucinationChecker()
         if conversation_id:
             self._tool_cache = ToolCache(redis_client, conversation_id)
 
@@ -145,6 +153,61 @@ class AgentExecutor:
             messages.append(HumanMessage(content=user_message))
         return messages
 
+    async def _regenerate_response(
+        self,
+        messages: list[BaseMessage],
+        feedback: str
+    ) -> str:
+        adjusted_messages = list(messages)
+        adjusted_messages.append(HumanMessage(content=f"Please adjust your response: {feedback}"))
+        tools = self._get_tools()
+        llm_with_tools = self.llm.bind_tools(tools)
+        response = await llm_with_tools.ainvoke(adjusted_messages, config={"tags": ["main-agent"]})
+        return response.content or ""
+
+    async def _generate_blocked_response(self, user_input: str) -> str:
+        prompt = f"""User message: "{user_input}"
+
+Detect the language of the user message above. Then respond in THAT EXACT LANGUAGE (if the user wrote in English, respond in English; if French, respond in French; etc.).
+
+Your response: Politely tell the user you can only help with dashboard actions and ask them to request a specific action available in their dashboard. Keep it brief and friendly.
+
+IMPORTANT: Your response language MUST match the user's language exactly."""
+        response = await self.llm.ainvoke([HumanMessage(content=prompt)], config={"tags": ["blocked-response"]})
+        return response.content or BLOCKED_RESPONSE
+
+    async def _generate_max_iterations_response(self, user_input: str) -> str:
+        prompt = f"""User message: "{user_input}"
+
+Detect the language of the user message above. Then respond in THAT EXACT LANGUAGE (if the user wrote in English, respond in English; if French, respond in French; etc.).
+
+Your response: Apologize that you've reached the maximum number of steps and briefly summarize that you tried to help based on their conversation. Keep it brief and friendly.
+
+IMPORTANT: Your response language MUST match the user's language exactly."""
+        response = await self.llm.ainvoke([HumanMessage(content=prompt)], config={"tags": ["max-iterations-response"]})
+        return response.content or MAX_ITERATIONS_RESPONSE
+
+    async def _check_and_refine_response(
+        self,
+        user_input: str,
+        response: str,
+        messages: list[BaseMessage]
+    ) -> str:
+        for iteration in range(MAX_CHECKER_ITERATIONS):
+            result = await self._hallucination_checker.check(user_input, response, SYSTEM_PROMPT)
+            if result.mode == "ALLOW":
+                return response
+            if result.mode == "BLOCK":
+                log_info("AgentExecutor", "_check_and_refine_response", "Response blocked")
+                messages.append(SystemMessage(content=BLOCKED_SYSTEM_NOTE))
+                return await self._generate_blocked_response(user_input)
+            if result.mode == "ADJUST":
+                if not result.feedback:
+                    return response
+                log_info("AgentExecutor", "_check_and_refine_response", f"Adjusting response (iteration {iteration + 1})")
+                response = await self._regenerate_response(messages, result.feedback)
+        return response
+
     async def run_step(
         self,
         user_message: str | None,
@@ -180,19 +243,27 @@ class AgentExecutor:
             iteration += 1
             tools = self._get_tools()
             llm_with_tools = self.llm.bind_tools(tools)
-            response = await llm_with_tools.ainvoke(messages)
+            response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
             messages.append(response)
 
             if not response.tool_calls:
+                raw_response = response.content or ""
+                user_input = user_message or ""
+                if not user_input and conversation_history:
+                    for msg in reversed(conversation_history):
+                        if msg["role"] == "user":
+                            user_input = msg["content"]
+                            break
+                checked_response = await self._check_and_refine_response(user_input, raw_response, messages)
                 return StepResult(
-                    response=response.content or "",
+                    response=checked_response,
                     done=True,
                     messages=messages,
                     active_endpoint_ids=self.active_endpoint_ids
                 )
 
             endpoint_tool_calls: list[ToolCallPayload] = []
-            
+
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
@@ -247,8 +318,15 @@ class AgentExecutor:
                 )
 
         log_info("AgentExecutor", "run_step", "Max iterations reached")
+        user_input = user_message or ""
+        if not user_input and conversation_history:
+            for msg in reversed(conversation_history):
+                if msg["role"] == "user":
+                    user_input = msg["content"]
+                    break
+        max_iter_response = await self._generate_max_iterations_response(user_input)
         return StepResult(
-            response="I've reached the maximum number of steps. Here's what I found so far based on our conversation.",
+            response=max_iter_response,
             done=True,
             messages=messages,
             active_endpoint_ids=self.active_endpoint_ids
@@ -271,10 +349,11 @@ class AgentExecutor:
             iteration += 1
             tools = self._get_tools()
             llm_with_tools = self.llm.bind_tools(tools)
-            response = await llm_with_tools.ainvoke(messages)
+            response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
             messages.append(response)
             if not response.tool_calls:
-                return response.content or ""
+                raw_response = response.content or ""
+                return await self._check_and_refine_response(user_message, raw_response, messages)
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
@@ -298,4 +377,4 @@ class AgentExecutor:
                         self._update_cache_after_discovery(added_ids)
                 messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
         log_info("AgentExecutor", "run", "Max iterations reached")
-        return "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
+        return await self._generate_max_iterations_response(user_message)
