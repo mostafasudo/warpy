@@ -4,6 +4,16 @@
   const STORAGE_KEY = "cta_widget_state";
   const API_TIMEOUT = 30000;
   const API_URL = "http://localhost:8000";
+  const MARKED_SRC = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";
+  const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
+  const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
+  const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
   function getScriptData() {
     const scripts = document.querySelectorAll("script[data-agent-id]");
@@ -133,6 +143,77 @@
     } catch (error) {
       return { id: toolCall.id, statusCode: 0, body: null, error: error.message || "Request failed" };
     }
+  }
+
+  function loadExternalScript(src, integrity) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-cta-src="${src}"]`) || document.querySelector(`script[src="${src}"]`);
+      if (existing) {
+        if (existing.getAttribute("data-loaded") === "true") {
+          resolve();
+          return;
+        }
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Failed to load " + src)), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = src;
+      if (integrity) {
+        script.integrity = integrity;
+        script.crossOrigin = "anonymous";
+      }
+      script.async = true;
+      script.setAttribute("data-cta-src", src);
+      script.onload = () => {
+        script.setAttribute("data-loaded", "true");
+        resolve();
+      };
+      script.onerror = () => reject(new Error("Failed to load " + src));
+      document.head.appendChild(script);
+    });
+  }
+
+  function createMarkdownRenderer(onReady) {
+    let renderFn = null;
+    let initPromise = null;
+
+    function init() {
+      if (initPromise) return initPromise;
+      const markedLoader = window.marked ? Promise.resolve() : loadExternalScript(MARKED_SRC, MARKED_INTEGRITY);
+      const purifyLoader = window.DOMPurify ? Promise.resolve() : loadExternalScript(DOMPURIFY_SRC, DOMPURIFY_INTEGRITY);
+      initPromise = Promise.all([markedLoader, purifyLoader])
+        .then(() => {
+          const parse = typeof window.marked?.parse === "function" ? window.marked.parse : typeof window.marked === "function" ? window.marked : null;
+          const purifier = window.DOMPurify && typeof window.DOMPurify.sanitize === "function" ? window.DOMPurify : null;
+          if (parse && purifier) {
+            return (value) => purifier.sanitize(parse(value || "", { gfm: true, breaks: true, headerIds: false, mangle: false }));
+          }
+          return null;
+        })
+        .catch(() => null);
+
+      initPromise.then((fn) => {
+        if (fn) {
+          renderFn = fn;
+          if (typeof onReady === "function") {
+            onReady();
+          }
+        }
+      });
+
+      return initPromise;
+    }
+
+    init();
+
+    return function renderMarkdown(value) {
+      if (renderFn) {
+        return renderFn(value);
+      }
+      const safe = escapeHtml(value || "");
+      return safe.replace(/\n/g, "<br>");
+    };
   }
 
   function createStyles() {
@@ -342,6 +423,92 @@
         background: #f3f4f6;
         color: #111827;
         border-bottom-left-radius: 4px;
+      }
+      .cta-widget-message h1,
+      .cta-widget-message h2,
+      .cta-widget-message h3,
+      .cta-widget-message h4,
+      .cta-widget-message h5,
+      .cta-widget-message h6 {
+        margin: 0 0 8px;
+        line-height: 1.3;
+        font-weight: 700;
+      }
+      .cta-widget-message h1 { font-size: 18px; }
+      .cta-widget-message h2 { font-size: 17px; }
+      .cta-widget-message h3 { font-size: 16px; }
+      .cta-widget-message h4,
+      .cta-widget-message h5,
+      .cta-widget-message h6 { font-size: 15px; }
+      .cta-widget-message p,
+      .cta-widget-message ul,
+      .cta-widget-message ol,
+      .cta-widget-message pre,
+      .cta-widget-message table,
+      .cta-widget-message blockquote {
+        margin: 0 0 10px;
+      }
+      .cta-widget-message ul,
+      .cta-widget-message ol {
+        padding-left: 20px;
+      }
+      .cta-widget-message li {
+        margin-bottom: 6px;
+      }
+      .cta-widget-message blockquote {
+        padding-left: 12px;
+        border-left: 3px solid #e5e7eb;
+        color: #4b5563;
+      }
+      .cta-widget-message a {
+        color: inherit;
+        text-decoration: underline;
+        word-break: break-all;
+      }
+      .cta-widget-message.assistant a {
+        color: #1d4ed8;
+      }
+      .cta-widget-message code {
+        background: rgba(17, 24, 39, 0.06);
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      .cta-widget-message.user code {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .cta-widget-message pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 12px;
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      .cta-widget-message pre code {
+        background: transparent;
+        padding: 0;
+        color: inherit;
+      }
+      .cta-widget-message table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        display: block;
+        overflow-x: auto;
+      }
+      .cta-widget-message th,
+      .cta-widget-message td {
+        border: 1px solid #e5e7eb;
+        padding: 8px 10px;
+        text-align: left;
+      }
+      .cta-widget-message tr:nth-child(even) {
+        background: #f9fafb;
+      }
+      .cta-widget-message > :last-child {
+        margin-bottom: 0;
       }
       .cta-widget-loading {
         align-self: flex-start;
@@ -689,6 +856,7 @@
     const micMenuEl = panel.querySelector(".cta-widget-mic-menu");
     const voiceHintEl = panel.querySelector(".cta-voice-hint");
     const voiceErrorEl = panel.querySelector(".cta-voice-error");
+    const renderMarkdown = createMarkdownRenderer(() => renderMessages());
 
     function renderMessages() {
       if (state.messages.length === 0) {
@@ -707,28 +875,27 @@
         return;
       }
 
-      messagesEl.innerHTML = state.messages
-        .map(
-          (msg) =>
-            `<div class="cta-widget-message ${msg.role}">${escapeHtml(msg.content)}</div>`
-        )
-        .join("");
+      messagesEl.innerHTML = "";
+
+      state.messages.forEach((msg) => {
+        const bubble = document.createElement("div");
+        bubble.className = `cta-widget-message ${msg.role}`;
+        if (msg.role === "assistant") {
+          bubble.innerHTML = renderMarkdown(msg.content);
+        } else {
+          bubble.textContent = msg.content;
+        }
+        messagesEl.appendChild(bubble);
+      });
 
       if (isLoading) {
-        messagesEl.innerHTML += `
-          <div class="cta-widget-loading">
-            <span></span><span></span><span></span>
-          </div>
-        `;
+        const loading = document.createElement("div");
+        loading.className = "cta-widget-loading";
+        loading.innerHTML = "<span></span><span></span><span></span>";
+        messagesEl.appendChild(loading);
       }
 
       messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
     }
 
     function setLoading(loading) {
