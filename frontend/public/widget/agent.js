@@ -901,7 +901,6 @@
     function setLoading(loading) {
       isLoading = loading;
       sendEl.disabled = loading;
-      inputEl.disabled = loading;
       updateMicState();
       renderMessages();
     }
@@ -926,7 +925,7 @@
     function updateMicState() {
       const hasMic = micDevices.length > 0;
       micEl.classList.toggle("recording", isRecording);
-      micEl.disabled = !hasMic || micPermissionDenied || isTranscribing || isLoading;
+      micEl.disabled = !hasMic || micPermissionDenied || isTranscribing;
       micEl.setAttribute("aria-pressed", isRecording ? "true" : "false");
       micEl.title = micPermissionDenied
         ? "Microphone access blocked"
@@ -937,7 +936,7 @@
           : "No microphone detected";
       const showSelector = micDevices.length > 1 && !micPermissionDenied;
       micSelectEl.style.display = showSelector ? "flex" : "none";
-      micSelectEl.disabled = !showSelector || micPermissionDenied || isTranscribing || isLoading;
+      micSelectEl.disabled = !showSelector || micPermissionDenied || isTranscribing;
       micSelectEl.title = micPermissionDenied
         ? "Microphone access blocked"
         : showSelector
@@ -1301,6 +1300,7 @@
           stopRecording();
           return;
         }
+        if (isLoading) return;
         sendMessage(inputEl.value);
         inputEl.value = "";
       }
