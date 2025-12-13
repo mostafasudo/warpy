@@ -23,7 +23,6 @@ def test_check_returns_allow_for_valid_response():
         system_prompt="You are a dashboard assistant."
     ))
     assert result.mode == "ALLOW"
-    assert result.feedback is None
 
 
 def test_check_returns_block_for_out_of_scope():
@@ -36,20 +35,6 @@ def test_check_returns_block_for_out_of_scope():
         system_prompt="You are a dashboard assistant."
     ))
     assert result.mode == "BLOCK"
-    assert result.feedback is None
-
-
-def test_check_returns_adjust_with_feedback():
-    llm = make_mock_llm()
-    llm.ainvoke.return_value = AIMessage(content=json.dumps({"mode": "ADJUST", "feedback": "Response should focus on dashboard actions."}))
-    checker = HallucinationChecker(llm_client=llm)
-    result = asyncio.run(checker.check(
-        user_input="Help me",
-        agent_response="I can help with many things.",
-        system_prompt="You are a dashboard assistant."
-    ))
-    assert result.mode == "ADJUST"
-    assert result.feedback == "Response should focus on dashboard actions."
 
 
 def test_check_returns_allow_for_empty_response():
@@ -112,7 +97,19 @@ def test_check_defaults_to_allow_for_invalid_mode():
     assert result.mode == "ALLOW"
 
 
-def test_check_ignores_feedback_when_not_adjust():
+def test_check_defaults_to_allow_for_removed_adjust_mode():
+    llm = make_mock_llm()
+    llm.ainvoke.return_value = AIMessage(content=json.dumps({"mode": "ADJUST", "feedback": "ignored"}))
+    checker = HallucinationChecker(llm_client=llm)
+    result = asyncio.run(checker.check(
+        user_input="test",
+        agent_response="Some response",
+        system_prompt="You are a dashboard assistant."
+    ))
+    assert result.mode == "ALLOW"
+
+
+def test_check_ignores_extra_fields():
     llm = make_mock_llm()
     llm.ainvoke.return_value = AIMessage(content=json.dumps({"mode": "ALLOW", "feedback": "This should be ignored"}))
     checker = HallucinationChecker(llm_client=llm)
@@ -122,7 +119,6 @@ def test_check_ignores_feedback_when_not_adjust():
         system_prompt="You are a dashboard assistant."
     ))
     assert result.mode == "ALLOW"
-    assert result.feedback is None
 
 
 def test_check_sends_correct_payload():
@@ -173,12 +169,5 @@ def test_check_handles_empty_message_content():
 
 
 def test_check_result_dataclass():
-    result = CheckResult(mode="BLOCK", feedback="test feedback")
+    result = CheckResult(mode="BLOCK")
     assert result.mode == "BLOCK"
-    assert result.feedback == "test feedback"
-
-
-def test_check_result_default_feedback():
-    result = CheckResult(mode="ALLOW")
-    assert result.mode == "ALLOW"
-    assert result.feedback is None

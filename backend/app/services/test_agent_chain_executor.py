@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from app.services.agent_chain import AgentExecutor, BLOCKED_RESPONSE, BLOCKED_SYSTEM_NOTE, MAX_CHECKER_ITERATIONS
+from app.services.agent_chain import AgentExecutor, BLOCKED_SYSTEM_NOTE
 from app.services.hallucination_checker import CheckResult
 
 
@@ -182,39 +182,6 @@ def test_checker_allows_valid_response(monkeypatch):
     assert len(checker.calls) == 1
 
 
-def test_checker_adjust_triggers_regeneration(monkeypatch):
-    responses = [
-        AIMessage(content="I can help with many things.", tool_calls=[]),
-        AIMessage(content="I can help with dashboard actions.", tool_calls=[])
-    ]
-    llm = DummyLLM(responses)
-    checker = MockChecker([
-        CheckResult(mode="ADJUST", feedback="Focus on dashboard actions."),
-        CheckResult(mode="ALLOW")
-    ])
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
-    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
-    result = asyncio.run(executor.run("Help me", []))
-    assert result == "I can help with dashboard actions."
-    assert len(checker.calls) == 2
-
-
-def test_checker_max_iterations_enforced(monkeypatch):
-    responses = [AIMessage(content="initial", tool_calls=[])]
-    for i in range(MAX_CHECKER_ITERATIONS):
-        responses.append(AIMessage(content=f"adjusted-{i}", tool_calls=[]))
-    llm = DummyLLM(responses)
-    adjust_results = [CheckResult(mode="ADJUST", feedback="Fix it.") for _ in range(MAX_CHECKER_ITERATIONS)]
-    checker = MockChecker(adjust_results)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
-    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
-    result = asyncio.run(executor.run("test", []))
-    assert result == f"adjusted-{MAX_CHECKER_ITERATIONS - 1}"
-    assert len(checker.calls) == MAX_CHECKER_ITERATIONS
-
-
 def test_run_step_with_checker_block(monkeypatch):
     from langchain_core.messages import SystemMessage
     responses = [
@@ -244,14 +211,3 @@ def test_run_step_uses_history_for_user_input(monkeypatch):
     result = asyncio.run(executor.run_step(None, history))
     assert result.done is True
     assert checker.calls[0][0] == "previous message"
-
-
-def test_checker_adjust_without_feedback_returns_response(monkeypatch):
-    responses = [AIMessage(content="original", tool_calls=[])]
-    llm = DummyLLM(responses)
-    checker = MockChecker([CheckResult(mode="ADJUST", feedback=None)])
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
-    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
-    result = asyncio.run(executor.run("test", []))
-    assert result == "original"

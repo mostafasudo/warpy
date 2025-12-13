@@ -51,8 +51,9 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
         func=find_actions,
         name="find_actions",
         description=(
-            "Discover available actions based on what the user wants to do. "
-            "Returns a list of actions that can be executed to fulfill the request."
+            "Discover which actions/endpoints are available for a request. "
+            "Use this anytime you need more tools, can't find an endpoint to call, or aren't sure what to do next. "
+            "Returns a list of matching actions that you can execute."
         ),
         args_schema=FindActionsInput
     )

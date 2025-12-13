@@ -19,7 +19,6 @@ from .agent_tools import create_find_actions_tool, get_endpoint_tools
 from .hallucination_checker import HallucinationChecker
 from .tool_cache import ToolCache
 
-MAX_CHECKER_ITERATIONS = 3
 BLOCKED_RESPONSE = "I can only help with dashboard actions. Please ask me to perform a specific action available in your dashboard."
 BLOCKED_SYSTEM_NOTE = "Your previous response was blocked because it did not align with your role as a dashboard assistant. Stay focused on discovering and executing dashboard actions only."
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
@@ -153,18 +152,6 @@ class AgentExecutor:
             messages.append(HumanMessage(content=user_message))
         return messages
 
-    async def _regenerate_response(
-        self,
-        messages: list[BaseMessage],
-        feedback: str
-    ) -> str:
-        adjusted_messages = list(messages)
-        adjusted_messages.append(HumanMessage(content=f"Please adjust your response: {feedback}"))
-        tools = self._get_tools()
-        llm_with_tools = self.llm.bind_tools(tools)
-        response = await llm_with_tools.ainvoke(adjusted_messages, config={"tags": ["main-agent"]})
-        return response.content or ""
-
     async def _generate_blocked_response(self, user_input: str) -> str:
         prompt = f"""User message: "{user_input}"
 
@@ -270,25 +257,17 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                 entry["result_summary"] = summary
                 entry["result_preview"] = preview
 
-        for iteration in range(MAX_CHECKER_ITERATIONS):
-            result = await self._hallucination_checker.check(
-                user_input,
-                response,
-                SYSTEM_PROMPT,
-                available_tools=available_tools,
-                tool_trace=tool_trace
-            )
-            if result.mode == "ALLOW":
-                return response
-            if result.mode == "BLOCK":
-                log_info("AgentExecutor", "_check_and_refine_response", "Response blocked")
-                messages.append(SystemMessage(content=BLOCKED_SYSTEM_NOTE))
-                return await self._generate_blocked_response(user_input)
-            if result.mode == "ADJUST":
-                if not result.feedback:
-                    return response
-                log_info("AgentExecutor", "_check_and_refine_response", f"Adjusting response (iteration {iteration + 1})")
-                response = await self._regenerate_response(messages, result.feedback)
+        result = await self._hallucination_checker.check(
+            user_input,
+            response,
+            SYSTEM_PROMPT,
+            available_tools=available_tools,
+            tool_trace=tool_trace
+        )
+        if result.mode == "BLOCK":
+            log_info("AgentExecutor", "_check_and_refine_response", "Response blocked")
+            messages.append(SystemMessage(content=BLOCKED_SYSTEM_NOTE))
+            return await self._generate_blocked_response(user_input)
         return response
 
     async def run_step(
