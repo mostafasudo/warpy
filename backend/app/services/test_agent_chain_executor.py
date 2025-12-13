@@ -32,8 +32,8 @@ class MockChecker:
         self.results = results
         self.calls = []
 
-    async def check(self, user_input, agent_response, system_prompt):
-        self.calls.append((user_input, agent_response, system_prompt))
+    async def check(self, user_input, agent_response, system_prompt, available_tools=None, tool_trace=None):
+        self.calls.append((user_input, agent_response, system_prompt, available_tools, tool_trace))
         return self.results.pop(0)
 
 
@@ -117,6 +117,42 @@ def test_parse_endpoint_ids_handles_invalid_json():
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), hallucination_checker=checker)
     assert executor._parse_endpoint_ids_from_response("not-json") == []
     assert executor._parse_endpoint_ids_from_response("{}") == []
+
+
+def test_checker_receives_available_tools(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [build_tool("do_thing", "{}")])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    endpoint_id = UUID("33333333-3333-3333-3333-333333333333")
+    result = asyncio.run(executor.run_step("hello", [], active_endpoint_ids=[endpoint_id]))
+    assert result.response == "ok"
+    tools = checker.calls[0][3]
+    assert {t["name"] for t in tools} == {"find_actions", "do_thing"}
+    assert checker.calls[0][4] == []
+
+
+def test_checker_receives_tool_trace_from_executed_tools(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_actions", "args": {"query": "test"}}]),
+        AIMessage(content="done", tool_calls=[])
+    ]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[{\"id\":\"1\"}]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    result = asyncio.run(executor.run("hello", []))
+    assert result == "done"
+    tool_trace = checker.calls[0][4]
+    assert len(tool_trace) == 1
+    assert tool_trace[0]["id"] == "call-1"
+    assert tool_trace[0]["name"] == "find_actions"
+    assert tool_trace[0]["args"] == {"query": "test"}
+    assert tool_trace[0]["result_is_json"] is True
+    assert tool_trace[0]["result_summary"].startswith("list len=")
 
 
 def test_checker_blocks_out_of_scope_response(monkeypatch):

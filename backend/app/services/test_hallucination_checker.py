@@ -143,6 +143,8 @@ def test_check_sends_correct_payload():
     assert payload["system_prompt"] == "Dashboard assistant."
     assert payload["user_input"] == "Create user"
     assert payload["agent_response"] == "User created."
+    assert payload["available_tools"] == []
+    assert payload["tool_trace"] == []
 
 
 def test_check_uses_json_response_format():

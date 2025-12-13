@@ -193,8 +193,91 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
         response: str,
         messages: list[BaseMessage]
     ) -> str:
+        def truncate(value: str, limit: int) -> str:
+            if len(value) <= limit:
+                return value
+            return value[:limit] + "..."
+
+        def summarize_json(value: Any) -> str:
+            if isinstance(value, dict):
+                if "error" in value:
+                    return f"error: {truncate(str(value.get('error') or ''), 240)}"
+                if "status_code" in value:
+                    status = value.get("status_code")
+                    body = value.get("body")
+                    if isinstance(body, dict):
+                        keys = sorted(body.keys())
+                        keys_str = ", ".join(keys[:10])
+                        more = f" (+{len(keys) - 10} more)" if len(keys) > 10 else ""
+                        return f"status_code={status}, body_keys: {keys_str}{more}"
+                    if isinstance(body, list):
+                        return f"status_code={status}, body_list_len={len(body)}"
+                    if body is None:
+                        return f"status_code={status}"
+                    return f"status_code={status}, body: {truncate(str(body), 240)}"
+                keys = sorted(value.keys())
+                keys_str = ", ".join(keys[:10])
+                more = f" (+{len(keys) - 10} more)" if len(keys) > 10 else ""
+                return f"object keys: {keys_str}{more}"
+            if isinstance(value, list):
+                summary = f"list len={len(value)}"
+                if value and isinstance(value[0], dict):
+                    keys = sorted(value[0].keys())
+                    keys_str = ", ".join(keys[:10])
+                    more = f" (+{len(keys) - 10} more)" if len(keys) > 10 else ""
+                    summary += f", item_keys: {keys_str}{more}"
+                return summary
+            return f"{type(value).__name__}: {truncate(str(value), 240)}"
+
+        def summarize_tool_content(content: str) -> tuple[bool, str, str]:
+            raw = str(content or "")
+            compact = " ".join(raw.split())
+            preview = truncate(compact, 800)
+            try:
+                parsed = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return False, truncate(compact, 300), preview
+            return True, truncate(summarize_json(parsed), 300), preview
+
+        available_tools = [
+            {"name": str(tool.name), "description": str(getattr(tool, "description", "") or "")}
+            for tool in self._get_tools()
+            if getattr(tool, "name", None)
+        ]
+        tool_trace: list[dict[str, Any]] = []
+        tool_calls_by_id: dict[str, dict[str, Any]] = {}
+        for message in messages:
+            if isinstance(message, AIMessage):
+                for call in getattr(message, "tool_calls", []) or []:
+                    call_id = call.get("id")
+                    name = call.get("name")
+                    if not call_id or not name:
+                        continue
+                    entry = {"id": str(call_id), "name": str(name), "args": call.get("args")}
+                    tool_trace.append(entry)
+                    tool_calls_by_id[str(call_id)] = entry
+            if isinstance(message, ToolMessage):
+                call_id = getattr(message, "tool_call_id", None)
+                if not call_id:
+                    continue
+                entry = tool_calls_by_id.get(str(call_id))
+                if not entry:
+                    entry = {"id": str(call_id), "name": "", "args": None}
+                    tool_trace.append(entry)
+                    tool_calls_by_id[str(call_id)] = entry
+                is_json, summary, preview = summarize_tool_content(message.content or "")
+                entry["result_is_json"] = is_json
+                entry["result_summary"] = summary
+                entry["result_preview"] = preview
+
         for iteration in range(MAX_CHECKER_ITERATIONS):
-            result = await self._hallucination_checker.check(user_input, response, SYSTEM_PROMPT)
+            result = await self._hallucination_checker.check(
+                user_input,
+                response,
+                SYSTEM_PROMPT,
+                available_tools=available_tools,
+                tool_trace=tool_trace
+            )
             if result.mode == "ALLOW":
                 return response
             if result.mode == "BLOCK":
