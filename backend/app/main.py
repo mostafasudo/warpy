@@ -7,6 +7,7 @@ from .controllers.config import router as config_router
 from .controllers.features import router as features_router
 from .controllers.endpoints import router as endpoints_router
 from .controllers.health import router as health_router
+from .controllers.products import router as products_router
 from .controllers.session import router as session_router
 from .controllers.widget import router as widget_router
 from .core.config import get_settings
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(endpoints_router)
     app.include_router(agent_router)
     app.include_router(widget_router)
+    app.include_router(products_router)
 
     return app
 
