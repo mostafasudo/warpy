@@ -397,6 +397,8 @@ describe("AgentPanel", () => {
 
     const apiKeyTextarea = await screen.findByDisplayValue("wgt_key_1234")
     expect(apiKeyTextarea).toHaveClass("resize-none")
+    expect(apiKeyTextarea).toHaveClass("h-10")
+    expect(apiKeyTextarea).toHaveAttribute("rows", "1")
     expect(screen.queryByDisplayValue("••••••••••••9999")).toBeNull()
     expect(screen.queryByRole("button", { name: /rotate/i })).toBeNull()
     expect(screen.queryByRole("button", { name: /generate key/i })).toBeNull()

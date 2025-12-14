@@ -350,7 +350,7 @@ const AdvancedSecurityPanel = () => {
                     {copied === "apiKey" ? "Copied" : "Copy"}
                   </Button>
                 </div>
-                <Textarea className="mt-3 resize-none font-mono" readOnly value={newApiKey} />
+                <Textarea className="mt-3 h-10 resize-none font-mono" readOnly rows={1} value={newApiKey} />
               </div>
             ) : null}
             {newApiKey ? null : (
