@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach, jest } from "@jest/globals"
 
-import { apiClient, configureApiClient } from "@/api/client"
+import { apiClient, configureApiClient, getApiUrl } from "@/api/client"
 import type { EndpointPayload } from "@/types"
 import { jsonResponse, mockFetch, textResponse } from "@/test/http"
 
@@ -18,6 +18,10 @@ describe("apiClient", () => {
     mockFetch(jsonResponse({ status: "ready" }))
 
     await expect(apiClient.health()).resolves.toEqual({ status: "ready" })
+  })
+
+  it("exposes configured base URL", () => {
+    expect(getApiUrl()).toBe("http://api.test")
   })
 
   it("throws descriptive errors", async () => {
@@ -180,5 +184,66 @@ describe("apiClient", () => {
 
     await apiClient.deleteFeature("f2")
     expect(fetchSpy).toHaveBeenCalledWith(new URL("/features/f2", "http://api.test"), expect.objectContaining({ method: "DELETE" }))
+  })
+
+  it("supports widget security operations", async () => {
+    const responses = [
+      jsonResponse({
+        active: {
+          requireSignedWidgetToken: false,
+          widgetRefreshEndpointPath: "/widget-token",
+          hasApiKey: false,
+          apiKeyLast4: null
+        },
+        draft: null,
+        hasStagedChanges: false
+      }),
+      jsonResponse({
+        active: {
+          requireSignedWidgetToken: false,
+          widgetRefreshEndpointPath: "/widget-token",
+          hasApiKey: false,
+          apiKeyLast4: null
+        },
+        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null, apiKeyLast4: null },
+        hasStagedChanges: true
+      }),
+      jsonResponse({ apiKey: "wgt_key_1234", apiKeyLast4: "1234" }),
+      jsonResponse({
+        active: {
+          requireSignedWidgetToken: true,
+          widgetRefreshEndpointPath: "/widget-token",
+          hasApiKey: true,
+          apiKeyLast4: "1234"
+        },
+        draft: null,
+        hasStagedChanges: false
+      })
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getAgentWidgetSecurity()
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/agent/widget-security", "http://api.test"), expect.any(Object))
+
+    await apiClient.updateAgentWidgetSecurityDraft({ requireSignedWidgetToken: true })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/widget-security/draft", "http://api.test"),
+      expect.objectContaining({ method: "PATCH" })
+    )
+
+    await apiClient.createAgentWidgetApiKey()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/widget-security/api-key", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await apiClient.deployAgentWidgetSecurity()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/widget-security/deploy", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
   })
 })

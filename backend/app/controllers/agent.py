@@ -14,6 +14,9 @@ from ..schemas.agent import (
     ConversationResponse,
     ConversationWithMessagesResponse,
     MessageResponse,
+    WidgetApiKeyCreateResponse,
+    WidgetSecurityDraftUpdate,
+    WidgetSecurityResponse,
 )
 from ..schemas.auth import ClerkSession
 from ..services.agent_chain import AgentExecutor
@@ -25,6 +28,12 @@ from ..services.agent_service import (
     get_messages,
     list_conversations,
     save_message,
+)
+from ..services.agent_widget_security_service import (
+    create_widget_api_key_draft,
+    deploy_widget_security_draft,
+    get_widget_security_state,
+    update_widget_security_draft,
 )
 
 router = APIRouter()
@@ -160,3 +169,69 @@ async def chat_route(
         log_error("AgentController", "chat", "Failed to process chat", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process chat")
 
+
+@router.get("/agent/widget-security", response_model=WidgetSecurityResponse)
+async def get_widget_security_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> WidgetSecurityResponse:
+    try:
+        return get_widget_security_state(session, clerk_session.user_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "get_widget_security", "Failed to fetch widget security", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch widget security")
+
+
+@router.patch("/agent/widget-security/draft", response_model=WidgetSecurityResponse)
+async def update_widget_security_draft_route(
+    payload: WidgetSecurityDraftUpdate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> WidgetSecurityResponse:
+    try:
+        require_set = "require_signed_widget_token" in payload.model_fields_set
+        refresh_set = "widget_refresh_endpoint_path" in payload.model_fields_set
+        return update_widget_security_draft(
+            session,
+            clerk_session.user_id,
+            require_signed_widget_token=payload.require_signed_widget_token if require_set and payload.require_signed_widget_token is not None else None,
+            widget_refresh_endpoint_path=payload.widget_refresh_endpoint_path if refresh_set and payload.widget_refresh_endpoint_path is not None else None,
+            clear_require_signed_widget_token=require_set and payload.require_signed_widget_token is None,
+            clear_widget_refresh_endpoint_path=refresh_set and payload.widget_refresh_endpoint_path is None,
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "update_widget_security_draft", "Failed to update widget security draft", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update widget security draft")
+
+
+@router.post("/agent/widget-security/api-key", response_model=WidgetApiKeyCreateResponse)
+async def create_widget_api_key_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> WidgetApiKeyCreateResponse:
+    try:
+        _state, api_key, last4 = create_widget_api_key_draft(session, clerk_session.user_id)
+        return WidgetApiKeyCreateResponse(apiKey=api_key, apiKeyLast4=last4)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "create_widget_api_key", "Failed to create widget API key", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create widget API key")
+
+
+@router.post("/agent/widget-security/deploy", response_model=WidgetSecurityResponse)
+async def deploy_widget_security_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> WidgetSecurityResponse:
+    try:
+        return deploy_widget_security_draft(session, clerk_session.user_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "deploy_widget_security", "Failed to deploy widget security draft", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deploy widget security draft")

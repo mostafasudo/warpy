@@ -12,8 +12,8 @@ def get_agent_by_id(session: Session, agent_id: UUID) -> Agent | None:
     return session.scalar(select(Agent).where(Agent.id == agent_id))
 
 
-def get_widget_config(session: Session, user_id: str) -> WidgetConfigResponse:
-    headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == user_id)).all()
+def get_widget_config(session: Session, agent: Agent) -> WidgetConfigResponse:
+    headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == agent.user_id)).all()
     header_map = {}
     for header in headers:
         auth_type = header.auth_type
@@ -23,7 +23,11 @@ def get_widget_config(session: Session, user_id: str) -> WidgetConfigResponse:
         if auth_type:
             config_kwargs["auth_type"] = auth_type
         header_map[header.header_name] = SessionHeaderConfig(**config_kwargs)
-    return WidgetConfigResponse(headers=header_map)
+    return WidgetConfigResponse(
+        headers=header_map,
+        require_signed_widget_token=agent.widget_auth_enabled,
+        widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path,
+    )
 
 
 def create_widget_conversation(session: Session, agent_id: UUID, participant: str = "widget") -> Conversation:
@@ -90,4 +94,3 @@ def get_tool_context(session: Session, conversation_id: UUID) -> str | None:
         )
     )
     return msg.content if msg else None
-

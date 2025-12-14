@@ -752,9 +752,13 @@
 
   function createWidget(config) {
     const apiUrl = API_URL;
-    const state = loadState() || { messages: [], conversationId: null, voice: {} };
+    const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {} };
     if (!state.voice) state.voice = {};
+    if (!state.auth) state.auth = {};
     let headerConfig = {};
+    let widgetAuthToken = state.auth.token || null;
+    let widgetRefreshEndpointPath = "/widget-token";
+    let configPromise = null;
     let isLoading = false;
     let isOpen = false;
     let isRecording = false;
@@ -1067,18 +1071,31 @@
       if (selectedMicId) {
         query.set("deviceId", selectedMicId);
       }
+      await ensureConfigLoaded();
+      const makeRequest = () =>
+        fetchWithTimeout(`${apiUrl}/widget/transcribe?${query.toString()}`, {
+          method: "POST",
+          body: blob,
+          headers: {
+            "Content-Type": blob.type || "audio/webm",
+            "x-audio-filename": "audio.webm",
+            ...(widgetAuthToken ? { Authorization: `Bearer ${widgetAuthToken}` } : {}),
+          }
+        });
+
       let attempt = 0;
       while (attempt < 2) {
         attempt += 1;
         try {
-          const response = await fetchWithTimeout(`${apiUrl}/widget/transcribe?${query.toString()}`, {
-            method: "POST",
-            body: blob,
-            headers: {
-              "Content-Type": blob.type || "audio/webm",
-              "x-audio-filename": "audio.webm"
+          let response = await makeRequest();
+          if (response.status === 401) {
+            const errorBody = await response.json().catch(() => null);
+            const code = errorBody && errorBody.detail && errorBody.detail.code;
+            if (code === "WIDGET_AUTH_REQUIRED" || code === "WIDGET_AUTH_INVALID") {
+              await refreshWidgetToken();
+              continue;
             }
-          });
+          }
           if (!response.ok) {
             throw new Error("Transcription failed");
           }
@@ -1151,8 +1168,60 @@
         if (res.ok) {
           const data = await res.json();
           headerConfig = data.headers || {};
+          widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
         }
       } catch {}
+    }
+
+    function ensureConfigLoaded() {
+      if (!configPromise) {
+        configPromise = fetchConfig();
+      }
+      return configPromise;
+    }
+
+    async function refreshWidgetToken() {
+      if (!config.baseUrl) {
+        throw new Error("Missing baseUrl");
+      }
+      const url = new URL(widgetRefreshEndpointPath, config.baseUrl.endsWith("/") ? config.baseUrl : config.baseUrl + "/");
+      const sessionHeaders = buildHeaders(headerConfig);
+      const res = await fetchWithTimeout(url.toString(), { method: "POST", headers: sessionHeaders });
+      if (!res.ok) {
+        throw new Error("Token refresh failed");
+      }
+      const data = await res.json().catch(() => null);
+      const token = data && data.token;
+      if (!token || typeof token !== "string") {
+        throw new Error("Token refresh failed");
+      }
+      widgetAuthToken = token;
+      state.auth.token = token;
+      saveState(state);
+    }
+
+    async function postWidgetChat(body) {
+      await ensureConfigLoaded();
+      const makeRequest = () =>
+        fetchWithTimeout(`${apiUrl}/widget/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(widgetAuthToken ? { Authorization: `Bearer ${widgetAuthToken}` } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+
+      let response = await makeRequest();
+      if (response.status === 401) {
+        const errorBody = await response.json().catch(() => null);
+        const code = errorBody && errorBody.detail && errorBody.detail.code;
+        if (code === "WIDGET_AUTH_REQUIRED" || code === "WIDGET_AUTH_INVALID") {
+          await refreshWidgetToken();
+          response = await makeRequest();
+        }
+      }
+      return response;
     }
 
     async function sendMessage(text) {
@@ -1170,11 +1239,7 @@
           message: text.trim(),
         };
 
-        let response = await fetchWithTimeout(`${apiUrl}/widget/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        let response = await postWidgetChat(payload);
 
         if (!response.ok) {
           throw new Error("Chat request failed");
@@ -1196,14 +1261,10 @@
               data.toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig))
             );
 
-            response = await fetchWithTimeout(`${apiUrl}/widget/chat`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                agentId: config.agentId,
-                conversationId: state.conversationId,
-                toolResults,
-              }),
+            response = await postWidgetChat({
+              agentId: config.agentId,
+              conversationId: state.conversationId,
+              toolResults,
             });
 
             if (!response.ok) {
@@ -1306,7 +1367,7 @@
       }
     });
 
-    fetchConfig();
+    ensureConfigLoaded();
     refreshDevices(false);
     updateMicState();
     renderMessages();

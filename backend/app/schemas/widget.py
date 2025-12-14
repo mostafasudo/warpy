@@ -18,6 +18,8 @@ class WidgetConfigResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     headers: dict[str, SessionHeaderConfig] = {}
+    require_signed_widget_token: bool = Field(default=False, alias="requireSignedWidgetToken")
+    widget_refresh_endpoint_path: str = Field(default="/widget-token", alias="widgetRefreshEndpointPath")
 
 
 class ToolCallPayload(BaseModel):

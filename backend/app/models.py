@@ -2,7 +2,7 @@ import enum
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -150,6 +150,14 @@ class Agent(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Text, nullable=False, index=True)
+    widget_auth_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    widget_refresh_endpoint_path = Column(Text, nullable=False, server_default="/widget-token")
+    widget_api_key_hash = Column(Text, nullable=True, index=True, unique=True)
+    widget_api_key_last4 = Column(Text, nullable=True)
+    widget_auth_enabled_draft = Column(Boolean, nullable=True)
+    widget_refresh_endpoint_path_draft = Column(Text, nullable=True)
+    widget_api_key_hash_draft = Column(Text, nullable=True)
+    widget_api_key_last4_draft = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

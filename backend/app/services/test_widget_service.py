@@ -64,11 +64,21 @@ def test_get_agent_by_id_found(db_session: Session):
 
 
 def test_get_widget_config_empty(db_session: Session):
-    config = get_widget_config(db_session, "user_1")
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    config = get_widget_config(db_session, agent)
     assert config.headers == {}
+    assert config.require_signed_widget_token is False
+    assert config.widget_refresh_endpoint_path == "/widget-token"
 
 
 def test_get_widget_config_with_headers(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
     header = SessionHeader(
         user_id="user_1",
         header_name="Authorization",
@@ -78,7 +88,7 @@ def test_get_widget_config_with_headers(db_session: Session):
     db_session.add(header)
     db_session.flush()
 
-    config = get_widget_config(db_session, "user_1")
+    config = get_widget_config(db_session, agent)
     assert "Authorization" in config.headers
     assert config.headers["Authorization"].source == StorageSource.local_storage
     assert config.headers["Authorization"].key == "auth_token"
@@ -217,4 +227,3 @@ def test_get_pending_state_not_found(db_session: Session):
 
     result = get_pending_state(db_session, conversation.id)
     assert result is None
-

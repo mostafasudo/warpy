@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from langchain_core.messages import messages_from_dict, messages_to_dict
 from sqlalchemy.orm import Session
 
+from ..core.config import get_settings
 from ..core.database import get_session
 from ..core.logger import log_error, log_info
 from ..core.llm_config import llm_config
@@ -30,6 +31,7 @@ from ..services.widget_service import (
     save_tool_context,
     save_widget_message,
 )
+from ..services.widget_auth_service import WidgetJwtError, verify_widget_jwt
 
 router = APIRouter(prefix="/widget", tags=["widget"])
 
@@ -64,6 +66,30 @@ def deserialize_state(state: str) -> tuple[list, list[UUID]]:
         return [], []
 
 
+def require_widget_auth(request: Request, agent_id: UUID, enabled: bool) -> None:
+    if not enabled:
+        return
+    auth_header = request.headers.get("authorization") or ""
+    if not auth_header:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "WIDGET_AUTH_REQUIRED", "message": "Signed widget token required"}
+        )
+    scheme, _, credentials = auth_header.partition(" ")
+    if scheme.lower() != "bearer" or not credentials.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "WIDGET_AUTH_INVALID", "message": "Invalid authorization header"}
+        )
+    settings = get_settings()
+    if not settings.widget_jwt_secret:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Widget JWT secret missing")
+    try:
+        verify_widget_jwt(token=credentials.strip(), expected_agent_id=agent_id, secret=settings.widget_jwt_secret)
+    except WidgetJwtError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"code": exc.code, "message": exc.message})
+
+
 @router.get("/config/{agent_id}", response_model=WidgetConfigResponse)
 def get_widget_config_route(
     agent_id: UUID,
@@ -73,7 +99,7 @@ def get_widget_config_route(
         agent = get_agent_by_id(session, agent_id)
         if not agent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-        config = get_widget_config(session, agent.user_id)
+        config = get_widget_config(session, agent)
         log_info("WidgetController", "get_widget_config", "Config fetched", agent_id=str(agent_id))
         return config
     except HTTPException:
@@ -85,6 +111,7 @@ def get_widget_config_route(
 
 @router.post("/chat", response_model=WidgetChatResponse)
 async def widget_chat(
+    request: Request,
     payload: WidgetChatRequest,
     session: Session = Depends(get_session)
 ) -> WidgetChatResponse:
@@ -92,6 +119,7 @@ async def widget_chat(
         agent = get_agent_by_id(session, payload.agent_id)
         if not agent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        require_widget_auth(request, payload.agent_id, agent.widget_auth_enabled)
 
         if payload.conversation_id:
             conversation = get_widget_conversation(session, payload.conversation_id, payload.agent_id)
@@ -196,6 +224,7 @@ async def widget_transcribe(
         agent = get_agent_by_id(session, agent_id)
         if not agent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        require_widget_auth(request, agent_id, agent.widget_auth_enabled)
         content_type = (request.headers.get("content-type") or "").lower()
         if not content_type.startswith("audio/"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid content type")

@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = Field(default="chat-to-api")
+    environment: str = Field(default="local")
     debug: bool = Field(default=False)
     database_url: str = Field(
         default="postgresql+psycopg2://postgres:postgres@localhost:5432/chat_to_api"
@@ -18,6 +19,8 @@ class Settings(BaseSettings):
     langsmith_endpoint: str = Field(default="")
     langsmith_api_key: str = Field(default="")
     langsmith_project: str = Field(default="")
+    widget_jwt_secret: str = Field(default="")
+    test_widget_token_api_key: str = Field(default="")
 
 
 @lru_cache

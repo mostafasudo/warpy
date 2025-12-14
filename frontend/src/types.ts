@@ -100,3 +100,32 @@ export type AgentResponse = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type WidgetSecurityActive = {
+  requireSignedWidgetToken: boolean;
+  widgetRefreshEndpointPath: string;
+  hasApiKey: boolean;
+  apiKeyLast4: string | null;
+};
+
+export type WidgetSecurityDraft = {
+  requireSignedWidgetToken: boolean | null;
+  widgetRefreshEndpointPath: string | null;
+  apiKeyLast4: string | null;
+};
+
+export type WidgetSecurityResponse = {
+  active: WidgetSecurityActive;
+  draft: WidgetSecurityDraft | null;
+  hasStagedChanges: boolean;
+};
+
+export type WidgetSecurityDraftUpdate = {
+  requireSignedWidgetToken?: boolean | null;
+  widgetRefreshEndpointPath?: string | null;
+};
+
+export type WidgetApiKeyCreateResponse = {
+  apiKey: string;
+  apiKeyLast4: string;
+};

@@ -1,15 +1,26 @@
-import { useEffect, useState } from "react"
-import { Check, Copy, Info, Link2, Sparkles } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Check, Copy, Info, Link2, Sparkles, Terminal, RotateCw } from "lucide-react"
 import clsx from "clsx"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
+import { getApiUrl } from "@/api/client"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
+import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useCreateAgent } from "@/mutations/use-create-agent"
+import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
+import { toastSelectors, useToastStore } from "@/stores/toast"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
 
@@ -76,6 +87,7 @@ type ScriptDisplayProps = {
 
 const ScriptDisplay = ({ agentId, baseUrl }: ScriptDisplayProps) => {
   const [copied, setCopied] = useState(false)
+  const addToast = useToastStore(toastSelectors.addToast)
 
   const scriptSrc = getWidgetCdnUrl() || `${window.location.origin}/widget/agent.js`
   const scriptCode = `<script src="${scriptSrc}"
@@ -83,9 +95,13 @@ const ScriptDisplay = ({ agentId, baseUrl }: ScriptDisplayProps) => {
         data-base-url="${baseUrl}"></script>`
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(scriptCode)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(scriptCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      addToast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "error" })
+    }
   }
 
   return (
@@ -124,6 +140,316 @@ const ScriptDisplay = ({ agentId, baseUrl }: ScriptDisplayProps) => {
             </code>{" "}
             tag.
           </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const maskApiKey = (last4: string) => `••••••••••••${last4}`
+
+const getAgentServerBaseUrl = (): string => getApiUrl()
+
+const buildWidgetTokenPrompt = (widgetRefreshEndpointPath: string) => {
+  return `You are implementing a secure widget token refresh endpoint.
+
+Goal
+- Create a server-side endpoint at: POST ${widgetRefreshEndpointPath}
+
+Requirements
+
+- Store the Widget API Key in a server-side environment variable (never expose it to the browser).
+- call: POST ${getAgentServerBaseUrl()}/widget-token Authorization: Bearer <WIDGET_API_KEY>
+- Return the upstream JSON exactly as: { token: "<jwt>" }
+- The JWT is short-lived (~5 minutes). Do not cache.
+Notes
+
+- Keep this endpoint protected by your existing dashboard auth/session.
+- The widget will retry token refresh automatically on 401.`.trim()
+}
+
+const AdvancedSecurityPanel = () => {
+  const { data, isPending } = useAgentWidgetSecurityQuery()
+  const updateDraft = useUpdateAgentWidgetSecurityDraft()
+  const createApiKey = useCreateAgentWidgetApiKey()
+  const deployDraft = useDeployAgentWidgetSecurity()
+  const addToast = useToastStore(toastSelectors.addToast)
+
+  const active = data?.active
+  const draft = data?.draft
+  const hasStagedChanges = data?.hasStagedChanges ?? false
+
+  const effectiveRequireSignedWidgetToken =
+    draft?.requireSignedWidgetToken ?? active?.requireSignedWidgetToken ?? false
+  const effectiveWidgetRefreshEndpointPath =
+    draft?.widgetRefreshEndpointPath ?? active?.widgetRefreshEndpointPath ?? "/widget-token"
+  const effectiveApiKeyLast4 = draft?.apiKeyLast4 ?? active?.apiKeyLast4
+
+  const showApiKeyStaged = Boolean(draft?.apiKeyLast4)
+  const showRefreshEndpointStaged = Boolean(draft?.widgetRefreshEndpointPath)
+
+  const [widgetRefreshEndpointDraft, setWidgetRefreshEndpointDraft] = useState<string>(
+    effectiveWidgetRefreshEndpointPath
+  )
+  const [newApiKey, setNewApiKey] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  useEffect(() => {
+    setWidgetRefreshEndpointDraft(effectiveWidgetRefreshEndpointPath)
+  }, [effectiveWidgetRefreshEndpointPath])
+
+  const maskedApiKey = useMemo(() => {
+    if (!effectiveApiKeyLast4) return null
+    return maskApiKey(effectiveApiKeyLast4)
+  }, [effectiveApiKeyLast4])
+
+  const handleCopy = async (value: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(key)
+      setTimeout(() => setCopied(null), 1800)
+    } catch {
+      addToast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "error" })
+    }
+  }
+
+  const handleToggle = async (checked: boolean) => {
+    try {
+      await updateDraft.mutateAsync({ requireSignedWidgetToken: checked })
+      addToast({
+        title: "Staged change",
+        description: "Signed widget token setting updated.",
+        variant: "success"
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update setting"
+      addToast({ title: "Update failed", description: message, variant: "error" })
+    }
+  }
+
+  const submitRefreshEndpoint = async () => {
+    const trimmed = widgetRefreshEndpointDraft.trim()
+    if (!trimmed.startsWith("/") || trimmed.includes("://")) {
+      addToast({
+        title: "Invalid endpoint",
+        description: "Refresh endpoint must be a path starting with '/'.",
+        variant: "error"
+      })
+      setWidgetRefreshEndpointDraft(effectiveWidgetRefreshEndpointPath)
+      return
+    }
+    if (trimmed === effectiveWidgetRefreshEndpointPath) return
+    try {
+      await updateDraft.mutateAsync({ widgetRefreshEndpointPath: trimmed })
+      addToast({
+        title: "Staged change",
+        description: "Widget refresh endpoint updated.",
+        variant: "success"
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update endpoint"
+      addToast({ title: "Update failed", description: message, variant: "error" })
+      setWidgetRefreshEndpointDraft(effectiveWidgetRefreshEndpointPath)
+    }
+  }
+
+  const handleGenerateOrRotate = async () => {
+    try {
+      const created = await createApiKey.mutateAsync()
+      setNewApiKey(created.apiKey)
+      addToast({
+        title: "API key generated",
+        description: "Copy it now. This key is shown only once.",
+        variant: "success"
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not generate API key"
+      addToast({ title: "Generate failed", description: message, variant: "error" })
+    }
+  }
+
+  const handleDeploy = async () => {
+    try {
+      await deployDraft.mutateAsync()
+      setNewApiKey(null)
+      addToast({ title: "Deployed", description: "Advanced Security changes deployed.", variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not deploy changes"
+      addToast({ title: "Deploy failed", description: message, variant: "error" })
+    }
+  }
+
+  if (isPending) {
+    return (
+      <div className="mt-6 rounded-xl border border-border bg-card/70 p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <div className="mt-6 space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
+      <div className="p-6">
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">Advanced Security</h3>
+                <p className="text-sm text-muted-foreground">Optional Widget JWT Auth</p>
+              </div>
+              {hasStagedChanges ? (
+                <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                  Staged
+                </Badge>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-muted-foreground">Require signed widget token</span>
+              <Switch
+                checked={effectiveRequireSignedWidgetToken}
+                onCheckedChange={handleToggle}
+                disabled={updateDraft.isPending}
+              />
+            </div>
+          </div>
+
+          <div className="h-px bg-border" />
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-semibold">Widget API Key</Label>
+              {showApiKeyStaged ? (
+                <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                  Staged
+                </Badge>
+              ) : null}
+            </div>
+            {newApiKey ? (
+              <div className="rounded-lg border border-border bg-muted/20 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Copy your API key</p>
+                    <p className="text-sm text-muted-foreground">This key is shown only once.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleCopy(newApiKey, "apiKey")}
+                    disabled={!newApiKey}
+                  >
+                    {copied === "apiKey" ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <Textarea className="mt-3 resize-none font-mono" readOnly value={newApiKey} />
+              </div>
+            ) : null}
+            {newApiKey ? null : (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex-1">
+                  <Input
+                    readOnly
+                    disabled={!maskedApiKey}
+                    value={maskedApiKey ?? ""}
+                    placeholder="No API key generated"
+                    className="font-mono"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleGenerateOrRotate}
+                  disabled={createApiKey.isPending}
+                >
+                  {maskedApiKey ? <RotateCw className="h-4 w-4" /> : <span className="font-semibold">+</span>}
+                  {maskedApiKey ? "Rotate" : "Generate Key"}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-semibold">Widget Refresh Endpoint</Label>
+              {showRefreshEndpointStaged ? (
+                <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                  Staged
+                </Badge>
+              ) : null}
+            </div>
+            <div className="flex overflow-hidden rounded-lg border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
+              <span className="flex items-center border-r border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
+                POST
+              </span>
+              <Input
+                value={widgetRefreshEndpointDraft}
+                onChange={(event) => setWidgetRefreshEndpointDraft(event.target.value)}
+                onBlur={submitRefreshEndpoint}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault()
+                    submitRefreshEndpoint()
+                  }
+                }}
+                className="h-10 border-0 bg-transparent font-mono focus-visible:ring-0"
+                aria-label="Widget refresh endpoint path"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <h4 className="mb-2 text-sm font-semibold">Setup</h4>
+            <ol className="ml-4 list-decimal space-y-2 text-sm text-muted-foreground">
+              <li>Store our API key server-side (as an environment variable).</li>
+              <li>
+                Implement{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                  POST {effectiveWidgetRefreshEndpointPath}
+                </code>
+                .
+              </li>
+              <li>
+                This endpoint should call{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                  POST {getAgentServerBaseUrl()}/widget-token
+                </code>{" "}
+                and return{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                  {`{ token: "<jwt>" }`}
+                </code>
+                .
+              </li>
+            </ol>
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => handleCopy(buildWidgetTokenPrompt(effectiveWidgetRefreshEndpointPath), "prompt")}
+              >
+                <Terminal className="h-4 w-4" />
+                {copied === "prompt" ? "Copied" : "Copy prompt for coding agent"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex justify-end border-t border-border pt-4">
+            <Button
+              onClick={handleDeploy}
+              disabled={!hasStagedChanges || deployDraft.isPending}
+              className={clsx("w-full sm:w-auto", "justify-center")}
+            >
+              Deploy Changes
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -187,7 +513,12 @@ export const AgentPanel = () => {
         selected={selectedEnv}
         onSelect={setSelectedEnv}
       />
-      {agent && <ScriptDisplay agentId={agent.id} baseUrl={currentBaseUrl} />}
+      {agent ? (
+        <>
+          <ScriptDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
+          <AdvancedSecurityPanel />
+        </>
+      ) : null}
     </PanelShell>
   )
 }

@@ -88,3 +88,15 @@ Services:
 - Backend (compose): http://localhost:8000
 - Postgres (port exposed by compose): localhost:5434
 - Redis (port exposed by compose): localhost:6380
+
+## Optional Widget JWT Auth (Advanced Security)
+If you enable **Require signed widget token** on the Agent page, the widget will require a short‑lived JWT for `/widget/chat` (and will refresh it via the configured refresh endpoint path).
+
+Required backend env:
+- `WIDGET_JWT_SECRET` (signing secret for widget JWTs)
+
+Local testing helper (no customer endpoint needed):
+- Set `TEST_WIDGET_TOKEN_API_KEY` to your generated **Widget API Key**
+- In **Advanced Security → Widget Refresh Endpoint**, set the path to `/test-widget-token` and **Deploy Changes**
+
+`POST /test-widget-token` is for testing only (disabled when `ENVIRONMENT=production`); it proxies `POST /widget-token` using `TEST_WIDGET_TOKEN_API_KEY`.

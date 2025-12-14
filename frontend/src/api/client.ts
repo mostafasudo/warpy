@@ -8,6 +8,9 @@ import type {
   FeatureTogglePayload,
   FeatureWithEndpoints,
   PaginatedEndpoints,
+  WidgetApiKeyCreateResponse,
+  WidgetSecurityDraftUpdate,
+  WidgetSecurityResponse,
 } from "@/types";
 
 type RequestOptions = Omit<RequestInit, "signal"> & {
@@ -24,6 +27,8 @@ export const configureApiClient = (config: {
   apiUrl = config.apiUrl;
   defaultTimeoutMs = config.apiTimeoutMs;
 };
+
+export const getApiUrl = (): string => apiUrl;
 
 const getSessionToken = async (): Promise<string | null> => {
   const clerk = (
@@ -101,6 +106,9 @@ export type {
   FeatureTogglePayload,
   FeatureWithEndpoints,
   PaginatedEndpoints,
+  WidgetApiKeyCreateResponse,
+  WidgetSecurityDraftUpdate,
+  WidgetSecurityResponse,
 } from "@/types";
 
 export const apiClient = {
@@ -174,6 +182,20 @@ export const apiClient = {
   getAgent: () => request<AgentResponse>("/agent"),
   createAgent: () =>
     request<AgentResponse>("/agent", {
+      method: "POST",
+    }),
+  getAgentWidgetSecurity: () => request<WidgetSecurityResponse>("/agent/widget-security"),
+  updateAgentWidgetSecurityDraft: (payload: WidgetSecurityDraftUpdate) =>
+    request<WidgetSecurityResponse>("/agent/widget-security/draft", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  createAgentWidgetApiKey: () =>
+    request<WidgetApiKeyCreateResponse>("/agent/widget-security/api-key", {
+      method: "POST",
+    }),
+  deployAgentWidgetSecurity: () =>
+    request<WidgetSecurityResponse>("/agent/widget-security/deploy", {
       method: "POST",
     }),
 };
