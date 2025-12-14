@@ -124,14 +124,14 @@ export const Shell = () => {
               <p className="text-xs text-muted-foreground">Configure your API surface and create features</p>
             </div>
           </div>
-          <nav className="mt-8 flex flex-col gap-2">
-            <NavButton
-              active={section === "dashboard"}
-              label="Dashboard"
-              icon={<LayoutDashboard className="h-4 w-4" />}
-              collapsed={sidebarCollapsed}
-              onClick={() => setSection("dashboard")}
-            />
+	          <nav className="mt-8 flex flex-col gap-2">
+	            <NavButton
+	              active={section === "dashboard"}
+	              label="Overview"
+	              icon={<LayoutDashboard className="h-4 w-4" />}
+	              collapsed={sidebarCollapsed}
+	              onClick={() => setSection("dashboard")}
+	            />
             <NavButton
               active={section === "api"}
               label="API config"

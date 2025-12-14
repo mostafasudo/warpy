@@ -45,11 +45,11 @@ export const DashboardPanel = () => {
   const endpointCount = (features ?? []).reduce((total, feature) => total + (feature?.endpointCount ?? 0), 0)
   const endpointHelper = `${endpointCount} endpoint${endpointCount === 1 ? "" : "s"} mapped.`
 
-  return (
-    <PanelShell
-      title="Dashboard"
-      description="See what your agent can use right now."
-    >
+	  return (
+	    <PanelShell
+	      title="Overview"
+	      description="See what your agent can use right now."
+	    >
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           label="Features"
