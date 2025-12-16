@@ -32,6 +32,7 @@ from ..services.agent_service import (
 from ..services.agent_widget_security_service import (
     create_widget_api_key_draft,
     deploy_widget_security_draft,
+    discard_widget_security_draft,
     get_widget_security_state,
     update_widget_security_draft,
 )
@@ -235,3 +236,17 @@ async def deploy_widget_security_route(
     except Exception as error:
         log_error("AgentController", "deploy_widget_security", "Failed to deploy widget security draft", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deploy widget security draft")
+
+
+@router.post("/agent/widget-security/discard", response_model=WidgetSecurityResponse)
+async def discard_widget_security_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> WidgetSecurityResponse:
+    try:
+        return discard_widget_security_draft(session, clerk_session.user_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "discard_widget_security", "Failed to discard widget security draft", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to discard widget security draft")

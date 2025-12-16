@@ -18,6 +18,7 @@ import { useFeaturesQuery } from "@/queries/use-features"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agent-widget-security-draft"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
@@ -173,6 +174,7 @@ const AdvancedSecurityPanel = () => {
   const updateDraft = useUpdateAgentWidgetSecurityDraft()
   const createApiKey = useCreateAgentWidgetApiKey()
   const deployDraft = useDeployAgentWidgetSecurity()
+  const discardDraft = useDiscardAgentWidgetSecurityDraft()
   const addToast = useToastStore(toastSelectors.addToast)
 
   const active = data?.active
@@ -276,6 +278,17 @@ const AdvancedSecurityPanel = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not deploy changes"
       addToast({ title: "Deploy failed", description: message, variant: "error" })
+    }
+  }
+
+  const handleDiscard = async () => {
+    try {
+      await discardDraft.mutateAsync()
+      setNewApiKey(null)
+      addToast({ title: "Discarded", description: "Staged changes reverted.", variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not discard changes"
+      addToast({ title: "Discard failed", description: message, variant: "error" })
     }
   }
 
@@ -442,7 +455,17 @@ const AdvancedSecurityPanel = () => {
             </div>
           </div>
 
-          <div className="flex justify-end border-t border-border pt-4">
+          <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+            {hasStagedChanges ? (
+              <Button
+                variant="ghost"
+                onClick={handleDiscard}
+                disabled={discardDraft.isPending}
+                className={clsx("w-full sm:w-auto", "justify-center")}
+              >
+                Discard changes
+              </Button>
+            ) : null}
             <Button
               onClick={handleDeploy}
               disabled={!hasStagedChanges || deployDraft.isPending}

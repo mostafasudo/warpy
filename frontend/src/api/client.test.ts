@@ -218,7 +218,17 @@ describe("apiClient", () => {
         },
         draft: null,
         hasStagedChanges: false
-      })
+      }),
+      jsonResponse({
+        active: {
+          requireSignedWidgetToken: false,
+          widgetRefreshEndpointPath: "/widget-token",
+          hasApiKey: true,
+          apiKeyLast4: "1234"
+        },
+        draft: null,
+        hasStagedChanges: false
+      }),
     ]
 
     const fetchSpy = jest
@@ -243,6 +253,12 @@ describe("apiClient", () => {
     await apiClient.deployAgentWidgetSecurity()
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/agent/widget-security/deploy", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await apiClient.discardAgentWidgetSecurityDraft()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/widget-security/discard", "http://api.test"),
       expect.objectContaining({ method: "POST" })
     )
   })

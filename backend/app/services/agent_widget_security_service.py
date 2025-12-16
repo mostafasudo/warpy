@@ -103,6 +103,23 @@ def deploy_widget_security_draft(session: Session, user_id: str) -> WidgetSecuri
     return _to_widget_security_response(agent)
 
 
+def discard_widget_security_draft(session: Session, user_id: str) -> WidgetSecurityResponse:
+    agent = session.scalar(
+        select(Agent).where(Agent.user_id == user_id).with_for_update()
+    )
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+    agent.widget_auth_enabled_draft = None
+    agent.widget_refresh_endpoint_path_draft = None
+    agent.widget_api_key_hash_draft = None
+    agent.widget_api_key_last4_draft = None
+
+    session.flush()
+    log_info("AgentWidgetSecurityService", "discard", "Draft discarded", user_id=user_id)
+    return _to_widget_security_response(agent)
+
+
 def _normalize_widget_refresh_path(value: str) -> str:
     trimmed = value.strip()
     if not trimmed.startswith("/"):
@@ -135,4 +152,3 @@ def _to_widget_security_response(agent: Agent) -> WidgetSecurityResponse:
             api_key_last4=agent.widget_api_key_last4_draft,
         )
     return WidgetSecurityResponse(active=active, draft=draft, has_staged_changes=_has_draft_changes(agent))
-

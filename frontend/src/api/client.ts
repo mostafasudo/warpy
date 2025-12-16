@@ -198,4 +198,8 @@ export const apiClient = {
     request<WidgetSecurityResponse>("/agent/widget-security/deploy", {
       method: "POST",
     }),
+  discardAgentWidgetSecurityDraft: () =>
+    request<WidgetSecurityResponse>("/agent/widget-security/discard", {
+      method: "POST",
+    }),
 };

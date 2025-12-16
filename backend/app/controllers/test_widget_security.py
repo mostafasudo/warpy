@@ -16,6 +16,7 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
     monkeypatch.setenv("WIDGET_JWT_SECRET", "secret")
+    monkeypatch.setenv("TEST_WIDGET_TOKEN_API_KEY", "")
     get_settings.cache_clear()
     importlib.reload(database)
     database._engine = None
@@ -174,6 +175,24 @@ def test_widget_security_refresh_endpoint_staging_and_deploy(client: TestClient)
 
     deployed = deploy_draft(client)
     assert deployed["active"]["widgetRefreshEndpointPath"] == "/custom-token"
+
+
+def test_widget_security_discard_clears_draft(client: TestClient):
+    create_agent(client)
+    client.patch(
+        "/agent/widget-security/draft",
+        json={"requireSignedWidgetToken": True},
+        headers=auth_headers(),
+    )
+    staged = client.get("/agent/widget-security", headers=auth_headers()).json()
+    assert staged["hasStagedChanges"] is True
+
+    discarded = client.post("/agent/widget-security/discard", headers=auth_headers())
+    assert discarded.status_code == 200
+    body = discarded.json()
+    assert body["hasStagedChanges"] is False
+    assert body["draft"] is None
+    assert body["active"]["requireSignedWidgetToken"] is False
 
 
 def test_test_widget_token_endpoint_requires_env_var(client: TestClient):
