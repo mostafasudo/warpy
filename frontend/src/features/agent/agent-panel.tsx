@@ -401,6 +401,7 @@ const AdvancedSecurityPanel = () => {
                   }
                 }}
                 className="h-10 border-0 bg-transparent font-mono focus-visible:ring-0"
+                wrapperClassName="flex-1"
                 aria-label="Widget refresh endpoint path"
               />
             </div>
