@@ -45,6 +45,8 @@ describe("DashboardPanel", () => {
     expect(useNavigationStore.getState().section).toBe("api")
     await user.click(screen.getByRole("button", { name: "Go to features" }))
     expect(useNavigationStore.getState().section).toBe("features")
+    await user.click(screen.getByRole("button", { name: "Go to agent" }))
+    expect(useNavigationStore.getState().section).toBe("agent")
   })
 
   it("uses singular endpoint when only one mapped", () => {

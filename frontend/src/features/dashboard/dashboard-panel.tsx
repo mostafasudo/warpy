@@ -85,13 +85,17 @@ export const DashboardPanel = () => {
           <Button
             onClick={() => setSection("api")}
             variant="secondary"
-            className="justify-between bg-muted/60 hover:bg-muted"
+            className="justify-between"
           >
             Configure API
             <ArrowRight className="h-4 w-4" />
           </Button>
-          <Button onClick={() => setSection("features")} className="justify-between">
+          <Button onClick={() => setSection("features")} variant="secondary" className="justify-between">
             Go to features
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => setSection("agent")} variant="secondary" className="justify-between">
+            Go to agent
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>

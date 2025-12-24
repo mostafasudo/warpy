@@ -11,10 +11,13 @@ describe("ThemeToggle", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<ThemeToggle />)
 
-    await user.click(screen.getByRole("button"))
+    await user.click(await screen.findByRole("button", { name: /light theme/i }))
     expect(useThemeStore.getState().theme).toBe("light")
 
-    await user.click(screen.getByRole("button"))
+    await user.click(await screen.findByRole("button", { name: /system theme/i }))
+    expect(useThemeStore.getState().theme).toBe("system")
+
+    await user.click(await screen.findByRole("button", { name: /dark theme/i }))
     expect(useThemeStore.getState().theme).toBe("dark")
   })
 })
