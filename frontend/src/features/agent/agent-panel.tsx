@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
-import { Check, Copy, Info, Link2, Sparkles, Terminal, RotateCw } from "lucide-react"
+import { Check, ChevronDown, Copy, Info, Link2, Sparkles, Terminal, RotateCw } from "lucide-react"
 import clsx from "clsx"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -176,6 +177,7 @@ const AdvancedSecurityPanel = () => {
   const deployDraft = useDeployAgentWidgetSecurity()
   const discardDraft = useDiscardAgentWidgetSecurityDraft()
   const addToast = useToastStore(toastSelectors.addToast)
+  const [isOpen, setIsOpen] = useState(false)
 
   const active = data?.active
   const draft = data?.draft
@@ -311,171 +313,196 @@ const AdvancedSecurityPanel = () => {
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
-      <div className="p-6">
-        <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div>
-                <h3 className="text-lg font-semibold">Advanced Security</h3>
-                <p className="text-sm text-muted-foreground">Optional Widget JWT Auth</p>
-              </div>
-              {hasStagedChanges ? (
-                <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                  Staged
-                </Badge>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-muted-foreground">Require signed widget token</span>
-              <Switch
-                checked={effectiveRequireSignedWidgetToken}
-                onCheckedChange={handleToggle}
-                disabled={updateDraft.isPending}
-              />
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-semibold">Widget API Key</Label>
-              {showApiKeyStaged ? (
-                <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                  Staged
-                </Badge>
-              ) : null}
-            </div>
-            {newApiKey ? (
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold">Copy your API key</p>
-                    <p className="text-sm text-muted-foreground">This key is shown only once.</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleCopy(newApiKey, "apiKey")}
-                    disabled={!newApiKey}
-                  >
-                    {copied === "apiKey" ? "Copied" : "Copy"}
-                  </Button>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
+        <div className="p-6">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">Advanced Security</h3>
+                  <p className="text-sm text-muted-foreground">Optional Widget JWT Auth</p>
                 </div>
-                <Textarea className="mt-3 h-10 resize-none font-mono" readOnly rows={1} value={newApiKey} />
+                {hasStagedChanges ? (
+                  <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                    Staged
+                  </Badge>
+                ) : null}
               </div>
-            ) : null}
-            {newApiKey ? null : (
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="flex-1">
-                  <Input
-                    readOnly
-                    disabled={!maskedApiKey}
-                    value={maskedApiKey ?? ""}
-                    placeholder="No API key generated"
-                    className="font-mono"
+              <div className="flex items-center gap-3">
+                <Badge variant={effectiveRequireSignedWidgetToken ? "default" : "secondary"}>
+                  {effectiveRequireSignedWidgetToken ? "Enabled" : "Disabled"}
+                </Badge>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    aria-label={isOpen ? "Collapse advanced security" : "Expand advanced security"}
+                  >
+                    <span className="text-sm font-medium">{isOpen ? "Hide" : "Show"}</span>
+                    <ChevronDown
+                      className={clsx("h-4 w-4 transition-transform", isOpen && "rotate-180")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+
+            <CollapsibleContent>
+              <div className="space-y-6">
+                <div className="h-px bg-border" />
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm font-medium text-muted-foreground">Require signed widget token</span>
+                  <Switch
+                    checked={effectiveRequireSignedWidgetToken}
+                    onCheckedChange={handleToggle}
+                    disabled={updateDraft.isPending}
                   />
                 </div>
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={handleGenerateOrRotate}
-                  disabled={createApiKey.isPending}
-                >
-                  {maskedApiKey ? <RotateCw className="h-4 w-4" /> : <span className="font-semibold">+</span>}
-                  {maskedApiKey ? "Rotate" : "Generate Key"}
-                </Button>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-semibold">Widget API Key</Label>
+                    {showApiKeyStaged ? (
+                      <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                        Staged
+                      </Badge>
+                    ) : null}
+                  </div>
+                  {newApiKey ? (
+                    <div className="rounded-lg border border-border bg-muted/20 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold">Copy your API key</p>
+                          <p className="text-sm text-muted-foreground">This key is shown only once.</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCopy(newApiKey, "apiKey")}
+                          disabled={!newApiKey}
+                        >
+                          {copied === "apiKey" ? "Copied" : "Copy"}
+                        </Button>
+                      </div>
+                      <Textarea className="mt-3 h-10 resize-none font-mono" readOnly rows={1} value={newApiKey} />
+                    </div>
+                  ) : null}
+                  {newApiKey ? null : (
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <div className="flex-1">
+                        <Input
+                          readOnly
+                          disabled={!maskedApiKey}
+                          value={maskedApiKey ?? ""}
+                          placeholder="No API key generated"
+                          className="font-mono"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={handleGenerateOrRotate}
+                        disabled={createApiKey.isPending}
+                      >
+                        {maskedApiKey ? <RotateCw className="h-4 w-4" /> : <span className="font-semibold">+</span>}
+                        {maskedApiKey ? "Rotate" : "Generate Key"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-semibold">Widget Refresh Endpoint</Label>
+                    {showRefreshEndpointStaged ? (
+                      <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                        Staged
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex overflow-hidden rounded-lg border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
+                    <span className="flex items-center border-r border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
+                      POST
+                    </span>
+                    <Input
+                      value={widgetRefreshEndpointDraft}
+                      onChange={(event) => setWidgetRefreshEndpointDraft(event.target.value)}
+                      onBlur={submitRefreshEndpoint}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault()
+                          submitRefreshEndpoint()
+                        }
+                      }}
+                      className="h-10 min-w-0 flex-1 border-0 bg-transparent font-mono focus-visible:ring-0"
+                      aria-label="Widget refresh endpoint path"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <h4 className="mb-2 text-sm font-semibold">Setup</h4>
+                  <ol className="ml-4 list-decimal space-y-2 text-sm text-muted-foreground">
+                    <li>Store our API key server-side (as an environment variable).</li>
+                    <li>
+                      Implement{" "}
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                        POST {effectiveWidgetRefreshEndpointPath}
+                      </code>
+                      .
+                    </li>
+                    <li>
+                      This endpoint should call{" "}
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                        POST {getAgentServerBaseUrl()}/widget-token
+                      </code>{" "}
+                      and return{" "}
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                        {`{ token: "<jwt>" }`}
+                      </code>
+                      .
+                    </li>
+                  </ol>
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => handleCopy(buildWidgetTokenPrompt(effectiveWidgetRefreshEndpointPath), "prompt")}
+                    >
+                      <Terminal className="h-4 w-4" />
+                      {copied === "prompt" ? "Copied" : "Copy prompt for coding agent"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+                  {hasStagedChanges ? (
+                    <Button
+                      variant="ghost"
+                      onClick={handleDiscard}
+                      disabled={discardDraft.isPending}
+                      className={clsx("w-full sm:w-auto", "justify-center")}
+                    >
+                      Discard changes
+                    </Button>
+                  ) : null}
+                  <Button
+                    onClick={handleDeploy}
+                    disabled={!hasStagedChanges || deployDraft.isPending}
+                    className={clsx("w-full sm:w-auto", "justify-center")}
+                  >
+                    Deploy Changes
+                  </Button>
+                </div>
               </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-semibold">Widget Refresh Endpoint</Label>
-              {showRefreshEndpointStaged ? (
-                <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                  Staged
-                </Badge>
-              ) : null}
-            </div>
-            <div className="flex overflow-hidden rounded-lg border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
-              <span className="flex items-center border-r border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
-                POST
-              </span>
-              <Input
-                value={widgetRefreshEndpointDraft}
-                onChange={(event) => setWidgetRefreshEndpointDraft(event.target.value)}
-                onBlur={submitRefreshEndpoint}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault()
-                    submitRefreshEndpoint()
-                  }
-                }}
-                className="h-10 min-w-0 flex-1 border-0 bg-transparent font-mono focus-visible:ring-0"
-                aria-label="Widget refresh endpoint path"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-muted/20 p-4">
-            <h4 className="mb-2 text-sm font-semibold">Setup</h4>
-            <ol className="ml-4 list-decimal space-y-2 text-sm text-muted-foreground">
-              <li>Store our API key server-side (as an environment variable).</li>
-              <li>
-                Implement{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-                  POST {effectiveWidgetRefreshEndpointPath}
-                </code>
-                .
-              </li>
-              <li>
-                This endpoint should call{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-                  POST {getAgentServerBaseUrl()}/widget-token
-                </code>{" "}
-                and return{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-                  {`{ token: "<jwt>" }`}
-                </code>
-                .
-              </li>
-            </ol>
-            <div className="mt-4">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => handleCopy(buildWidgetTokenPrompt(effectiveWidgetRefreshEndpointPath), "prompt")}
-              >
-                <Terminal className="h-4 w-4" />
-                {copied === "prompt" ? "Copied" : "Copy prompt for coding agent"}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-            {hasStagedChanges ? (
-              <Button
-                variant="ghost"
-                onClick={handleDiscard}
-                disabled={discardDraft.isPending}
-                className={clsx("w-full sm:w-auto", "justify-center")}
-              >
-                Discard changes
-              </Button>
-            ) : null}
-            <Button
-              onClick={handleDeploy}
-              disabled={!hasStagedChanges || deployDraft.isPending}
-              className={clsx("w-full sm:w-auto", "justify-center")}
-            >
-              Deploy Changes
-            </Button>
+            </CollapsibleContent>
           </div>
         </div>
       </div>
-    </div>
+    </Collapsible>
   )
 }
 

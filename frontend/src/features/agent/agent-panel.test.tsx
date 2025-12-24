@@ -75,6 +75,10 @@ const createWrapper = () => {
   )
 }
 
+const openAdvancedSecurity = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(await screen.findByRole("button", { name: /expand advanced security/i }))
+}
+
 const baseFeatures = [
   { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }
 ]
@@ -340,6 +344,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     await user.click(screen.getByRole("switch"))
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({ requireSignedWidgetToken: true })
@@ -389,6 +394,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     expect(await screen.findByDisplayValue("••••••••••••9999")).not.toBeNull()
     expect(screen.queryByLabelText("Copy masked API key")).toBeNull()
 
@@ -434,8 +440,10 @@ describe("AgentPanel", () => {
     })
     expect(navigator.clipboard.writeText).toBe(writeText)
 
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     fireEvent.click(screen.getByRole("button", { name: /copy prompt for coding agent/i }))
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining("POST /widget-token"))
@@ -467,8 +475,10 @@ describe("AgentPanel", () => {
     })
     expect(navigator.clipboard.writeText).toBe(writeText)
 
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     fireEvent.click(screen.getByRole("button", { name: /copy prompt for coding agent/i }))
 
     await waitFor(() => {
@@ -502,8 +512,10 @@ describe("AgentPanel", () => {
       isPending: false
     })
 
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     expect(screen.getByRole("button", { name: /deploy changes/i })).toBeDisabled()
   })
 
@@ -532,6 +544,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     const input = screen.getByLabelText("Widget refresh endpoint path")
     await user.clear(input)
     await user.type(input, "/custom-token")
@@ -567,6 +580,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     const input = screen.getByLabelText("Widget refresh endpoint path")
     await user.clear(input)
     await user.type(input, "invalid-path")
@@ -609,6 +623,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
+    await openAdvancedSecurity(user)
     await user.click(screen.getByRole("button", { name: /deploy changes/i }))
     expect(mutateAsync).toHaveBeenCalled()
   })
