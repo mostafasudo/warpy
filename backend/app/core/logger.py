@@ -15,7 +15,7 @@ class AppLogger:
 
     @classmethod
     def _setup_logger(cls) -> logging.Logger:
-        logger = logging.getLogger("chat_to_api")
+        logger = logging.getLogger("warpy")
         logger.setLevel(logging.INFO)
         logger.propagate = False
 
@@ -71,4 +71,3 @@ def log_debug(scope: str, method: str, message: str, **kwargs: Any) -> None:
     if extra:
         log_msg += f" | {extra}"
     logger.debug(log_msg)
-

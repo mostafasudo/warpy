@@ -1378,7 +1378,7 @@
   function init() {
     const config = getScriptData();
     if (!config || !config.agentId) {
-      console.warn("[ChatToAPI] Missing data-agent-id attribute");
+      console.warn("[Warpy] Missing data-agent-id attribute");
       return;
     }
 

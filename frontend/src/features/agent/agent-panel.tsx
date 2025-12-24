@@ -413,8 +413,7 @@ const AdvancedSecurityPanel = () => {
                     submitRefreshEndpoint()
                   }
                 }}
-                className="h-10 border-0 bg-transparent font-mono focus-visible:ring-0"
-                wrapperClassName="flex-1"
+                className="h-10 min-w-0 flex-1 border-0 bg-transparent font-mono focus-visible:ring-0"
                 aria-label="Widget refresh endpoint path"
               />
             </div>

@@ -1,6 +1,7 @@
+"use client"
+
 import * as React from "react"
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
-import { CornerDownLeft } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -100,16 +101,12 @@ AlertDialogDescription.displayName =
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
->(({ className, autoFocus = true, children, ...props }, ref) => (
+>(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
-    autoFocus={autoFocus}
     className={cn(buttonVariants(), className)}
     {...props}
-  >
-    {children}
-    <CornerDownLeft aria-hidden="true" />
-  </AlertDialogPrimitive.Action>
+  />
 ))
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
 

@@ -823,21 +823,23 @@ export const FeaturesPanel = () => {
       <div className="space-y-3 rounded-2xl border border-border/70 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-            <Input
-              placeholder="Search features or endpoints"
-              value={searchDraft}
-              onChange={(event) => setSearchDraft(event.target.value)}
-              className="w-full md:w-80 transition-shadow focus-visible:shadow-[0_0_0_2px_var(--ring)]"
-              data-testid="feature-search"
-              suffix={
-                showSearchLoading ? (
+            <div className="relative w-full md:w-80">
+              <Input
+                placeholder="Search features or endpoints"
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                className="w-full pr-9 transition-shadow focus-visible:shadow-[0_0_0_2px_var(--ring)]"
+                data-testid="feature-search"
+              />
+              {showSearchLoading ? (
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
                   <Loader2
                     className="h-4 w-4 animate-spin text-muted-foreground"
                     data-testid="feature-search-loading"
                   />
-                ) : null
-              }
-            />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
         {isPending ? (

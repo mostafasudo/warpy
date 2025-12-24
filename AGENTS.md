@@ -43,7 +43,8 @@
 ## Frontend specifics
 - **React Query:** stable array keys; cache boundaries per feature; granular invalidation; retries/timeouts set; one mutation per file.
 - **Zustand:** tiny stores; selectors to avoid re-renders; no business logic in components.
-- **shadcdn:** use official components and patterns (built on Radix and Lucide); don’t re-implement primitives.
+- **shadcdn:** use official components and patterns (built on Radix and Lucide); don't re-implement primitives.
+- **Design System:** For a comprehensive guide about our design system, check [WARPY_DESIGN_SYSTEM.md](./WARPY_DESIGN_SYSTEM.md).
 
 ## Backend specifics
 - **FastAPI:** pydantic models; strict types; timeouts/retries on outbound calls; input validation at edges.

@@ -1,6 +1,6 @@
-# chat-to-api
+# Warpy
 
-Embeddable chat/voice agent that turns natural-language into authenticated API actions. Learn More [here](https://www.notion.so/Chat-to-API-19dc1bcbe3f58097b047fe03c2f42918?source=copy_link) 📝
+Embeddable agent widget for dashboards. Bend interfaces into authenticated API actions and UI operations. Learn more at https://warpy.ai.
 
 ## Prerequisites
 - Node.js 20+

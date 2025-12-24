@@ -120,8 +120,8 @@ export const Shell = () => {
                 sidebarCollapsed ? "max-w-0 opacity-0" : "max-w-[200px] opacity-100"
               )}
             >
-              <p className="text-sm font-semibold">Chat to API</p>
-              <p className="text-xs text-muted-foreground">Configure your API surface and create features</p>
+              <p className="text-sm font-semibold">Warpy</p>
+              <p className="text-xs text-muted-foreground">Bend the Interface.</p>
             </div>
           </div>
 	          <nav className="mt-8 flex flex-col gap-2">

@@ -2,13 +2,13 @@ services:
   postgres:
     image: pgvector/pgvector:pg15
     environment:
-      POSTGRES_DB: chat_to_api
+      POSTGRES_DB: warpy
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5434:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - warpy-postgres-data:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
@@ -22,7 +22,7 @@ services:
       - ./.env
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-}
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/chat_to_api
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/warpy
       REDIS_URL: redis://redis:6379/0
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -46,7 +46,7 @@ services:
     env_file:
       - ./.env
     environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/chat_to_api
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/warpy
       REDIS_URL: redis://redis:6379/0
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -80,4 +80,4 @@ services:
       - /app/node_modules
 
 volumes:
-  postgres-data:
+  warpy-postgres-data:
