@@ -1,7 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, expect, it, beforeEach, afterEach, jest } from "@jest/globals"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, render, screen } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { Shell } from "./shell"
@@ -41,6 +41,7 @@ describe("Shell", () => {
       section: "dashboard",
       sidebarCollapsed: false
     })
+    window.history.replaceState(null, "", "http://localhost/")
   })
 
   afterEach(() => {
@@ -56,8 +57,20 @@ describe("Shell", () => {
     expect(screen.getByText("API configuration")).not.toBeNull()
     await user.click(screen.getByRole("button", { name: "API config" }))
     expect(screen.getByTestId("api-panel")).not.toBeNull()
+    await waitFor(() => {
+      expect(new URL(window.location.href).searchParams.get("tab")).toBe("api")
+    })
     await user.click(screen.getByRole("button", { name: /Collapse sidebar/i }))
     expect(useNavigationStore.getState().sidebarCollapsed).toBe(true)
+  })
+
+  it("hydrates section from query string", async () => {
+    window.history.replaceState(null, "", "http://localhost/?tab=features")
+    await act(async () => {
+      renderShell()
+    })
+
+    expect(await screen.findByTestId("endpoints-panel")).not.toBeNull()
   })
 
   it("shows mobile guard when viewport is small", async () => {

@@ -20,6 +20,28 @@ type NavButtonProps = {
   collapsed: boolean
 }
 
+const sectionQueryKey = "tab"
+type Section = ReturnType<typeof navigationSelectors.section>
+const navigationSections: Section[] = ["dashboard", "api", "features", "agent"]
+
+const getSectionFromUrl = (): Section | null => {
+  if (typeof window === "undefined") return null
+  const value = new URLSearchParams(window.location.search).get(sectionQueryKey)
+  if (!value) return null
+  return navigationSections.includes(value as Section) ? (value as Section) : null
+}
+
+const syncSectionToUrl = (section: Section) => {
+  if (typeof window === "undefined") return
+  const url = new URL(window.location.href)
+  if (section === "dashboard") {
+    url.searchParams.delete(sectionQueryKey)
+  } else {
+    url.searchParams.set(sectionQueryKey, section)
+  }
+  window.history.replaceState(null, "", url.toString())
+}
+
 const NavButton = ({ active, label, icon, onClick, collapsed }: NavButtonProps) => {
   const button = (
     <Button
@@ -81,6 +103,7 @@ export const Shell = () => {
     if (typeof window === "undefined" || !("matchMedia" in window)) return false
     return window.matchMedia("(max-width: 767px)").matches
   })
+  const [hasSyncedSection, setHasSyncedSection] = useState(false)
   const section = useNavigationStore(navigationSelectors.section)
   const sidebarCollapsed = useNavigationStore(navigationSelectors.sidebarCollapsed)
   const setSection = useNavigationStore(navigationSelectors.setSection)
@@ -100,6 +123,19 @@ export const Shell = () => {
       return () => media.removeListener(update)
     }
   }, [])
+
+  useEffect(() => {
+    const sectionFromUrl = getSectionFromUrl()
+    if (sectionFromUrl) {
+      setSection(sectionFromUrl)
+    }
+    setHasSyncedSection(true)
+  }, [setSection])
+
+  useEffect(() => {
+    if (!hasSyncedSection) return
+    syncSectionToUrl(section)
+  }, [hasSyncedSection, section])
 
   return (
     <div className="relative min-h-screen">

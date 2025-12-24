@@ -220,39 +220,20 @@ const AdvancedSecurityPanel = () => {
   const handleToggle = async (checked: boolean) => {
     try {
       await updateDraft.mutateAsync({ requireSignedWidgetToken: checked })
-      addToast({
-        title: "Staged change",
-        description: "Signed widget token setting updated.",
-        variant: "success"
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not update setting"
-      addToast({ title: "Update failed", description: message, variant: "error" })
+    } catch {
     }
   }
 
   const submitRefreshEndpoint = async () => {
     const trimmed = widgetRefreshEndpointDraft.trim()
     if (!trimmed.startsWith("/") || trimmed.includes("://")) {
-      addToast({
-        title: "Invalid endpoint",
-        description: "Refresh endpoint must be a path starting with '/'.",
-        variant: "error"
-      })
       setWidgetRefreshEndpointDraft(effectiveWidgetRefreshEndpointPath)
       return
     }
     if (trimmed === effectiveWidgetRefreshEndpointPath) return
     try {
       await updateDraft.mutateAsync({ widgetRefreshEndpointPath: trimmed })
-      addToast({
-        title: "Staged change",
-        description: "Widget refresh endpoint updated.",
-        variant: "success"
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not update endpoint"
-      addToast({ title: "Update failed", description: message, variant: "error" })
+    } catch {
       setWidgetRefreshEndpointDraft(effectiveWidgetRefreshEndpointPath)
     }
   }
@@ -261,14 +242,7 @@ const AdvancedSecurityPanel = () => {
     try {
       const created = await createApiKey.mutateAsync()
       setNewApiKey(created.apiKey)
-      addToast({
-        title: "API key generated",
-        description: "Copy it now. This key is shown only once.",
-        variant: "success"
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not generate API key"
-      addToast({ title: "Generate failed", description: message, variant: "error" })
+    } catch {
     }
   }
 
