@@ -504,6 +504,38 @@
         height: 22px;
       }
 
+      .cta-widget-toggle.has-unread::after {
+        content: "";
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--cta-accent);
+        box-shadow: 0 0 0 2px var(--cta-surface-strong), 0 0 0 0 var(--cta-focus);
+        pointer-events: none;
+      }
+
+      .cta-widget-toggle.unread-pulse::after {
+        animation: cta-widget-unread-pulse 420ms ease-out;
+      }
+
+      @keyframes cta-widget-unread-pulse {
+        0% {
+          transform: scale(0.9);
+          box-shadow: 0 0 0 2px var(--cta-surface-strong), 0 0 0 0 var(--cta-focus);
+        }
+        70% {
+          transform: scale(1.25);
+          box-shadow: 0 0 0 2px var(--cta-surface-strong), 0 0 0 14px rgba(0, 0, 0, 0);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 2px var(--cta-surface-strong), 0 0 0 0 rgba(0, 0, 0, 0);
+        }
+      }
+
       @media (hover: none) {
         .cta-widget-toggle {
           transform: translateY(-50%);
@@ -540,6 +572,7 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        min-height: 0;
         pointer-events: none;
         opacity: 0;
         transform: translateX(calc(100% + 16px));
@@ -725,12 +758,15 @@
       .cta-widget-messages {
         flex: 1;
         overflow-y: auto;
+        min-height: 0;
         padding: 16px;
         display: flex;
         flex-direction: column;
         gap: 10px;
         scrollbar-width: thin;
         scrollbar-color: var(--cta-border) transparent;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
       }
 
       .cta-widget-messages::-webkit-scrollbar {
@@ -1187,6 +1223,10 @@
         .cta-widget-mic.recording {
           animation: none !important;
         }
+
+        .cta-widget-toggle.unread-pulse::after {
+          animation: none !important;
+        }
       }
     `;
     return style;
@@ -1213,6 +1253,7 @@
     let configPromise = null;
     let isLoading = false;
     let isOpen = false;
+    let hasUnread = false;
     let isRecording = false;
     let isTranscribing = false;
     let mediaRecorder = null;
@@ -1779,6 +1820,18 @@
       return response;
     }
 
+    function setUnread(nextHasUnread) {
+      hasUnread = Boolean(nextHasUnread);
+      toggle.classList.toggle("has-unread", hasUnread);
+      toggle.setAttribute("aria-label", hasUnread ? "Open Warpy (new message)" : "Open Warpy");
+    }
+
+    function playUnreadPulse() {
+      toggle.classList.remove("unread-pulse");
+      void toggle.offsetWidth;
+      toggle.classList.add("unread-pulse");
+    }
+
     async function sendMessage(text) {
       if (!text.trim() || isLoading) return;
 
@@ -1787,6 +1840,7 @@
       renderMessages();
       setLoading(true);
 
+      let didReceiveAssistant = false;
       try {
         const payload = {
           agentId: config.agentId,
@@ -1835,6 +1889,9 @@
         if (data.messages && data.messages.length > 0) {
           for (const msg of data.messages) {
             state.messages.push({ role: msg.role, content: msg.content });
+            if (msg.role === "assistant") {
+              didReceiveAssistant = true;
+            }
           }
         }
 
@@ -1844,7 +1901,13 @@
           role: "assistant",
           content: "Sorry, something went wrong. Please try again.",
         });
+        didReceiveAssistant = true;
         saveState(state);
+      }
+
+      if (!isOpen && didReceiveAssistant) {
+        setUnread(true);
+        playUnreadPulse();
       }
 
       setLoading(false);
@@ -1853,6 +1916,7 @@
     function openPanel() {
       if (isOpen) return;
       isOpen = true;
+      setUnread(false);
       panel.classList.add("open");
       scrim.classList.add("open");
       toggle.classList.add("open");
@@ -1889,12 +1953,18 @@
       state.messages = [];
       state.conversationId = null;
       saveState(state);
+      setUnread(false);
       renderMessages();
     }
 
     toggle.addEventListener("click", () => {
       if (ignoreToggleClick) return;
       togglePanel();
+    });
+    toggle.addEventListener("animationend", (event) => {
+      if (event.animationName === "cta-widget-unread-pulse") {
+        toggle.classList.remove("unread-pulse");
+      }
     });
     closeEl.addEventListener("click", togglePanel);
     newChatEl.addEventListener("click", startNewChat);
