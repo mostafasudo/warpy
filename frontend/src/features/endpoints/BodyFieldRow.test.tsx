@@ -103,6 +103,24 @@ describe("BodyFieldRow", () => {
     expect(onAdd).toHaveBeenCalledWith("obj", "string")
   })
 
+  it("switches to array type and item type", async () => {
+    const onUpdate = jest.fn()
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderField(
+      { id: "arr", name: "tags", type: "string", required: false, description: "" },
+      { onUpdate }
+    )
+
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("array"))
+    expect(onUpdate).toHaveBeenCalledWith("arr", expect.objectContaining({ type: "array:string" }))
+
+    const [, itemSelect] = await screen.findAllByRole("combobox")
+    await user.click(itemSelect)
+    await user.click(await screen.findByText("number"))
+    expect(onUpdate).toHaveBeenCalledWith("arr", expect.objectContaining({ type: "array:number" }))
+  })
+
   it("renders nested children for object fields", () => {
     renderField({
       id: "parent",

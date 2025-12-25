@@ -28,6 +28,9 @@ import { type BodyField } from "@/stores/endpoint-builder"
 import { EnumValuesInput } from "./EnumValuesInput"
 import type { FieldValidation } from "./validation"
 
+type BodyFieldArrayItemType = "string" | "number" | "boolean" | "object"
+type BodyFieldPrimaryType = BodyFieldArrayItemType | "array"
+
 type BodyFieldRowProps = {
   field: BodyField
   depth: number
@@ -40,6 +43,9 @@ type BodyFieldRowProps = {
 
 export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove, focusRef }: BodyFieldRowProps) => {
   const actionRef = useRef<HTMLButtonElement>(null)
+  const isArrayType = field.type.startsWith("array:")
+  const primaryType = (isArrayType ? "array" : field.type) as BodyFieldPrimaryType
+  const arrayItemType = (isArrayType ? field.type.replace("array:", "") : "string") as BodyFieldArrayItemType
   const fixedEnabled = field.fixed !== undefined
   const canNest = field.type === "object" || field.type === "array:object"
   const isPrimitive = field.type === "string" || field.type === "number" || field.type === "boolean"
@@ -68,6 +74,19 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
       type,
       fixed: newFixed
     })
+  }
+
+  const handlePrimaryTypeChange = (type: BodyFieldPrimaryType) => {
+    if (type === "array") {
+      const nextType: BodyField["type"] = isArrayType ? field.type : "array:string"
+      handleTypeChange(nextType)
+      return
+    }
+    handleTypeChange(type)
+  }
+
+  const handleArrayItemTypeChange = (type: BodyFieldArrayItemType) => {
+    handleTypeChange(`array:${type}` as BodyField["type"])
   }
 
   const renderFixedInput = (className?: string, invalidFixed?: boolean) => {
@@ -145,21 +164,33 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
               data-testid={`body-field-${field.id}-description`}
             />
           )}
-          <Select value={field.type} onValueChange={(value) => handleTypeChange(value as BodyField["type"])}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="string">string</SelectItem>
-              <SelectItem value="number">number</SelectItem>
-              <SelectItem value="boolean">boolean</SelectItem>
-              <SelectItem value="object">object</SelectItem>
-              <SelectItem value="array:string">array of string</SelectItem>
-              <SelectItem value="array:number">array of number</SelectItem>
-              <SelectItem value="array:boolean">array of boolean</SelectItem>
-              <SelectItem value="array:object">array of object</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Select value={primaryType} onValueChange={(value) => handlePrimaryTypeChange(value as BodyFieldPrimaryType)}>
+              <SelectTrigger className="w-full sm:w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="string">string</SelectItem>
+                <SelectItem value="number">number</SelectItem>
+                <SelectItem value="boolean">boolean</SelectItem>
+                <SelectItem value="object">object</SelectItem>
+                <SelectItem value="array">array</SelectItem>
+              </SelectContent>
+            </Select>
+            {primaryType === "array" ? (
+              <Select value={arrayItemType} onValueChange={(value) => handleArrayItemTypeChange(value as BodyFieldArrayItemType)}>
+                <SelectTrigger className="w-full sm:w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="string">string</SelectItem>
+                  <SelectItem value="number">number</SelectItem>
+                  <SelectItem value="boolean">boolean</SelectItem>
+                  <SelectItem value="object">object</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+          </div>
           <div className="flex flex-wrap gap-2 sm:ml-auto">
             {canNest && (
               <ActionTooltip content="Add a nested field">
