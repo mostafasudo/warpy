@@ -74,7 +74,7 @@
 
 #### Typography: The Unified Stack
 
-- **Headlines & UI:** Inter. We have reverted to a single sans-serif to maintain a professional, "invisible" structural feel. Tight tracking (-0.025em) gives it a modern edge.
+- **Headlines & UI:** Space Grotesk. A geometric sans-serif that maintains a professional, "invisible" structural feel with a futuristic edge. Tight tracking (-0.025em) enhances its modern, technical character.
 
 - **Code/Data:** JetBrains Mono. Used strictly for code blocks, JSON payloads, and technical values.
 
