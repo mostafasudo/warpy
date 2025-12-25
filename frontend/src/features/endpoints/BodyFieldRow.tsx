@@ -121,7 +121,7 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
       className="w-full space-y-2"
       style={{ marginLeft: indent }}
     >
-      <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm min-w-[320px] sm:min-w-[520px]">
+      <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-3 shadow-sm min-w-[320px] sm:min-w-[520px]">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Input
             placeholder="Field name"
