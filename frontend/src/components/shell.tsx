@@ -230,42 +230,20 @@ export const Shell = () => {
               onClick={toggleSidebarCollapsed}
             />
           </div>
-        </aside>
-        <div className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-10 md:py-8">
-          <header className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {section === "dashboard"
-                  ? "API configuration"
-                  : section === "api"
-                    ? "API config"
-                    : section === "features"
-                      ? "Features"
-                      : "Agent"}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {section === "dashboard"
-                  ? "See setup progress and jump to what matters next."
-                  : section === "api"
-                    ? "Configure base URLs and session headers for every request."
-                    : section === "features"
-                      ? "Create endpoints to empower your agent with features."
-                      : "Publish your agent."}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <ThemeToggle />
-              <div className="rounded-full">
-                <UserButton />
-              </div>
-            </div>
-          </header>
-          {section === "dashboard" && <DashboardPanel />}
-          {section === "api" && <ApiConfigPanel />}
-          {section === "features" && <EndpointsPanel />}
-          {section === "agent" && <AgentPanel />}
-        </div>
-      </div>
+	        </aside>
+	        <div className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-10 md:py-8">
+	          <header className="flex items-center justify-end gap-3">
+	            <ThemeToggle />
+	            <div className="rounded-full">
+	              <UserButton />
+	            </div>
+	          </header>
+	          {section === "dashboard" && <DashboardPanel />}
+	          {section === "api" && <ApiConfigPanel />}
+	          {section === "features" && <EndpointsPanel />}
+	          {section === "agent" && <AgentPanel />}
+	        </div>
+	      </div>
       {isMobile && <MobileGuard />}
     </div>
   )

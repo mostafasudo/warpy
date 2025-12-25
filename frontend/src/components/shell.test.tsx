@@ -24,6 +24,10 @@ jest.mock("@/features/endpoints/EndpointsPanel", () => ({
   EndpointsPanel: () => <div data-testid="endpoints-panel" />
 }))
 
+jest.mock("@/features/agent/agent-panel", () => ({
+  AgentPanel: () => <div data-testid="agent-panel" />
+}))
+
 const renderShell = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
@@ -54,11 +58,21 @@ describe("Shell", () => {
       renderShell()
     })
 
-    expect(screen.getByText("API configuration")).not.toBeNull()
+    expect(screen.getByTestId("dashboard-panel")).not.toBeNull()
     await user.click(screen.getByRole("button", { name: "API config" }))
     expect(screen.getByTestId("api-panel")).not.toBeNull()
     await waitFor(() => {
       expect(new URL(window.location.href).searchParams.get("tab")).toBe("api")
+    })
+    await user.click(screen.getByRole("button", { name: "Agent" }))
+    expect(screen.getByTestId("agent-panel")).not.toBeNull()
+    await waitFor(() => {
+      expect(new URL(window.location.href).searchParams.get("tab")).toBe("agent")
+    })
+    await user.click(screen.getByRole("button", { name: "Overview" }))
+    expect(screen.getByTestId("dashboard-panel")).not.toBeNull()
+    await waitFor(() => {
+      expect(new URL(window.location.href).searchParams.get("tab")).toBeNull()
     })
     await user.click(screen.getByRole("button", { name: /Collapse sidebar/i }))
     expect(useNavigationStore.getState().sidebarCollapsed).toBe(true)
@@ -105,7 +119,7 @@ describe("Shell", () => {
       onchange: null,
       addEventListener: undefined,
       removeEventListener: undefined,
-      addListener: (cb: any) => listeners.push(cb),
+      addListener: (cb: (event: { matches: boolean }) => void) => listeners.push(cb),
       removeListener
     })) as unknown as typeof window.matchMedia
 
