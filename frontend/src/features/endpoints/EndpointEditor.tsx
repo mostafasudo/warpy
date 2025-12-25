@@ -114,7 +114,7 @@ export const EndpointEditor = ({ editing, isSaving, onSave, onClose, features }:
   const hasExistingFeatures = features.length > 0
 
   return (
-    <div className="rounded-2xl bg-card/50 p-4">
+    <div className="rounded-2xl p-4">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold">{editing ? "Edit endpoint" : "New endpoint"}</p>
