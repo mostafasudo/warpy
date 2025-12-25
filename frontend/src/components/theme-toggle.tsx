@@ -39,11 +39,11 @@ export const ThemeToggle = ({ className }: ThemeToggleProps) => {
             aria-label={option.label}
             aria-pressed={isActive}
             className={cn(
-              "h-7 w-7 rounded-full text-muted-foreground transition-colors",
+              "h-6 w-6 rounded-full text-muted-foreground transition-colors",
               isActive && "bg-background/80 text-foreground shadow-sm"
             )}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-3 w-3" />
           </Button>
         )
       })}
