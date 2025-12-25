@@ -281,6 +281,7 @@ describe("AgentPanel", () => {
       configurable: true
     })
     expect(navigator.clipboard.writeText).toBe(writeText)
+    expect(window.navigator.clipboard.writeText).toBe(writeText)
 
     render(<AgentPanel />, { wrapper: createWrapper() })
 
@@ -432,6 +433,7 @@ describe("AgentPanel", () => {
     })
     mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     const writeText = jest.fn((_value: string) => Promise.resolve())
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
@@ -439,15 +441,18 @@ describe("AgentPanel", () => {
       configurable: true
     })
     expect(navigator.clipboard.writeText).toBe(writeText)
+    expect(window.navigator.clipboard.writeText).toBe(writeText)
 
-    const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
     await openAdvancedSecurity(user)
-    fireEvent.click(screen.getByRole("button", { name: /copy prompt for coding agent/i }))
+    const copyPromptButton = screen.getByRole("button", { name: /copy prompt for coding agent/i })
+    expect(copyPromptButton).not.toBeDisabled()
+    await user.click(copyPromptButton)
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining("POST /widget-token"))
       expect(writeText).toHaveBeenCalledWith(expect.not.stringContaining("{data-base-url}"))
+      expect(addToast).not.toHaveBeenCalled()
     })
   })
 
@@ -467,6 +472,7 @@ describe("AgentPanel", () => {
     })
     mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     const writeText = jest.fn(() => Promise.reject(new Error("denied")))
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
@@ -474,12 +480,14 @@ describe("AgentPanel", () => {
       configurable: true
     })
     expect(navigator.clipboard.writeText).toBe(writeText)
+    expect(window.navigator.clipboard.writeText).toBe(writeText)
 
-    const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
     await openAdvancedSecurity(user)
-    fireEvent.click(screen.getByRole("button", { name: /copy prompt for coding agent/i }))
+    const copyPromptButton = screen.getByRole("button", { name: /copy prompt for coding agent/i })
+    expect(copyPromptButton).not.toBeDisabled()
+    await user.click(copyPromptButton)
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalled()
@@ -491,7 +499,7 @@ describe("AgentPanel", () => {
     })
   })
 
-  it("disables deploy button when no staged changes", () => {
+  it("disables deploy button when no staged changes", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
