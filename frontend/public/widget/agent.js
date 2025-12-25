@@ -2,12 +2,184 @@
   "use strict";
 
   const STORAGE_KEY = "cta_widget_state";
+  const UI_STORAGE_KEY = "cta_widget_ui_state";
   const API_TIMEOUT = 30000;
   const API_URL = "http://localhost:8000";
   const MARKED_SRC = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";
   const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
+  const WIDGET_CONTAINER_ID = "cta-widget-container";
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function parseColor(input) {
+    if (!input || typeof input !== "string") return null;
+    const value = input.trim().toLowerCase();
+    if (!value) return null;
+    if (value === "transparent") {
+      return { r: 0, g: 0, b: 0, a: 0 };
+    }
+    const rgbMatch = value.match(/^rgba?\((.*)\)$/);
+    if (rgbMatch) {
+      const parts = rgbMatch[1].trim().split(/[,/ ]+/).filter(Boolean);
+      if (parts.length < 3) return null;
+      const r = Number(parts[0]);
+      const g = Number(parts[1]);
+      const b = Number(parts[2]);
+      const a = parts.length >= 4 ? Number(parts[3]) : 1;
+      if ([r, g, b, a].some((n) => Number.isNaN(n))) return null;
+      return { r: clamp(Math.round(r), 0, 255), g: clamp(Math.round(g), 0, 255), b: clamp(Math.round(b), 0, 255), a: clamp(a, 0, 1) };
+    }
+    const hexMatch = value.match(/^#([0-9a-f]{3,8})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const expand = (s) => s.split("").map((c) => c + c).join("");
+      const normalized = hex.length === 3 || hex.length === 4 ? expand(hex) : hex;
+      if (normalized.length !== 6 && normalized.length !== 8) return null;
+      const r = parseInt(normalized.slice(0, 2), 16);
+      const g = parseInt(normalized.slice(2, 4), 16);
+      const b = parseInt(normalized.slice(4, 6), 16);
+      const a = normalized.length === 8 ? parseInt(normalized.slice(6, 8), 16) / 255 : 1;
+      return { r, g, b, a };
+    }
+    return null;
+  }
+
+  function rgbCss({ r, g, b }) {
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function rgbaCss({ r, g, b }, alpha) {
+    return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+  }
+
+  function mixRgb(a, b, t) {
+    const ratio = clamp(t, 0, 1);
+    return {
+      r: Math.round(a.r + (b.r - a.r) * ratio),
+      g: Math.round(a.g + (b.g - a.g) * ratio),
+      b: Math.round(a.b + (b.b - a.b) * ratio),
+      a: 1,
+    };
+  }
+
+  function relativeLuminance({ r, g, b }) {
+    const normalize = (v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const R = normalize(r);
+    const G = normalize(g);
+    const B = normalize(b);
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  }
+
+  function inferThemeFromPage() {
+    const body = document.body || document.documentElement;
+    const bodyStyles = body ? getComputedStyle(body) : null;
+    const htmlStyles = getComputedStyle(document.documentElement);
+    const fgValue = bodyStyles ? bodyStyles.color : htmlStyles.color;
+    const fontFamily = bodyStyles ? bodyStyles.fontFamily : htmlStyles.fontFamily;
+    const fontSize = bodyStyles ? bodyStyles.fontSize : htmlStyles.fontSize;
+    const fg = parseColor(fgValue) || { r: 17, g: 24, b: 39, a: 1 };
+
+    const bodyBg = bodyStyles ? parseColor(bodyStyles.backgroundColor) : null;
+    const htmlBg = parseColor(htmlStyles.backgroundColor);
+    let bg = bodyBg && bodyBg.a > 0.05 ? bodyBg : htmlBg && htmlBg.a > 0.05 ? htmlBg : null;
+    if (!bg) {
+      const prefersDark =
+        typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      bg = prefersDark || relativeLuminance(fg) > 0.6 ? { r: 9, g: 10, b: 11, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
+    }
+
+    const isDark = relativeLuminance(bg) < 0.5;
+
+    const link = document.querySelector("a[href]");
+    const linkColor = link ? parseColor(getComputedStyle(link).color) : null;
+    const accent = linkColor && linkColor.a > 0.5 ? linkColor : fg;
+    const accentContrast = relativeLuminance(accent) > 0.6 ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 };
+
+    const surface = rgbaCss(bg, isDark ? 0.62 : 0.72);
+    const surfaceStrong = rgbaCss(bg, isDark ? 0.82 : 0.92);
+    const border = rgbaCss(fg, isDark ? 0.22 : 0.14);
+    const muted = rgbaCss(fg, isDark ? 0.72 : 0.68);
+    const bubbleAssistant = rgbCss(mixRgb(bg, fg, isDark ? 0.08 : 0.04));
+    const bubbleUser = rgbCss(mixRgb(bg, fg, isDark ? 0.14 : 0.07));
+    const codeBg = rgbCss(mixRgb(bg, fg, isDark ? 0.18 : 0.09));
+    const scrim = isDark ? "rgba(0, 0, 0, 0.55)" : "rgba(0, 0, 0, 0.22)";
+    const shadowColor = isDark ? "rgba(0, 0, 0, 0.62)" : "rgba(0, 0, 0, 0.20)";
+    const focus = rgbaCss(accent, isDark ? 0.45 : 0.32);
+
+    return {
+      fontFamily,
+      fontSize,
+      fg: rgbCss(fg),
+      bg: rgbCss(bg),
+      muted,
+      surface,
+      surfaceStrong,
+      border,
+      shadowColor,
+      scrim,
+      accent: rgbCss(accent),
+      accentContrast: rgbCss(accentContrast),
+      bubbleAssistant,
+      bubbleUser,
+      codeBg,
+      focus,
+    };
+  }
+
+  function applyThemeVariables(host) {
+    const theme = inferThemeFromPage();
+    host.style.setProperty("--cta-font-family", theme.fontFamily);
+    host.style.setProperty("--cta-font-size", theme.fontSize);
+    host.style.setProperty("--cta-fg", theme.fg);
+    host.style.setProperty("--cta-bg", theme.bg);
+    host.style.setProperty("--cta-fg-muted", theme.muted);
+    host.style.setProperty("--cta-surface", theme.surface);
+    host.style.setProperty("--cta-surface-strong", theme.surfaceStrong);
+    host.style.setProperty("--cta-border", theme.border);
+    host.style.setProperty("--cta-shadow-color", theme.shadowColor);
+    host.style.setProperty("--cta-scrim", theme.scrim);
+    host.style.setProperty("--cta-accent", theme.accent);
+    host.style.setProperty("--cta-accent-contrast", theme.accentContrast);
+    host.style.setProperty("--cta-bubble-assistant", theme.bubbleAssistant);
+    host.style.setProperty("--cta-bubble-user", theme.bubbleUser);
+    host.style.setProperty("--cta-code-bg", theme.codeBg);
+    host.style.setProperty("--cta-focus", theme.focus);
+  }
+
+  function observeTheme(host) {
+    let frame = null;
+    const requestSync = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        applyThemeVariables(host);
+      });
+    };
+
+    applyThemeVariables(host);
+
+    const observer = new MutationObserver(requestSync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    if (document.body) {
+      observer.observe(document.body, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    }
+
+    if (typeof window.matchMedia === "function") {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      if (typeof mq.addEventListener === "function") {
+        mq.addEventListener("change", requestSync);
+      } else if (typeof mq.addListener === "function") {
+        mq.addListener(requestSync);
+      }
+    }
+  }
 
   function escapeHtml(text) {
     const div = document.createElement("div");
@@ -16,8 +188,15 @@
   }
 
   function getScriptData() {
-    const scripts = document.querySelectorAll("script[data-agent-id]");
-    const script = scripts[scripts.length - 1];
+    const current = document.currentScript;
+    const fromCurrent =
+      current && current.tagName === "SCRIPT" && current.getAttribute && current.getAttribute("data-agent-id") ? current : null;
+    const script =
+      fromCurrent ||
+      (() => {
+        const scripts = document.querySelectorAll("script[data-agent-id]");
+        return scripts.length ? scripts[scripts.length - 1] : null;
+      })();
     if (!script) return null;
     return {
       agentId: script.getAttribute("data-agent-id"),
@@ -37,6 +216,23 @@
   function saveState(state) {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {}
+  }
+
+  function loadUiState() {
+    try {
+      const raw = localStorage.getItem(UI_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveUiState(ui) {
+    try {
+      localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(ui || {}));
     } catch {}
   }
 
@@ -219,155 +415,335 @@
   function createStyles() {
     const style = document.createElement("style");
     style.textContent = `
+      :host {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        z-index: 2147483000;
+        font-family: var(--cta-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+        font-size: var(--cta-font-size, 14px);
+        color: var(--cta-fg, #111827);
+        --cta-bg: #ffffff;
+        --cta-fg-muted: rgba(17, 24, 39, 0.7);
+        --cta-surface: rgba(255, 255, 255, 0.72);
+        --cta-surface-strong: rgba(255, 255, 255, 0.92);
+        --cta-border: rgba(17, 24, 39, 0.12);
+        --cta-shadow-color: rgba(0, 0, 0, 0.2);
+        --cta-scrim: rgba(0, 0, 0, 0.22);
+        --cta-accent: rgb(37, 99, 235);
+        --cta-accent-contrast: rgb(255, 255, 255);
+        --cta-bubble-assistant: rgba(17, 24, 39, 0.06);
+        --cta-bubble-user: rgba(17, 24, 39, 0.08);
+        --cta-code-bg: rgba(17, 24, 39, 0.1);
+        --cta-focus: rgba(37, 99, 235, 0.32);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+
       .cta-widget-toggle {
         position: fixed;
-        bottom: 24px;
-        right: 24px;
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        border: none;
-        cursor: pointer;
-        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+        top: 70vh;
+        right: calc(16px + env(safe-area-inset-right, 0px));
+        transform: translateY(-50%) translateX(10px);
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        background: var(--cta-surface);
+        border: 1px solid var(--cta-border);
+        color: var(--cta-accent);
+        cursor: grab;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: transform 0.2s, box-shadow 0.2s;
-        z-index: 99999;
+        pointer-events: auto;
+        opacity: 0.82;
+        z-index: 2;
+        touch-action: none;
+        transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        backdrop-filter: blur(18px) saturate(160%);
+        -webkit-backdrop-filter: blur(18px) saturate(160%);
       }
-      .cta-widget-toggle:hover {
-        transform: scale(1.05);
-        box-shadow: 0 6px 24px rgba(59, 130, 246, 0.5);
+
+      .cta-widget-toggle:hover,
+      .cta-widget-toggle:focus-visible,
+      .cta-widget-toggle.dragging {
+        transform: translateY(-50%) translateX(0);
+        opacity: 1;
       }
+
+      .cta-widget-toggle.dragging {
+        cursor: grabbing;
+      }
+
+      .cta-widget-toggle.open {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-50%) translateX(18px);
+      }
+
+      .cta-widget-toggle:focus-visible {
+        outline: none;
+        box-shadow: 0 18px 60px var(--cta-shadow-color), 0 0 0 4px var(--cta-focus);
+      }
+
       .cta-widget-toggle svg {
-        width: 28px;
-        height: 28px;
-        color: white;
+        width: 22px;
+        height: 22px;
       }
-      .cta-widget-toggle .cta-dot {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 10px;
-        height: 10px;
-        background: #ef4444;
-        border-radius: 50%;
-        border: 2px solid white;
+
+      @media (hover: none) {
+        .cta-widget-toggle {
+          transform: translateY(-50%);
+          opacity: 0.9;
+        }
       }
+
+      .cta-widget-scrim {
+        position: fixed;
+        inset: 0;
+        background: var(--cta-scrim);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms ease;
+      }
+
+      @media (max-width: 900px) {
+        .cta-widget-scrim.open {
+          opacity: 1;
+          pointer-events: auto;
+        }
+      }
+
       .cta-widget-panel {
         position: fixed;
-        bottom: 96px;
-        right: 24px;
-        width: 400px;
-        max-width: calc(100vw - 48px);
-        height: 560px;
-        max-height: calc(100vh - 120px);
-        background: #ffffff;
-        border-radius: 16px;
-        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
-        display: none;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(440px, calc(100vw - 56px));
+        max-width: 100vw;
+        background: var(--cta-surface);
+        border-left: 1px solid var(--cta-border);
+        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        display: flex;
         flex-direction: column;
         overflow: hidden;
-        z-index: 99998;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        color-scheme: light;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateX(calc(100% + 16px));
+        transition: transform 240ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 200ms ease;
+        border-radius: 18px 0 0 18px;
+        z-index: 3;
+        backdrop-filter: blur(22px) saturate(160%);
+        -webkit-backdrop-filter: blur(22px) saturate(160%);
       }
+
       .cta-widget-panel.open {
-        display: flex;
+        pointer-events: auto;
+        opacity: 1;
+        transform: translateX(0);
       }
+
+      @media (max-width: 640px) {
+        .cta-widget-panel {
+          width: 100vw;
+          border-radius: 0;
+        }
+      }
+
       .cta-widget-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 16px 20px;
-        border-bottom: 1px solid #e5e7eb;
-        background: #fafafa;
+        gap: 12px;
+        padding: 14px 16px;
+        padding-top: calc(14px + env(safe-area-inset-top, 0px));
+        border-bottom: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
       }
+
       .cta-widget-header-left {
         display: flex;
         align-items: center;
         gap: 12px;
+        min-width: 0;
       }
+
       .cta-widget-avatar {
-        width: 40px;
-        height: 40px;
-        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        width: 36px;
+        height: 36px;
         border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
+        background: var(--cta-bubble-assistant);
+        border: 1px solid var(--cta-border);
+        flex-shrink: 0;
+        position: relative;
       }
+
       .cta-widget-avatar svg {
-        width: 20px;
-        height: 20px;
-        color: #3b82f6;
+        width: 18px;
+        height: 18px;
+        color: var(--cta-accent);
       }
+
       .cta-widget-avatar .cta-status {
         position: absolute;
-        bottom: -2px;
-        left: -2px;
-        width: 12px;
-        height: 12px;
-        background: #22c55e;
-        border-radius: 50%;
-        border: 2px solid white;
+        bottom: -3px;
+        left: -3px;
+        width: 10px;
+        height: 10px;
+        background: rgb(34, 197, 94);
+        border-radius: 999px;
+        box-shadow: 0 0 0 2px var(--cta-surface-strong);
       }
+
       .cta-widget-title {
-        font-size: 15px;
-        font-weight: 600;
-        color: #111827;
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
         margin: 0;
+        color: var(--cta-fg);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
+
       .cta-widget-subtitle {
         font-size: 12px;
-        color: #6b7280;
         margin: 0;
+        color: var(--cta-fg-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .cta-widget-close {
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 8px;
-        border-radius: 8px;
-        color: #6b7280;
-        transition: background 0.15s;
-      }
-      .cta-widget-close:hover {
-        background: #f3f4f6;
-      }
-      .cta-widget-close svg {
-        width: 20px;
-        height: 20px;
-      }
+
       .cta-widget-header-actions {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-shrink: 0;
       }
+
+      .cta-widget-close {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        background: transparent;
+        border: 1px solid var(--cta-border);
+        cursor: pointer;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        opacity: 0.9;
+        transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+
+      .cta-widget-close:hover {
+        opacity: 1;
+        border-color: var(--cta-accent);
+      }
+
+      .cta-widget-close-hint {
+        display: none;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: 1px solid var(--cta-border);
+        color: var(--cta-fg-muted);
+        font-size: 11px;
+        line-height: 1;
+        opacity: 0.8;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        .cta-widget-close {
+          width: auto;
+          padding: 0 10px;
+        }
+
+        .cta-widget-close-hint {
+          display: inline-flex;
+        }
+      }
+
+      .cta-widget-close:active {
+        transform: translateY(1px);
+      }
+
+      .cta-widget-close:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
+      .cta-widget-close svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .cta-widget-new-chat {
+        height: 36px;
+        padding: 0 10px;
+        background: transparent;
+        border: 1px solid var(--cta-border);
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 12px;
+        opacity: 0.9;
+        transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+
+      .cta-widget-new-chat:hover {
+        opacity: 1;
+        border-color: var(--cta-accent);
+      }
+
+      .cta-widget-new-chat:active {
+        transform: translateY(1px);
+      }
+
+      .cta-widget-new-chat:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
       .cta-widget-messages {
         flex: 1;
         overflow-y: auto;
-        padding: 20px;
+        padding: 16px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
         scrollbar-width: thin;
-        scrollbar-color: #d1d5db #f9fafb;
+        scrollbar-color: var(--cta-border) transparent;
       }
+
       .cta-widget-messages::-webkit-scrollbar {
-        width: 8px;
+        width: 10px;
       }
-      .cta-widget-messages::-webkit-scrollbar-track {
-        background: #f9fafb;
-      }
+
       .cta-widget-messages::-webkit-scrollbar-thumb {
-        background: #d1d5db;
+        background: var(--cta-border);
         border-radius: 999px;
+        border: 3px solid transparent;
+        background-clip: content-box;
       }
-      .cta-widget-messages::-webkit-scrollbar-thumb:hover {
-        background: #c0c4cc;
-      }
+
       .cta-widget-empty {
         flex: 1;
         display: flex;
@@ -375,55 +751,64 @@
         align-items: center;
         justify-content: center;
         text-align: center;
-        padding: 40px 20px;
-        color: #6b7280;
+        padding: 28px 18px;
+        color: var(--cta-fg-muted);
       }
+
       .cta-widget-empty-icon {
-        width: 64px;
-        height: 64px;
-        background: #f3f4f6;
-        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
+        background: var(--cta-bubble-assistant);
+        border: 1px solid var(--cta-border);
       }
+
       .cta-widget-empty-icon svg {
-        width: 32px;
-        height: 32px;
-        color: #9ca3af;
+        width: 28px;
+        height: 28px;
+        color: var(--cta-accent);
       }
+
       .cta-widget-empty h3 {
-        font-size: 16px;
-        font-weight: 600;
-        color: #374151;
+        font-size: 14px;
+        font-weight: 650;
         margin: 0 0 8px;
+        color: var(--cta-fg);
+        letter-spacing: -0.01em;
       }
+
       .cta-widget-empty p {
-        font-size: 14px;
+        font-size: 13px;
         margin: 0;
-        max-width: 280px;
+        max-width: 320px;
       }
+
       .cta-widget-message {
-        max-width: 85%;
-        padding: 12px 16px;
+        max-width: 92%;
+        padding: 10px 12px;
         border-radius: 16px;
-        font-size: 14px;
-        line-height: 1.5;
+        font-size: 13px;
+        line-height: 1.55;
         word-wrap: break-word;
+        border: 1px solid var(--cta-border);
       }
+
       .cta-widget-message.user {
         align-self: flex-end;
-        background: #3b82f6;
-        color: white;
-        border-bottom-right-radius: 4px;
+        background: var(--cta-bubble-user);
+        border-bottom-right-radius: 6px;
       }
+
       .cta-widget-message.assistant {
         align-self: flex-start;
-        background: #f3f4f6;
-        color: #111827;
-        border-bottom-left-radius: 4px;
+        background: var(--cta-bubble-assistant);
+        border-bottom-left-radius: 6px;
       }
+
       .cta-widget-message h1,
       .cta-widget-message h2,
       .cta-widget-message h3,
@@ -431,15 +816,18 @@
       .cta-widget-message h5,
       .cta-widget-message h6 {
         margin: 0 0 8px;
-        line-height: 1.3;
+        line-height: 1.25;
         font-weight: 700;
+        letter-spacing: -0.01em;
       }
-      .cta-widget-message h1 { font-size: 18px; }
-      .cta-widget-message h2 { font-size: 17px; }
-      .cta-widget-message h3 { font-size: 16px; }
+
+      .cta-widget-message h1 { font-size: 16px; }
+      .cta-widget-message h2 { font-size: 15px; }
+      .cta-widget-message h3,
       .cta-widget-message h4,
       .cta-widget-message h5,
-      .cta-widget-message h6 { font-size: 15px; }
+      .cta-widget-message h6 { font-size: 14px; }
+
       .cta-widget-message p,
       .cta-widget-message ul,
       .cta-widget-message ol,
@@ -448,303 +836,357 @@
       .cta-widget-message blockquote {
         margin: 0 0 10px;
       }
+
       .cta-widget-message ul,
       .cta-widget-message ol {
-        padding-left: 20px;
+        padding-left: 18px;
       }
+
       .cta-widget-message li {
         margin-bottom: 6px;
       }
+
       .cta-widget-message blockquote {
-        padding-left: 12px;
-        border-left: 3px solid #e5e7eb;
-        color: #4b5563;
+        padding-left: 10px;
+        border-left: 3px solid var(--cta-border);
+        color: var(--cta-fg-muted);
       }
+
       .cta-widget-message a {
-        color: inherit;
+        color: var(--cta-accent);
         text-decoration: underline;
-        word-break: break-all;
+        word-break: break-word;
       }
-      .cta-widget-message.assistant a {
-        color: #1d4ed8;
-      }
+
       .cta-widget-message code {
-        background: rgba(17, 24, 39, 0.06);
+        background: var(--cta-code-bg);
         padding: 2px 6px;
-        border-radius: 6px;
-        font-size: 13px;
+        border-radius: 8px;
+        font-size: 12px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        border: 1px solid var(--cta-border);
       }
-      .cta-widget-message.user code {
-        background: rgba(255, 255, 255, 0.2);
-      }
+
       .cta-widget-message pre {
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 12px;
-        border-radius: 12px;
+        background: var(--cta-code-bg);
+        padding: 10px;
+        border-radius: 14px;
         overflow-x: auto;
         max-width: 100%;
+        border: 1px solid var(--cta-border);
       }
+
       .cta-widget-message pre code {
         background: transparent;
         padding: 0;
-        color: inherit;
+        border: none;
       }
+
       .cta-widget-message table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 13px;
+        font-size: 12px;
         display: block;
         overflow-x: auto;
       }
+
+      .cta-widget-message img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 12px;
+        border: 1px solid var(--cta-border);
+      }
+
       .cta-widget-message th,
       .cta-widget-message td {
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--cta-border);
         padding: 8px 10px;
         text-align: left;
       }
-      .cta-widget-message tr:nth-child(even) {
-        background: #f9fafb;
-      }
+
       .cta-widget-message > :last-child {
         margin-bottom: 0;
       }
+
       .cta-widget-loading {
         align-self: flex-start;
         display: flex;
-        gap: 4px;
-        padding: 16px;
+        gap: 6px;
+        padding: 12px;
       }
+
       .cta-widget-loading span {
-        width: 8px;
-        height: 8px;
-        background: #9ca3af;
-        border-radius: 50%;
+        width: 7px;
+        height: 7px;
+        background: var(--cta-fg-muted);
+        border-radius: 999px;
         animation: cta-bounce 1.4s ease-in-out infinite;
       }
-      .cta-widget-loading span:nth-child(1) { animation-delay: 0s; }
+
       .cta-widget-loading span:nth-child(2) { animation-delay: 0.2s; }
       .cta-widget-loading span:nth-child(3) { animation-delay: 0.4s; }
+
       @keyframes cta-bounce {
         0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
         40% { transform: scale(1); opacity: 1; }
       }
+
       .cta-widget-input-area {
-        padding: 16px 20px;
-        border-top: 1px solid #e5e7eb;
-        background: #ffffff;
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+        border-top: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
       }
+
       .cta-widget-input-row {
         display: flex;
         gap: 8px;
         align-items: flex-end;
       }
+
       .cta-widget-input {
         flex: 1;
-        padding: 12px 16px;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        background: #ffffff;
-        color: #111827;
-        font-size: 14px;
-        resize: none;
+        height: 48px;
+        padding: 0 14px;
+        border: 1px solid transparent;
+        border-radius: 14px;
+        background: var(--cta-surface);
+        color: var(--cta-fg);
         outline: none;
-        font-family: inherit;
-        transition: border-color 0.15s;
+        min-width: 0;
+        font-size: 13px;
+        box-shadow: inset 0 0 0 1px var(--cta-border);
+        transition: box-shadow 90ms ease, background-color 90ms ease;
       }
-      .cta-widget-input:focus {
-        border-color: #3b82f6;
-      }
+
       .cta-widget-input::placeholder {
-        color: #9ca3af;
+        color: var(--cta-fg-muted);
       }
+
+      .cta-widget-input:focus {
+        box-shadow: inset 0 0 0 1px var(--cta-accent);
+      }
+
       .cta-widget-send {
-        width: 44px;
-        height: 44px;
-        background: #3b82f6;
-        border: none;
-        border-radius: 12px;
+        width: 48px;
+        height: 48px;
+        background: var(--cta-accent);
+        border: 1px solid var(--cta-accent);
+        border-radius: 14px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.15s;
+        transition: transform 160ms ease, opacity 160ms ease;
         flex-shrink: 0;
+        color: var(--cta-accent-contrast);
       }
+
       .cta-widget-send:hover:not(:disabled) {
-        background: #2563eb;
+        transform: translateY(-1px);
       }
+
       .cta-widget-send:disabled {
-        background: #93c5fd;
+        opacity: 0.6;
         cursor: not-allowed;
       }
-      .cta-widget-send svg {
-        width: 20px;
-        height: 20px;
-        color: white;
+
+      .cta-widget-send:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
       }
+
+      .cta-widget-send svg {
+        width: 18px;
+        height: 18px;
+        color: currentColor;
+      }
+
       .cta-voice-controls {
         display: flex;
         align-items: center;
         gap: 6px;
         position: relative;
       }
+
       .cta-mic-group {
         display: flex;
         align-items: center;
         gap: 0;
       }
+
       .cta-widget-mic {
         position: relative;
-        width: 44px;
-        height: 44px;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        background: #ffffff;
+        width: 48px;
+        height: 48px;
+        border: 1px solid var(--cta-border);
+        border-radius: 14px;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+        transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
         flex-shrink: 0;
       }
+
       .cta-widget-mic svg {
         width: 18px;
         height: 18px;
-        color: #374151;
+        color: var(--cta-fg);
+        opacity: 0.9;
       }
+
       .cta-widget-mic.paired {
         border-top-right-radius: 0;
         border-bottom-right-radius: 0;
       }
+
       .cta-widget-mic-select {
         width: 36px;
-        height: 44px;
-        border: 1px solid #e5e7eb;
+        height: 48px;
+        border: 1px solid var(--cta-border);
         border-left: none;
-        border-radius: 0 12px 12px 0;
+        border-radius: 0 14px 14px 0;
         margin-left: -1px;
-        background: #ffffff;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+        transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
         flex-shrink: 0;
       }
+
       .cta-widget-mic-select svg {
         width: 14px;
         height: 14px;
-        color: #374151;
+        color: var(--cta-fg);
+        opacity: 0.85;
       }
-      .cta-widget-mic:disabled {
-        cursor: not-allowed;
-        opacity: 0.6;
-      }
+
+      .cta-widget-mic:disabled,
       .cta-widget-mic-select:disabled {
         cursor: not-allowed;
-        opacity: 0.6;
+        opacity: 0.55;
       }
+
       .cta-widget-mic:hover:not(:disabled),
       .cta-widget-mic-select:hover:not(:disabled) {
-        border-color: #3b82f6;
+        border-color: var(--cta-accent);
       }
+
+      .cta-widget-mic:focus-visible,
+      .cta-widget-mic-select:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
       .cta-widget-mic.recording {
-        background: #fee2e2;
-        border-color: #ef4444;
-        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+        border-color: rgb(239, 68, 68);
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22);
         animation: cta-pulse 1.2s ease-in-out infinite;
       }
-      .cta-widget-mic.recording svg {
-        color: #b91c1c;
-      }
+
       .cta-mic-dot {
         position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #ef4444;
-        box-shadow: 0 0 0 2px #fff;
+        top: 7px;
+        right: 7px;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgb(239, 68, 68);
+        box-shadow: 0 0 0 2px var(--cta-surface-strong);
         opacity: 0;
-        transition: opacity 0.15s;
+        transition: opacity 160ms ease;
       }
+
       .cta-widget-mic.recording .cta-mic-dot {
         opacity: 1;
       }
+
       .cta-widget-mic-menu {
         position: absolute;
-        bottom: 44px;
+        bottom: 48px;
         right: 0;
-        min-width: 200px;
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+        min-width: 220px;
+        background: var(--cta-surface-strong);
+        border: 1px solid var(--cta-border);
+        border-radius: 14px;
+        box-shadow: 0 18px 60px var(--cta-shadow-color);
         display: none;
         overflow: hidden;
-        z-index: 2;
+        z-index: 5;
+        backdrop-filter: blur(18px) saturate(160%);
+        -webkit-backdrop-filter: blur(18px) saturate(160%);
       }
+
       .cta-widget-mic-menu.open {
         display: block;
       }
+
       .cta-widget-mic-menu button {
         width: 100%;
         padding: 10px 12px;
         text-align: left;
-        background: none;
+        background: transparent;
         border: none;
         cursor: pointer;
-        font-size: 13px;
-        color: #111827;
+        font-size: 12px;
+        color: var(--cta-fg);
       }
+
       .cta-widget-mic-menu button:hover {
-        background: #f3f4f6;
+        background: var(--cta-bubble-assistant);
       }
+
       .cta-widget-mic-menu button.active {
-        background: #eff6ff;
-        color: #1d4ed8;
+        background: var(--cta-bubble-user);
       }
+
       .cta-voice-hint,
       .cta-voice-error {
         margin-top: 8px;
-        padding: 6px 10px;
+        padding: 8px 10px;
         font-size: 12px;
-        line-height: 1.4;
+        line-height: 1.35;
         text-align: center;
-        border-radius: 8px;
+        border-radius: 12px;
         display: none;
         justify-content: center;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-bubble-assistant);
+        color: var(--cta-fg-muted);
       }
-      .cta-voice-hint {
-        color: #4b5563;
-        background: #f9fafb;
-      }
+
       .cta-voice-error {
-        color: #b91c1c;
-        background: #fef2f2;
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.32);
+        color: rgb(185, 28, 28);
       }
+
       @keyframes cta-pulse {
-        0% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12); }
-        50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.08); }
-        100% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12); }
+        0% { transform: scale(1); }
+        50% { transform: scale(1.03); }
+        100% { transform: scale(1); }
       }
-      .cta-widget-new-chat {
-        padding: 8px 10px;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 12px;
-        color: #374151;
-        transition: border-color 0.15s, color 0.15s, background 0.15s;
-      }
-      .cta-widget-new-chat:hover {
-        border-color: #3b82f6;
-        color: #1d4ed8;
-        background: #eff6ff;
+
+      @media (prefers-reduced-motion: reduce) {
+        .cta-widget-toggle,
+        .cta-widget-panel,
+        .cta-widget-scrim,
+        .cta-widget-send,
+        .cta-widget-new-chat,
+        .cta-widget-close,
+        .cta-widget-mic,
+        .cta-widget-mic-select {
+          transition: none !important;
+        }
+
+        .cta-widget-loading span,
+        .cta-widget-mic.recording {
+          animation: none !important;
+        }
       }
     `;
     return style;
@@ -752,9 +1194,19 @@
 
   function createWidget(config) {
     const apiUrl = API_URL;
-    const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {} };
+    const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
     if (!state.voice) state.voice = {};
     if (!state.auth) state.auth = {};
+    if (!state.ui) state.ui = {};
+    const savedUi = loadUiState();
+    if (savedUi && typeof savedUi.launcherY === "number") {
+      state.ui.launcherY = clamp(savedUi.launcherY, 0, 1);
+    }
+    if (typeof state.ui.launcherY !== "number") {
+      state.ui.launcherY = 0.72;
+      saveUiState(state.ui);
+      saveState(state);
+    }
     let headerConfig = {};
     let widgetAuthToken = state.auth.token || null;
     let widgetRefreshEndpointPath = "/widget-token";
@@ -773,12 +1225,15 @@
     let recordingTimeout = null;
     let micAccessRequested = false;
 
-    const container = document.createElement("div");
-    container.id = "cta-widget-container";
+    const root = document.createElement("div");
+
+    const scrim = document.createElement("div");
+    scrim.className = "cta-widget-scrim";
 
     const toggle = document.createElement("button");
     toggle.className = "cta-widget-toggle";
-    toggle.setAttribute("aria-label", "Open chat assistant");
+    toggle.setAttribute("aria-label", "Open Warpy");
+    toggle.setAttribute("aria-expanded", "false");
     toggle.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
@@ -789,6 +1244,10 @@
 
     const panel = document.createElement("div");
     panel.className = "cta-widget-panel";
+    panel.id = "cta-widget-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Warpy");
+    toggle.setAttribute("aria-controls", panel.id);
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
@@ -800,23 +1259,24 @@
             <span class="cta-status"></span>
           </div>
           <div>
-            <p class="cta-widget-title">Dashboard Assistant</p>
-            <p class="cta-widget-subtitle">Ready for your command</p>
+            <p class="cta-widget-title">Warpy</p>
+            <p class="cta-widget-subtitle">Ready to act</p>
           </div>
         </div>
         <div class="cta-widget-header-actions">
           <button class="cta-widget-new-chat">New chat</button>
-          <button class="cta-widget-close" aria-label="Close chat">
+          <button class="cta-widget-close" aria-label="Close (Esc)" aria-keyshortcuts="Escape" title="Close (Esc)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
+            <span class="cta-widget-close-hint" aria-hidden="true">Esc</span>
           </button>
         </div>
       </div>
       <div class="cta-widget-messages"></div>
       <div class="cta-widget-input-area">
         <div class="cta-widget-input-row">
-          <input type="text" class="cta-widget-input" placeholder="Type a command..." />
+          <input type="text" class="cta-widget-input" placeholder="Ask Warpy…" />
           <div class="cta-voice-controls">
             <div class="cta-mic-group">
               <button class="cta-widget-mic" aria-label="Start voice input" title="Start voice input">
@@ -847,8 +1307,9 @@
       </div>
     `;
 
-    container.appendChild(toggle);
-    container.appendChild(panel);
+    root.appendChild(scrim);
+    root.appendChild(toggle);
+    root.appendChild(panel);
 
     const messagesEl = panel.querySelector(".cta-widget-messages");
     const inputEl = panel.querySelector(".cta-widget-input");
@@ -862,6 +1323,92 @@
     const voiceErrorEl = panel.querySelector(".cta-voice-error");
     const renderMarkdown = createMarkdownRenderer(() => renderMessages());
 
+    function getViewportHeight() {
+      if (window.visualViewport && typeof window.visualViewport.height === "number") {
+        return window.visualViewport.height;
+      }
+      return window.innerHeight;
+    }
+
+    function applyLauncherPosition() {
+      const height = getViewportHeight();
+      const safe = 72;
+      const top = clamp(height * clamp(state.ui.launcherY, 0, 1), safe, height - safe);
+      toggle.style.top = `${Math.round(top)}px`;
+    }
+
+    function persistLauncherPosition() {
+      const height = getViewportHeight();
+      const top = parseFloat(toggle.style.top);
+      if (!Number.isFinite(top) || !Number.isFinite(height) || height <= 0) return;
+      state.ui.launcherY = clamp(top / height, 0, 1);
+      saveUiState(state.ui);
+      saveState(state);
+    }
+
+    applyLauncherPosition();
+
+    if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
+      window.visualViewport.addEventListener("resize", applyLauncherPosition, { passive: true });
+      window.visualViewport.addEventListener("scroll", applyLauncherPosition, { passive: true });
+    } else {
+      window.addEventListener("resize", applyLauncherPosition, { passive: true });
+    }
+
+    let ignoreToggleClick = false;
+    let dragPointerId = null;
+    let dragStartClientY = 0;
+    let dragStartTop = 0;
+
+    function stopDragging(event) {
+      if (dragPointerId === null) return;
+      if (event && dragPointerId !== event.pointerId) return;
+      try {
+        if (event && toggle.hasPointerCapture(event.pointerId)) {
+          toggle.releasePointerCapture(event.pointerId);
+        }
+      } catch {}
+      toggle.classList.remove("dragging");
+      if (ignoreToggleClick) {
+        persistLauncherPosition();
+        setTimeout(() => {
+          ignoreToggleClick = false;
+        }, 0);
+      }
+      dragPointerId = null;
+    }
+
+    toggle.addEventListener("pointerdown", (event) => {
+      if (isOpen) return;
+      if (typeof event.button === "number" && event.button !== 0) return;
+      dragPointerId = event.pointerId;
+      dragStartClientY = event.clientY;
+      dragStartTop =
+        parseFloat(toggle.style.top) || toggle.getBoundingClientRect().top + toggle.getBoundingClientRect().height / 2;
+      toggle.classList.add("dragging");
+      try {
+        toggle.setPointerCapture(event.pointerId);
+      } catch {}
+    });
+
+    toggle.addEventListener("pointermove", (event) => {
+      if (dragPointerId !== event.pointerId) return;
+      const delta = event.clientY - dragStartClientY;
+      if (Math.abs(delta) < 6) return;
+      const height = getViewportHeight();
+      const safe = 72;
+      const nextTop = clamp(dragStartTop + delta, safe, height - safe);
+      toggle.style.top = `${Math.round(nextTop)}px`;
+      ignoreToggleClick = true;
+    });
+
+    toggle.addEventListener("pointerup", stopDragging);
+    toggle.addEventListener("pointercancel", stopDragging);
+
+    scrim.addEventListener("click", () => {
+      if (isOpen) togglePanel();
+    });
+
     function renderMessages() {
       if (state.messages.length === 0) {
         messagesEl.innerHTML = `
@@ -872,8 +1419,8 @@
                 <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
               </svg>
             </div>
-            <h3>How can I help you?</h3>
-            <p>I can help you perform tasks and retrieve data across your dashboard. What would you like me to do?</p>
+            <h3>What would you like to do?</h3>
+            <p>Ask a question, request help, or describe what you want to get done.</p>
           </div>
         `;
         return;
@@ -976,7 +1523,15 @@
 
     function handleOutsideMenuClick(event) {
       if (!micMenuOpen) return;
-      if (micMenuEl.contains(event.target) || micSelectEl.contains(event.target) || micEl.contains(event.target)) return;
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const isInside =
+        path.includes(micMenuEl) ||
+        path.includes(micSelectEl) ||
+        path.includes(micEl) ||
+        micMenuEl.contains(event.target) ||
+        micSelectEl.contains(event.target) ||
+        micEl.contains(event.target);
+      if (isInside) return;
       closeMicMenu();
     }
 
@@ -1295,15 +1850,38 @@
       setLoading(false);
     }
 
-    function togglePanel() {
-      isOpen = !isOpen;
-      panel.classList.toggle("open", isOpen);
-      if (isOpen) {
-        inputEl.focus();
-        renderMessages();
+    function openPanel() {
+      if (isOpen) return;
+      isOpen = true;
+      panel.classList.add("open");
+      scrim.classList.add("open");
+      toggle.classList.add("open");
+      toggle.setAttribute("aria-expanded", "true");
+      inputEl.focus();
+      renderMessages();
+    }
+
+    function closePanel({ restoreLauncherFocus = true } = {}) {
+      if (!isOpen) return;
+      isOpen = false;
+      panel.classList.remove("open");
+      scrim.classList.remove("open");
+      toggle.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+      closeMicMenu();
+      stopRecording();
+      if (restoreLauncherFocus) {
+        toggle.focus();
       } else {
-        closeMicMenu();
-        stopRecording();
+        inputEl.blur();
+      }
+    }
+
+    function togglePanel() {
+      if (isOpen) {
+        closePanel();
+      } else {
+        openPanel();
       }
     }
 
@@ -1314,9 +1892,22 @@
       renderMessages();
     }
 
-    toggle.addEventListener("click", togglePanel);
+    toggle.addEventListener("click", () => {
+      if (ignoreToggleClick) return;
+      togglePanel();
+    });
     closeEl.addEventListener("click", togglePanel);
     newChatEl.addEventListener("click", startNewChat);
+    document.addEventListener("keydown", (event) => {
+      if (!isOpen) return;
+      if (event.key !== "Escape") return;
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const isFromWidget = path.includes(panel) || path.includes(root);
+      if (isFromWidget) {
+        event.stopPropagation();
+      }
+      closePanel({ restoreLauncherFocus: false });
+    });
     micEl.addEventListener("click", (event) => {
       if (isRecording) {
         stopRecording();
@@ -1372,7 +1963,7 @@
     updateMicState();
     renderMessages();
 
-    return container;
+    return root;
   }
 
   function init() {
@@ -1382,15 +1973,17 @@
       return;
     }
 
-    if (document.getElementById("cta-widget-container")) {
+    if (document.getElementById(WIDGET_CONTAINER_ID)) {
       return;
     }
 
-    const style = createStyles();
-    document.head.appendChild(style);
-
-    const widget = createWidget(config);
-    document.body.appendChild(widget);
+    const host = document.createElement("div");
+    host.id = WIDGET_CONTAINER_ID;
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    shadowRoot.appendChild(createStyles());
+    shadowRoot.appendChild(createWidget(config));
+    observeTheme(host);
+    document.body.appendChild(host);
   }
 
   if (document.readyState === "loading") {

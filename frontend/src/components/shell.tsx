@@ -86,7 +86,7 @@ const NavButton = ({ active, label, icon, onClick, collapsed }: NavButtonProps) 
 const MobileGuard = () => (
   <div
     data-testid="mobile-guard"
-    className="absolute inset-0 z-10 flex items-center justify-center bg-background/85 px-6 backdrop-blur-lg md:hidden"
+    className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-background/85 px-6 backdrop-blur-lg md:hidden"
   >
     <div className="w-full max-w-sm space-y-4 rounded-2xl border border-border bg-card/90 p-6 text-center shadow-lg">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/80 text-muted-foreground">
@@ -143,7 +143,7 @@ export const Shell = () => {
   }, [hasSyncedSection, section])
 
   return (
-    <div className="relative min-h-screen">
+    <div className={cn("relative min-h-screen", isMobile && "overflow-x-hidden")}>
       <div className={cn("flex", isMobile && "pointer-events-none opacity-50 blur-sm")}>
         <aside
           className={cn(

@@ -53,6 +53,38 @@ const createController = (timeoutMs: number) => {
   return { controller, timeoutId };
 };
 
+const extractErrorMessage = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as
+      | { detail?: unknown; message?: unknown; error?: unknown }
+      | string
+      | number
+      | null;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      if (typeof parsed.detail === "string") return parsed.detail;
+      if (Array.isArray(parsed.detail)) {
+        const parts = parsed.detail
+          .map((item) => {
+            if (!item) return "";
+            if (typeof item === "string") return item;
+            if (typeof (item as { msg?: unknown }).msg === "string") return (item as { msg: string }).msg;
+            if (typeof (item as { message?: unknown }).message === "string") return (item as { message: string }).message;
+            return "";
+          })
+          .filter(Boolean);
+        if (parts.length) return parts.join("; ");
+      }
+      if (typeof parsed.message === "string") return parsed.message;
+      if (typeof parsed.error === "string") return parsed.error;
+    }
+  } catch {
+    return trimmed;
+  }
+  return trimmed;
+};
+
 const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
   const url = new URL(path, apiUrl);
   const timeoutMs = init?.timeoutMs ?? defaultTimeoutMs;
@@ -75,7 +107,8 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
     });
 
     if (!response.ok) {
-      const message = await response.text();
+      const raw = await response.text();
+      const message = extractErrorMessage(raw);
       throw new Error(message || `Request failed with ${response.status}`);
     }
 

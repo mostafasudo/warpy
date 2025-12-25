@@ -104,7 +104,10 @@ describe("Shell", () => {
       renderShell()
     })
 
-    expect(screen.getByTestId("mobile-guard")).not.toBeNull()
+    const guard = screen.getByTestId("mobile-guard")
+    expect(guard.className).toContain("fixed")
+    expect(guard.className).toContain("inset-0")
+    expect(guard.className).toContain("overflow-hidden")
     window.matchMedia = original
   })
 

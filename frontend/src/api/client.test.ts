@@ -30,6 +30,12 @@ describe("apiClient", () => {
     await expect(apiClient.health()).rejects.toThrow("down")
   })
 
+  it("extracts detail from JSON errors", async () => {
+    mockFetch(jsonResponse({ detail: "Generate a widget API key before enabling signed widget tokens." }, 400))
+
+    await expect(apiClient.health()).rejects.toThrow("Generate a widget API key before enabling signed widget tokens.")
+  })
+
   it("falls back to status code when message is empty", async () => {
     mockFetch(textResponse("", 502))
 
