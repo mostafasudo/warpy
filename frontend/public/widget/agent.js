@@ -1292,13 +1292,14 @@
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
-          <div class="cta-widget-avatar" style="position:relative">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
-              <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
-            </svg>
-            <span class="cta-status"></span>
-          </div>
+	          <div class="cta-widget-avatar" style="position:relative">
+	            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+	              <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
+	              <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
+	              <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z"/>
+	            </svg>
+	            <span class="cta-status"></span>
+	          </div>
           <div>
             <p class="cta-widget-title">Warpy</p>
             <p class="cta-widget-subtitle">Ready to act</p>
@@ -1454,12 +1455,13 @@
       if (state.messages.length === 0) {
         messagesEl.innerHTML = `
           <div class="cta-widget-empty">
-            <div class="cta-widget-empty-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
-                <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
-              </svg>
-            </div>
+	            <div class="cta-widget-empty-icon">
+	              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+	                <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
+	                <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
+	                <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z"/>
+	              </svg>
+	            </div>
             <h3>What would you like to do?</h3>
             <p>Ask a question, request help, or describe what you want to get done.</p>
           </div>
