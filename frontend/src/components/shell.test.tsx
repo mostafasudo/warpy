@@ -128,4 +128,20 @@ describe("Shell", () => {
     expect(removeListener).toHaveBeenCalled()
     window.matchMedia = original
   })
+
+  it("blurs sidebar buttons after pointer clicks when collapsed", async () => {
+    useNavigationStore.setState({
+      section: "dashboard",
+      sidebarCollapsed: true
+    })
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+
+    await act(async () => {
+      renderShell()
+    })
+
+    const button = screen.getByRole("button", { name: "API config" })
+    await user.click(button)
+    expect(document.activeElement).not.toBe(button)
+  })
 })

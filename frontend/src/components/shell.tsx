@@ -47,7 +47,12 @@ const NavButton = ({ active, label, icon, onClick, collapsed }: NavButtonProps) 
     <Button
       type="button"
       variant="ghost"
-      onClick={onClick}
+      onClick={(event) => {
+        onClick()
+        if (event.detail > 0) {
+          event.currentTarget.blur()
+        }
+      }}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex w-full items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-200",
@@ -100,7 +105,7 @@ const MobileGuard = () => (
 
 export const Shell = () => {
   const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined" || !("matchMedia" in window)) return false
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false
     return window.matchMedia("(max-width: 767px)").matches
   })
   const [hasSyncedSection, setHasSyncedSection] = useState(false)
@@ -110,7 +115,7 @@ export const Shell = () => {
   const toggleSidebarCollapsed = useNavigationStore(navigationSelectors.toggleSidebarCollapsed)
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("matchMedia" in window)) return
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
     const media = window.matchMedia("(max-width: 767px)")
     const update = () => setIsMobile(media.matches)
     update()
