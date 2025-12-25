@@ -5,7 +5,6 @@ import clsx from "clsx"
 import { PanelShell } from "@/components/panel-shell"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -220,7 +219,9 @@ const AdvancedSecurityPanel = () => {
   const handleToggle = async (checked: boolean) => {
     try {
       await updateDraft.mutateAsync({ requireSignedWidgetToken: checked })
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update widget auth setting"
+      addToast({ title: "Update failed", description: message, variant: "error" })
     }
   }
 
@@ -242,7 +243,9 @@ const AdvancedSecurityPanel = () => {
     try {
       const created = await createApiKey.mutateAsync()
       setNewApiKey(created.apiKey)
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not generate API key"
+      addToast({ title: "API key failed", description: message, variant: "error" })
     }
   }
 
@@ -327,13 +330,23 @@ const AdvancedSecurityPanel = () => {
               <div className="space-y-6">
                 <div className="h-px bg-border" />
 
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">Require signed widget token</span>
-                  <Switch
-                    checked={effectiveRequireSignedWidgetToken}
-                    onCheckedChange={handleToggle}
-                    disabled={updateDraft.isPending}
-                  />
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold">Require signed widget token</p>
+                      <p className="text-sm text-muted-foreground">
+                        Protect the widget with short-lived JWTs (recommended).
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => void handleToggle(!effectiveRequireSignedWidgetToken)}
+                      disabled={updateDraft.isPending}
+                      variant={effectiveRequireSignedWidgetToken ? "outline" : "default"}
+                      className={clsx("w-full sm:w-auto", "justify-center")}
+                    >
+                      {effectiveRequireSignedWidgetToken ? "Disable" : "Enable"}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">

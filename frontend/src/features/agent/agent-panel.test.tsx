@@ -5,19 +5,34 @@ import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { AgentPanel } from "./agent-panel"
+import { useCreateAgent } from "@/mutations/use-create-agent"
+import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
+import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
+import { useAgentQuery } from "@/queries/use-agent"
+import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
+import { useConfigQuery } from "@/queries/use-config"
+import { useFeaturesQuery } from "@/queries/use-features"
 import { useNavigationStore } from "@/stores/navigation"
 
-var addToast: jest.Mock
-
 jest.mock("@/stores/toast", () => {
-  addToast = jest.fn()
+  const addToast = jest.fn()
+  ;(globalThis as unknown as { __toastAddToast?: jest.Mock }).__toastAddToast = addToast
+  type ToastState = { addToast: jest.Mock; toasts: unknown[]; removeToast: jest.Mock }
+  const toastState: ToastState = { addToast, toasts: [], removeToast: jest.fn() }
   return {
-    useToastStore: (selector: any) => selector({ addToast, toasts: [], removeToast: jest.fn() }),
+    useToastStore: <T,>(selector: (state: ToastState) => T) => selector(toastState),
     toastSelectors: {
-      addToast: (state: any) => state.addToast
+      addToast: (state: ToastState) => state.addToast
     }
   }
 })
+
+const getAddToast = () => {
+  const addToast = (globalThis as unknown as { __toastAddToast?: jest.Mock }).__toastAddToast
+  if (!addToast) throw new Error("addToast mock not initialized")
+  return addToast
+}
 
 jest.mock("@/queries/use-agent-widget-security", () => ({
   useAgentWidgetSecurityQuery: jest.fn(),
@@ -53,18 +68,14 @@ jest.mock("@/mutations/use-deploy-agent-widget-security", () => ({
   useDeployAgentWidgetSecurity: jest.fn()
 }))
 
-const mockedUseConfigQuery = require("@/queries/use-config").useConfigQuery as jest.Mock
-const mockedUseFeaturesQuery = require("@/queries/use-features").useFeaturesQuery as jest.Mock
-const mockedUseAgentQuery = require("@/queries/use-agent").useAgentQuery as jest.Mock
-const mockedUseCreateAgent = require("@/mutations/use-create-agent").useCreateAgent as jest.Mock
-const mockedUseAgentWidgetSecurityQuery = require("@/queries/use-agent-widget-security")
-  .useAgentWidgetSecurityQuery as jest.Mock
-const mockedUseUpdateAgentWidgetSecurityDraft = require("@/mutations/use-update-agent-widget-security-draft")
-  .useUpdateAgentWidgetSecurityDraft as jest.Mock
-const mockedUseCreateAgentWidgetApiKey = require("@/mutations/use-create-agent-widget-api-key")
-  .useCreateAgentWidgetApiKey as jest.Mock
-const mockedUseDeployAgentWidgetSecurity = require("@/mutations/use-deploy-agent-widget-security")
-  .useDeployAgentWidgetSecurity as jest.Mock
+const mockedUseConfigQuery = useConfigQuery as unknown as jest.Mock
+const mockedUseFeaturesQuery = useFeaturesQuery as unknown as jest.Mock
+const mockedUseAgentQuery = useAgentQuery as unknown as jest.Mock
+const mockedUseCreateAgent = useCreateAgent as unknown as jest.Mock
+const mockedUseAgentWidgetSecurityQuery = useAgentWidgetSecurityQuery as unknown as jest.Mock
+const mockedUseUpdateAgentWidgetSecurityDraft = useUpdateAgentWidgetSecurityDraft as unknown as jest.Mock
+const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown as jest.Mock
+const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -289,7 +300,7 @@ describe("AgentPanel", () => {
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalled()
-      expect(addToast).toHaveBeenCalledWith({
+      expect(getAddToast()).toHaveBeenCalledWith({
         title: "Copy failed",
         description: "Could not copy to clipboard.",
         variant: "error"
@@ -316,7 +327,7 @@ describe("AgentPanel", () => {
     expect(mockMutate).toHaveBeenCalled()
   })
 
-  it("stages widget auth when toggle is clicked", async () => {
+  it("stages widget auth when enable button is clicked", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
@@ -346,7 +357,7 @@ describe("AgentPanel", () => {
     render(<AgentPanel />, { wrapper: createWrapper() })
 
     await openAdvancedSecurity(user)
-    await user.click(screen.getByRole("switch"))
+    await user.click(screen.getByRole("button", { name: /enable/i }))
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({ requireSignedWidgetToken: true })
     })
@@ -434,7 +445,7 @@ describe("AgentPanel", () => {
     mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    const writeText = jest.fn((_value: string) => Promise.resolve())
+    const writeText = jest.fn(() => Promise.resolve())
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       writable: true,
@@ -452,7 +463,7 @@ describe("AgentPanel", () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining("POST /widget-token"))
       expect(writeText).toHaveBeenCalledWith(expect.not.stringContaining("{data-base-url}"))
-      expect(addToast).not.toHaveBeenCalled()
+      expect(getAddToast()).not.toHaveBeenCalled()
     })
   })
 
@@ -491,7 +502,7 @@ describe("AgentPanel", () => {
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalled()
-      expect(addToast).toHaveBeenCalledWith({
+      expect(getAddToast()).toHaveBeenCalledWith({
         title: "Copy failed",
         description: "Could not copy to clipboard.",
         variant: "error"
