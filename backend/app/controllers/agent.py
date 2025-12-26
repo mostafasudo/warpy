@@ -8,6 +8,8 @@ from ..core.database import get_session
 from ..core.logger import log_error, log_info
 from ..schemas.agent import (
     AgentResponse,
+    AgentWidgetConfigResponse,
+    AgentWidgetConfigUpdate,
     ChatRequest,
     ChatResponse,
     ConversationCreate,
@@ -35,6 +37,10 @@ from ..services.agent_widget_security_service import (
     discard_widget_security_draft,
     get_widget_security_state,
     update_widget_security_draft,
+)
+from ..services.agent_widget_config_service import (
+    get_agent_widget_config,
+    update_agent_widget_config,
 )
 
 router = APIRouter()
@@ -250,3 +256,32 @@ async def discard_widget_security_route(
     except Exception as error:
         log_error("AgentController", "discard_widget_security", "Failed to discard widget security draft", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to discard widget security draft")
+
+
+@router.get("/agent/widget-config", response_model=AgentWidgetConfigResponse)
+async def get_agent_widget_config_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> AgentWidgetConfigResponse:
+    try:
+        return get_agent_widget_config(session, clerk_session.user_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "get_widget_config", "Failed to fetch widget config", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch widget config")
+
+
+@router.put("/agent/widget-config", response_model=AgentWidgetConfigResponse)
+async def update_agent_widget_config_route(
+    payload: AgentWidgetConfigUpdate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> AgentWidgetConfigResponse:
+    try:
+        return update_agent_widget_config(session, clerk_session.user_id, payload)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "update_widget_config", "Failed to update widget config", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update widget config")

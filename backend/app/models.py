@@ -158,6 +158,16 @@ class Agent(Base):
     widget_refresh_endpoint_path_draft = Column(Text, nullable=True)
     widget_api_key_hash_draft = Column(Text, nullable=True)
     widget_api_key_last4_draft = Column(Text, nullable=True)
+    widget_title = Column(Text, nullable=False, server_default="Warpy")
+    widget_subtitle = Column(Text, nullable=False, server_default="Ready to act")
+    widget_icon_url = Column(Text, nullable=True)
+    widget_empty_title = Column(Text, nullable=False, server_default="What would you like to do?")
+    widget_empty_description = Column(
+        Text,
+        nullable=False,
+        server_default="Ask a question, request help, or describe what you want to get done.",
+    )
+    widget_input_placeholder = Column(Text, nullable=False, server_default="Ask Warpy…")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

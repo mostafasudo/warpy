@@ -1,5 +1,7 @@
 import type {
   AgentResponse,
+  AgentWidgetConfigResponse,
+  AgentWidgetConfigUpdate,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
@@ -131,6 +133,8 @@ export type HealthResponse = {
 
 export type {
   AgentResponse,
+  AgentWidgetConfigResponse,
+  AgentWidgetConfigUpdate,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
@@ -234,5 +238,11 @@ export const apiClient = {
   discardAgentWidgetSecurityDraft: () =>
     request<WidgetSecurityResponse>("/agent/widget-security/discard", {
       method: "POST",
+    }),
+  getAgentWidgetConfig: () => request<AgentWidgetConfigResponse>("/agent/widget-config"),
+  updateAgentWidgetConfig: (payload: AgentWidgetConfigUpdate) =>
+    request<AgentWidgetConfigResponse>("/agent/widget-config", {
+      method: "PUT",
+      body: JSON.stringify(payload),
     }),
 };

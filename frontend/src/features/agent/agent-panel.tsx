@@ -8,11 +8,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { getApiUrl } from "@/api/client"
 import { useAgentQuery } from "@/queries/use-agent"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
+import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
@@ -20,6 +22,7 @@ import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
 import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agent-widget-security-draft"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
+import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 
@@ -167,6 +170,288 @@ Notes
 
 - Keep this endpoint protected by your existing dashboard auth/session.
 - The widget will retry token refresh automatically on 401.`.trim()
+}
+
+type WidgetConfigDraft = {
+  widgetTitle: string
+  widgetSubtitle: string
+  widgetIconUrl: string | null
+  widgetEmptyTitle: string
+  widgetEmptyDescription: string
+  widgetInputPlaceholder: string
+}
+
+const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
+  widgetTitle: "Warpy",
+  widgetSubtitle: "Ready to act",
+  widgetIconUrl: null,
+  widgetEmptyTitle: "What would you like to do?",
+  widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
+  widgetInputPlaceholder: "Ask Warpy…"
+}
+
+const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
+  widgetTitle: value.widgetTitle.trim(),
+  widgetSubtitle: value.widgetSubtitle.trim(),
+  widgetIconUrl: value.widgetIconUrl?.trim() ? value.widgetIconUrl.trim() : null,
+  widgetEmptyTitle: value.widgetEmptyTitle.trim(),
+  widgetEmptyDescription: value.widgetEmptyDescription.trim(),
+  widgetInputPlaceholder: value.widgetInputPlaceholder.trim()
+})
+
+const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
+
+const ConfigureWidgetPanel = () => {
+  const { data, isPending } = useAgentWidgetConfigQuery()
+  const updateConfig = useUpdateAgentWidgetConfig()
+  const addToast = useToastStore(toastSelectors.addToast)
+  const [isOpen, setIsOpen] = useState(false)
+  const [draft, setDraft] = useState<WidgetConfigDraft | null>(null)
+  const [iconMode, setIconMode] = useState<"default" | "custom">("default")
+
+  useEffect(() => {
+    if (!data) return
+    setDraft(data)
+    setIconMode(data.widgetIconUrl ? "custom" : "default")
+  }, [data])
+
+  const payload = useMemo(() => {
+    if (!draft) return null
+    return normalizeWidgetConfig({
+      ...draft,
+      widgetIconUrl: iconMode === "custom" ? draft.widgetIconUrl : null
+    })
+  }, [draft, iconMode])
+
+  const payloadFingerprint = useMemo(() => (payload ? JSON.stringify(payload) : null), [payload])
+
+  const isDirty = useMemo(() => {
+    if (!data || !payloadFingerprint) return false
+    return JSON.stringify(normalizeWidgetConfig(data)) !== payloadFingerprint
+  }, [data, payloadFingerprint])
+
+  const isCustomConfig = useMemo(() => {
+    if (!payloadFingerprint) return false
+    return payloadFingerprint !== DEFAULT_WIDGET_CONFIG_FINGERPRINT
+  }, [payloadFingerprint])
+
+  const previewIconUrl = useMemo(() => {
+    if (!draft) return null
+    return iconMode === "custom" ? (draft.widgetIconUrl?.trim() ? draft.widgetIconUrl.trim() : null) : null
+  }, [draft, iconMode])
+
+  const handleSave = async () => {
+    if (!payload) return
+    try {
+      await updateConfig.mutateAsync(payload)
+      addToast({ title: "Saved", description: "Widget configuration updated.", variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update widget configuration"
+      addToast({ title: "Save failed", description: message, variant: "error" })
+    }
+  }
+
+  const handleDiscard = () => {
+    if (!data) return
+    setDraft(data)
+    setIconMode(data.widgetIconUrl ? "custom" : "default")
+  }
+
+  const handleRestoreDefaults = () => {
+    setDraft(DEFAULT_WIDGET_CONFIG)
+    setIconMode("default")
+  }
+
+  if (isPending || !draft) {
+    return (
+      <div
+        className="mt-6 rounded-xl border border-border bg-card/70 p-6 shadow-sm"
+        data-testid="configure-widget-loading"
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full sm:col-span-2" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
+        <div className="p-6">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">Configure Widget</h3>
+                  <p className="text-sm text-muted-foreground">Icon and copy</p>
+                </div>
+                {isDirty ? (
+                  <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                    Unsaved
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge variant={isCustomConfig ? "default" : "secondary"}>
+                  {isCustomConfig ? "Custom" : "Default"}
+                </Badge>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    aria-label={isOpen ? "Collapse configure widget" : "Expand configure widget"}
+                  >
+                    <span className="text-sm font-medium">{isOpen ? "Hide" : "Show"}</span>
+                    <ChevronDown
+                      className={clsx("h-4 w-4 transition-transform", isOpen && "rotate-180")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+
+            <CollapsibleContent>
+              <div className="space-y-6 pt-2">
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+                      {previewIconUrl ? (
+                        <img src={previewIconUrl} alt="Widget icon" className="h-5 w-5 rounded-sm object-contain" />
+                      ) : (
+                        <Sparkles className="h-5 w-5 text-primary" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{draft.widgetTitle}</p>
+                      <p className="truncate text-xs text-muted-foreground">{draft.widgetSubtitle}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="widget-title">Widget title</Label>
+                    <Input
+                      id="widget-title"
+                      value={draft.widgetTitle}
+                      onChange={(event) => setDraft({ ...draft, widgetTitle: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="widget-subtitle">Widget subtitle</Label>
+                    <Input
+                      id="widget-subtitle"
+                      value={draft.widgetSubtitle}
+                      onChange={(event) => setDraft({ ...draft, widgetSubtitle: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Widget icon</Label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Select
+                        value={iconMode}
+                        onValueChange={(value) => {
+                          const next = value === "custom" ? "custom" : "default"
+                          setIconMode(next)
+                          if (next === "default") {
+                            setDraft({ ...draft, widgetIconUrl: null })
+                          } else if (draft.widgetIconUrl === null) {
+                            setDraft({ ...draft, widgetIconUrl: "" })
+                          }
+                        }}
+                      >
+                        <SelectTrigger aria-label="Widget icon mode">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default sparkles</SelectItem>
+                          <SelectItem value="custom">Custom image URL</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={iconMode === "custom" ? draft.widgetIconUrl ?? "" : ""}
+                        onChange={(event) => setDraft({ ...draft, widgetIconUrl: event.target.value })}
+                        disabled={iconMode !== "custom"}
+                        placeholder="https://example.com/icon.png"
+                        aria-label="Widget icon URL"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="widget-placeholder">Input placeholder</Label>
+                    <Input
+                      id="widget-placeholder"
+                      value={draft.widgetInputPlaceholder}
+                      onChange={(event) => setDraft({ ...draft, widgetInputPlaceholder: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="widget-empty-title">Empty state title</Label>
+                    <Input
+                      id="widget-empty-title"
+                      value={draft.widgetEmptyTitle}
+                      onChange={(event) => setDraft({ ...draft, widgetEmptyTitle: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="widget-empty-description">Empty state description</Label>
+                    <Textarea
+                      id="widget-empty-description"
+                      value={draft.widgetEmptyDescription}
+                      onChange={(event) => setDraft({ ...draft, widgetEmptyDescription: event.target.value })}
+                      className="min-h-20"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+                  <Button
+                    variant="ghost"
+                    onClick={handleDiscard}
+                    disabled={!isDirty || updateConfig.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Discard changes
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRestoreDefaults}
+                    disabled={updateConfig.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Restore defaults
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={!isDirty || updateConfig.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Save changes
+                  </Button>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </div>
+      </div>
+    </Collapsible>
+  )
 }
 
 const AdvancedSecurityPanel = () => {
@@ -522,7 +807,7 @@ export const AgentPanel = () => {
   if (isPending || isCreating) {
     return (
       <PanelShell title="Activate Agent" description="Install the script to enable your agent to perform actions on behalf of your users.">
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="agent-panel-loading">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-40 w-full" />
         </div>
@@ -553,6 +838,7 @@ export const AgentPanel = () => {
       {agent ? (
         <>
           <ScriptDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
+          <ConfigureWidgetPanel />
           <AdvancedSecurityPanel />
         </>
       ) : null}

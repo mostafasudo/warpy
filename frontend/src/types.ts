@@ -129,3 +129,14 @@ export type WidgetApiKeyCreateResponse = {
   apiKey: string;
   apiKeyLast4: string;
 };
+
+export type AgentWidgetConfigResponse = {
+  widgetTitle: string;
+  widgetSubtitle: string;
+  widgetIconUrl: string | null;
+  widgetEmptyTitle: string;
+  widgetEmptyDescription: string;
+  widgetInputPlaceholder: string;
+};
+
+export type AgentWidgetConfigUpdate = AgentWidgetConfigResponse;

@@ -20,6 +20,15 @@ class WidgetConfigResponse(BaseModel):
     headers: dict[str, SessionHeaderConfig] = {}
     require_signed_widget_token: bool = Field(default=False, alias="requireSignedWidgetToken")
     widget_refresh_endpoint_path: str = Field(default="/widget-token", alias="widgetRefreshEndpointPath")
+    widget_title: str = Field(default="Warpy", alias="widgetTitle")
+    widget_subtitle: str = Field(default="Ready to act", alias="widgetSubtitle")
+    widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl")
+    widget_empty_title: str = Field(default="What would you like to do?", alias="widgetEmptyTitle")
+    widget_empty_description: str = Field(
+        default="Ask a question, request help, or describe what you want to get done.",
+        alias="widgetEmptyDescription",
+    )
+    widget_input_placeholder: str = Field(default="Ask Warpy…", alias="widgetInputPlaceholder")
 
 
 class ToolCallPayload(BaseModel):

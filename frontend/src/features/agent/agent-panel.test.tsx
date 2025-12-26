@@ -8,8 +8,10 @@ import { AgentPanel } from "./agent-panel"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
@@ -39,6 +41,11 @@ jest.mock("@/queries/use-agent-widget-security", () => ({
   agentWidgetSecurityQueryKey: ["agent", "widget-security"]
 }))
 
+jest.mock("@/queries/use-agent-widget-config", () => ({
+  useAgentWidgetConfigQuery: jest.fn(),
+  agentWidgetConfigQueryKey: ["agent", "widget-config"]
+}))
+
 jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
 }))
@@ -60,6 +67,10 @@ jest.mock("@/mutations/use-update-agent-widget-security-draft", () => ({
   useUpdateAgentWidgetSecurityDraft: jest.fn()
 }))
 
+jest.mock("@/mutations/use-update-agent-widget-config", () => ({
+  useUpdateAgentWidgetConfig: jest.fn()
+}))
+
 jest.mock("@/mutations/use-create-agent-widget-api-key", () => ({
   useCreateAgentWidgetApiKey: jest.fn()
 }))
@@ -73,9 +84,11 @@ const mockedUseFeaturesQuery = useFeaturesQuery as unknown as jest.Mock
 const mockedUseAgentQuery = useAgentQuery as unknown as jest.Mock
 const mockedUseCreateAgent = useCreateAgent as unknown as jest.Mock
 const mockedUseAgentWidgetSecurityQuery = useAgentWidgetSecurityQuery as unknown as jest.Mock
+const mockedUseAgentWidgetConfigQuery = useAgentWidgetConfigQuery as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetSecurityDraft = useUpdateAgentWidgetSecurityDraft as unknown as jest.Mock
 const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown as jest.Mock
 const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
+const mockedUseUpdateAgentWidgetConfig = useUpdateAgentWidgetConfig as unknown as jest.Mock
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -105,6 +118,15 @@ const baseWidgetSecurity = {
   hasStagedChanges: false
 }
 
+const baseWidgetConfig = {
+  widgetTitle: "Warpy",
+  widgetSubtitle: "Ready to act",
+  widgetIconUrl: null,
+  widgetEmptyTitle: "What would you like to do?",
+  widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
+  widgetInputPlaceholder: "Ask Warpy…"
+}
+
 describe("AgentPanel", () => {
   beforeEach(() => {
     useNavigationStore.setState({ section: "agent" })
@@ -125,6 +147,14 @@ describe("AgentPanel", () => {
       mutateAsync: jest.fn(),
       isPending: false
     })
+    mockedUseAgentWidgetConfigQuery.mockReturnValue({
+      data: baseWidgetConfig,
+      isPending: false
+    })
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false
+    })
   })
 
   it("shows loading skeleton when pending", () => {
@@ -135,7 +165,7 @@ describe("AgentPanel", () => {
 
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    expect(document.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0)
+    expect(screen.getByTestId("agent-panel-loading")).not.toBeNull()
   })
 
   it("shows empty state when no endpoints exist", () => {
@@ -205,7 +235,222 @@ describe("AgentPanel", () => {
     expect(screen.getByText("production")).not.toBeNull()
     const scriptCode = screen.getByTestId("script-code")
     expect(scriptCode.textContent).toContain('data-agent-id="agent-123"')
+    expect(screen.getByText("Configure Widget")).not.toBeNull()
     expect(screen.getByText("Advanced Security")).not.toBeNull()
+  })
+
+  it("shows widget config loading state when pending", () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    mockedUseAgentWidgetConfigQuery.mockReturnValue({
+      data: null,
+      isPending: true
+    })
+
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    expect(screen.getByTestId("configure-widget-loading")).not.toBeNull()
+  })
+
+  it("saves widget config changes and shows toast", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => baseWidgetConfig)
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    const titleInput = screen.getByLabelText("Widget title")
+    expect(screen.getByText("Default")).not.toBeNull()
+    await user.clear(titleInput)
+    await user.type(titleInput, "Acme Assistant")
+    expect(screen.getByText("Unsaved")).not.toBeNull()
+    expect(screen.getByText("Custom")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widgetTitle: "Acme Assistant",
+          widgetIconUrl: null
+        })
+      )
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Saved",
+        description: "Widget configuration updated.",
+        variant: "success"
+      })
+    })
+  })
+
+  it("shows error toast when widget config save fails", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => {
+      throw new Error("nope")
+    })
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    const titleInput = screen.getByLabelText("Widget title")
+    await user.clear(titleInput)
+    await user.type(titleInput, "Acme Assistant")
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalled()
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Save failed",
+        description: "nope",
+        variant: "error"
+      })
+    })
+  })
+
+  it("restores defaults and discards changes", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    const titleInput = screen.getByLabelText("Widget title")
+    await user.clear(titleInput)
+    await user.type(titleInput, "Acme Assistant")
+    expect(screen.getByText("Unsaved")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /restore defaults/i }))
+    expect(screen.queryByText("Unsaved")).toBeNull()
+    expect(screen.getByText("Default")).not.toBeNull()
+    expect((screen.getByLabelText("Widget title") as HTMLInputElement).value).toBe("Warpy")
+
+    await user.clear(screen.getByLabelText("Widget title"))
+    await user.type(screen.getByLabelText("Widget title"), "Acme Assistant")
+    expect(screen.getByText("Unsaved")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /discard changes/i }))
+    expect(screen.queryByText("Unsaved")).toBeNull()
+    expect((screen.getByLabelText("Widget title") as HTMLInputElement).value).toBe("Warpy")
+  })
+
+  it("switches icon mode and saves icon URL", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => baseWidgetConfig)
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    await user.click(screen.getByLabelText("Widget icon mode"))
+    await user.click(screen.getByRole("option", { name: "Custom image URL" }))
+
+    const iconUrlInput = screen.getByLabelText("Widget icon URL")
+    expect(iconUrlInput).not.toBeDisabled()
+    await user.type(iconUrlInput, "https://example.com/icon.png")
+    expect(screen.getByText("Custom")).not.toBeNull()
+    expect(screen.getByRole("img", { name: "Widget icon" })).toHaveAttribute("src", "https://example.com/icon.png")
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widgetIconUrl: "https://example.com/icon.png"
+        })
+      )
+    })
+
+    await user.click(screen.getByLabelText("Widget icon mode"))
+    await user.click(screen.getByRole("option", { name: "Default sparkles" }))
+
+    expect(screen.getByText("Default")).not.toBeNull()
+    expect(screen.queryByRole("img", { name: "Widget icon" })).toBeNull()
+    expect(screen.getByLabelText("Widget icon URL")).toBeDisabled()
   })
 
   it("switches environment tabs", async () => {

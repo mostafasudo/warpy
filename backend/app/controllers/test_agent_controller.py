@@ -84,3 +84,77 @@ def test_agent_conversation_and_chat_flow(client: TestClient):
     conversations = client.get("/agent/conversations", headers=auth_headers())
     assert conversations.status_code == 200
     assert len(conversations.json()) == 1
+
+
+def test_agent_widget_config_get_and_update(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    fetched = client.get("/agent/widget-config", headers=auth_headers())
+    assert fetched.status_code == 200
+    body = fetched.json()
+    assert body["widgetTitle"] == "Warpy"
+    assert body["widgetSubtitle"] == "Ready to act"
+    assert body["widgetIconUrl"] is None
+    assert body["widgetEmptyTitle"] == "What would you like to do?"
+    assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
+    assert body["widgetInputPlaceholder"] == "Ask Warpy…"
+
+    updated = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetSubtitle": "Here to help",
+            "widgetIconUrl": "https://example.com/icon.png",
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+        },
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()
+    assert updated_body["widgetTitle"] == "Acme Assistant"
+    assert updated_body["widgetIconUrl"] == "https://example.com/icon.png"
+
+    refetched = client.get("/agent/widget-config", headers=auth_headers())
+    assert refetched.status_code == 200
+    assert refetched.json()["widgetTitle"] == "Acme Assistant"
+
+
+def test_agent_widget_config_icon_url_validation(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    invalid = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetSubtitle": "Here to help",
+            "widgetIconUrl": "not a url",
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+        },
+    )
+    assert invalid.status_code == 400
+
+
+def test_agent_widget_config_rejects_blank_title(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    invalid = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "   ",
+            "widgetSubtitle": "Here to help",
+            "widgetIconUrl": None,
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+        },
+    )
+    assert invalid.status_code == 400

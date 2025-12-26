@@ -52,6 +52,21 @@ class WidgetApiKeyCreateResponse(BaseModel):
     api_key_last4: str = Field(alias="apiKeyLast4")
 
 
+class AgentWidgetConfigResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    widget_title: str = Field(alias="widgetTitle", min_length=1, max_length=80)
+    widget_subtitle: str = Field(alias="widgetSubtitle", min_length=1, max_length=80)
+    widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl", max_length=2048)
+    widget_empty_title: str = Field(alias="widgetEmptyTitle", min_length=1, max_length=120)
+    widget_empty_description: str = Field(alias="widgetEmptyDescription", min_length=1, max_length=240)
+    widget_input_placeholder: str = Field(alias="widgetInputPlaceholder", min_length=1, max_length=120)
+
+
+class AgentWidgetConfigUpdate(AgentWidgetConfigResponse):
+    pass
+
+
 class ConversationCreate(BaseModel):
     participant: str
 

@@ -499,9 +499,18 @@
         box-shadow: 0 18px 60px var(--cta-shadow-color), 0 0 0 4px var(--cta-focus);
       }
 
-      .cta-widget-toggle svg {
+      .cta-widget-toggle svg,
+      .cta-widget-toggle img {
         width: 22px;
         height: 22px;
+      }
+
+      .cta-widget-toggle img {
+        border-radius: 6px;
+        object-fit: contain;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-drag: none;
       }
 
       .cta-widget-toggle.has-unread::after {
@@ -627,10 +636,22 @@
         position: relative;
       }
 
-      .cta-widget-avatar svg {
+      .cta-widget-avatar svg,
+      .cta-widget-avatar img {
         width: 18px;
         height: 18px;
+      }
+
+      .cta-widget-avatar svg {
         color: var(--cta-accent);
+      }
+
+      .cta-widget-avatar img {
+        border-radius: 6px;
+        object-fit: contain;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-drag: none;
       }
 
       .cta-widget-avatar .cta-status {
@@ -803,10 +824,22 @@
         border: 1px solid var(--cta-border);
       }
 
-      .cta-widget-empty-icon svg {
+      .cta-widget-empty-icon svg,
+      .cta-widget-empty-icon img {
         width: 28px;
         height: 28px;
+      }
+
+      .cta-widget-empty-icon svg {
         color: var(--cta-accent);
+      }
+
+      .cta-widget-empty-icon img {
+        border-radius: 10px;
+        object-fit: contain;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-drag: none;
       }
 
       .cta-widget-empty h3 {
@@ -1266,16 +1299,7 @@
     let recordingTimeout = null;
     let micAccessRequested = false;
 
-    const root = document.createElement("div");
-
-    const scrim = document.createElement("div");
-    scrim.className = "cta-widget-scrim";
-
-    const toggle = document.createElement("button");
-    toggle.className = "cta-widget-toggle";
-    toggle.setAttribute("aria-label", "Open Warpy");
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.innerHTML = `
+    const DEFAULT_WIDGET_ICON = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
         <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
@@ -1283,26 +1307,38 @@
       </svg>
     `;
 
+    let widgetTitle = "Warpy";
+    let widgetSubtitle = "Ready to act";
+    let widgetIconUrl = null;
+    let widgetEmptyTitle = "What would you like to do?";
+    let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
+    let widgetInputPlaceholder = "Ask Warpy…";
+
+    const root = document.createElement("div");
+
+    const scrim = document.createElement("div");
+    scrim.className = "cta-widget-scrim";
+
+    const toggle = document.createElement("button");
+    toggle.className = "cta-widget-toggle";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.innerHTML = DEFAULT_WIDGET_ICON;
+
     const panel = document.createElement("div");
     panel.className = "cta-widget-panel";
     panel.id = "cta-widget-panel";
     panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Warpy");
     toggle.setAttribute("aria-controls", panel.id);
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
 	          <div class="cta-widget-avatar" style="position:relative">
-	            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-	              <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
-	              <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
-	              <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z"/>
-	            </svg>
+	            ${DEFAULT_WIDGET_ICON}
 	            <span class="cta-status"></span>
 	          </div>
           <div>
-            <p class="cta-widget-title">Warpy</p>
-            <p class="cta-widget-subtitle">Ready to act</p>
+            <p class="cta-widget-title"></p>
+            <p class="cta-widget-subtitle"></p>
           </div>
         </div>
         <div class="cta-widget-header-actions">
@@ -1318,7 +1354,7 @@
       <div class="cta-widget-messages"></div>
       <div class="cta-widget-input-area">
         <div class="cta-widget-input-row">
-          <input type="text" class="cta-widget-input" placeholder="Ask Warpy…" />
+          <input type="text" class="cta-widget-input" placeholder="" />
           <div class="cta-voice-controls">
             <div class="cta-mic-group">
               <button class="cta-widget-mic" aria-label="Start voice input" title="Start voice input">
@@ -1363,7 +1399,50 @@
     const micMenuEl = panel.querySelector(".cta-widget-mic-menu");
     const voiceHintEl = panel.querySelector(".cta-voice-hint");
     const voiceErrorEl = panel.querySelector(".cta-voice-error");
+    const titleEl = panel.querySelector(".cta-widget-title");
+    const subtitleEl = panel.querySelector(".cta-widget-subtitle");
+    const avatarEl = panel.querySelector(".cta-widget-avatar");
     const renderMarkdown = createMarkdownRenderer(() => renderMessages());
+
+    function getToggleAriaLabel() {
+      return hasUnread ? `Open ${widgetTitle} (new message)` : `Open ${widgetTitle}`;
+    }
+
+    function getIconMarkup() {
+      if (!widgetIconUrl) return DEFAULT_WIDGET_ICON;
+      return `<img src="${escapeHtml(widgetIconUrl)}" alt="" aria-hidden="true" draggable="false" />`;
+    }
+
+    function syncToggleAriaLabel() {
+      toggle.setAttribute("aria-label", getToggleAriaLabel());
+    }
+
+    function syncHeader() {
+      panel.setAttribute("aria-label", widgetTitle);
+      if (titleEl) titleEl.textContent = widgetTitle;
+      if (subtitleEl) subtitleEl.textContent = widgetSubtitle;
+      if (inputEl) inputEl.setAttribute("placeholder", widgetInputPlaceholder);
+    }
+
+    function syncIcons() {
+      toggle.innerHTML = getIconMarkup();
+      if (!avatarEl) return;
+      const statusEl = avatarEl.querySelector(".cta-status");
+      const existingIcon = avatarEl.querySelector("svg, img");
+      if (existingIcon) existingIcon.remove();
+      if (statusEl) {
+        statusEl.insertAdjacentHTML("beforebegin", getIconMarkup());
+      } else {
+        avatarEl.insertAdjacentHTML("afterbegin", getIconMarkup());
+      }
+    }
+
+    function applyWidgetUiConfig() {
+      syncHeader();
+      syncIcons();
+      syncToggleAriaLabel();
+      renderMessages();
+    }
 
     function getViewportHeight() {
       if (window.visualViewport && typeof window.visualViewport.height === "number") {
@@ -1456,14 +1535,10 @@
         messagesEl.innerHTML = `
           <div class="cta-widget-empty">
 	            <div class="cta-widget-empty-icon">
-	              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-	                <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
-	                <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
-	                <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z"/>
-	              </svg>
+	              ${getIconMarkup()}
 	            </div>
-            <h3>What would you like to do?</h3>
-            <p>Ask a question, request help, or describe what you want to get done.</p>
+            <h3>${escapeHtml(widgetEmptyTitle)}</h3>
+            <p>${escapeHtml(widgetEmptyDescription)}</p>
           </div>
         `;
         return;
@@ -1767,6 +1842,23 @@
           const data = await res.json();
           headerConfig = data.headers || {};
           widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
+          if (typeof data.widgetTitle === "string" && data.widgetTitle.trim()) {
+            widgetTitle = data.widgetTitle.trim();
+          }
+          if (typeof data.widgetSubtitle === "string" && data.widgetSubtitle.trim()) {
+            widgetSubtitle = data.widgetSubtitle.trim();
+          }
+          widgetIconUrl = typeof data.widgetIconUrl === "string" && data.widgetIconUrl.trim() ? data.widgetIconUrl.trim() : null;
+          if (typeof data.widgetEmptyTitle === "string" && data.widgetEmptyTitle.trim()) {
+            widgetEmptyTitle = data.widgetEmptyTitle.trim();
+          }
+          if (typeof data.widgetEmptyDescription === "string" && data.widgetEmptyDescription.trim()) {
+            widgetEmptyDescription = data.widgetEmptyDescription.trim();
+          }
+          if (typeof data.widgetInputPlaceholder === "string" && data.widgetInputPlaceholder.trim()) {
+            widgetInputPlaceholder = data.widgetInputPlaceholder.trim();
+          }
+          applyWidgetUiConfig();
         }
       } catch {}
     }
@@ -1825,7 +1917,7 @@
     function setUnread(nextHasUnread) {
       hasUnread = Boolean(nextHasUnread);
       toggle.classList.toggle("has-unread", hasUnread);
-      toggle.setAttribute("aria-label", hasUnread ? "Open Warpy (new message)" : "Open Warpy");
+      syncToggleAriaLabel();
     }
 
     function playUnreadPulse() {
@@ -2033,7 +2125,7 @@
     ensureConfigLoaded();
     refreshDevices(false);
     updateMicState();
-    renderMessages();
+    applyWidgetUiConfig();
 
     return root;
   }
