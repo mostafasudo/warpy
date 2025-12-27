@@ -309,4 +309,24 @@ describe("apiClient", () => {
       expect.objectContaining({ method: "PUT" })
     )
   })
+
+  it("supports widget install operations", async () => {
+    const responses = [
+      jsonResponse({ framework: "react", packageManager: "npm" }),
+      jsonResponse({ framework: "vue", packageManager: "pnpm" })
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getAgentWidgetInstall()
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/agent/widget-install", "http://api.test"), expect.any(Object))
+
+    await apiClient.updateAgentWidgetInstall({ framework: "vue", packageManager: "pnpm" })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/widget-install", "http://api.test"),
+      expect.objectContaining({ method: "PUT" })
+    )
+  })
 })

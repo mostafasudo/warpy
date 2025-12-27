@@ -8,10 +8,12 @@ import { AgentPanel } from "./agent-panel"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useAgentQuery } from "@/queries/use-agent"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
+import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
@@ -46,6 +48,11 @@ jest.mock("@/queries/use-agent-widget-config", () => ({
   agentWidgetConfigQueryKey: ["agent", "widget-config"]
 }))
 
+jest.mock("@/queries/use-agent-widget-install", () => ({
+  useAgentWidgetInstallQuery: jest.fn(),
+  agentWidgetInstallQueryKey: ["agent", "widget-install"]
+}))
+
 jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
 }))
@@ -71,6 +78,10 @@ jest.mock("@/mutations/use-update-agent-widget-config", () => ({
   useUpdateAgentWidgetConfig: jest.fn()
 }))
 
+jest.mock("@/mutations/use-update-agent-widget-install", () => ({
+  useUpdateAgentWidgetInstall: jest.fn()
+}))
+
 jest.mock("@/mutations/use-create-agent-widget-api-key", () => ({
   useCreateAgentWidgetApiKey: jest.fn()
 }))
@@ -85,10 +96,12 @@ const mockedUseAgentQuery = useAgentQuery as unknown as jest.Mock
 const mockedUseCreateAgent = useCreateAgent as unknown as jest.Mock
 const mockedUseAgentWidgetSecurityQuery = useAgentWidgetSecurityQuery as unknown as jest.Mock
 const mockedUseAgentWidgetConfigQuery = useAgentWidgetConfigQuery as unknown as jest.Mock
+const mockedUseAgentWidgetInstallQuery = useAgentWidgetInstallQuery as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetSecurityDraft = useUpdateAgentWidgetSecurityDraft as unknown as jest.Mock
 const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown as jest.Mock
 const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetConfig = useUpdateAgentWidgetConfig as unknown as jest.Mock
+const mockedUseUpdateAgentWidgetInstall = useUpdateAgentWidgetInstall as unknown as jest.Mock
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -127,6 +140,28 @@ const baseWidgetConfig = {
   widgetInputPlaceholder: "Ask Warpy…"
 }
 
+const renderPanelWithInstall = (install: { framework: string; packageManager: string }) => {
+  mockedUseConfigQuery.mockReturnValue({
+    data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+    isPending: false
+  })
+  mockedUseFeaturesQuery.mockReturnValue({
+    data: baseFeatures,
+    isPending: false
+  })
+  mockedUseAgentQuery.mockReturnValue({
+    data: { id: "agent-123", userId: "user-1" },
+    isPending: false,
+    error: null
+  })
+  mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+  mockedUseAgentWidgetInstallQuery.mockReturnValue({
+    data: install,
+    isPending: false
+  })
+  render(<AgentPanel />, { wrapper: createWrapper() })
+}
+
 describe("AgentPanel", () => {
   beforeEach(() => {
     useNavigationStore.setState({ section: "agent" })
@@ -153,6 +188,14 @@ describe("AgentPanel", () => {
     })
     mockedUseUpdateAgentWidgetConfig.mockReturnValue({
       mutateAsync: jest.fn(),
+      isPending: false
+    })
+    mockedUseAgentWidgetInstallQuery.mockReturnValue({
+      data: { framework: "react", packageManager: "npm" },
+      isPending: false
+    })
+    mockedUseUpdateAgentWidgetInstall.mockReturnValue({
+      mutate: jest.fn(),
       isPending: false
     })
   })
@@ -210,7 +253,7 @@ describe("AgentPanel", () => {
     expect(useNavigationStore.getState().section).toBe("features")
   })
 
-  it("shows environment tabs and script when endpoints exist", () => {
+  it("shows environment tabs and usage when endpoints exist", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: {
         baseUrl: { local: "http://localhost:3000", production: "https://api.example.com" },
@@ -233,10 +276,37 @@ describe("AgentPanel", () => {
 
     expect(screen.getByText("local")).not.toBeNull()
     expect(screen.getByText("production")).not.toBeNull()
-    const scriptCode = screen.getByTestId("script-code")
-    expect(scriptCode.textContent).toContain('data-agent-id="agent-123"')
+    const usageCode = screen.getByTestId("usage-code")
+    expect(usageCode.textContent).toContain('agentId="agent-123"')
+    expect(screen.getByText("Install")).not.toBeNull()
+    expect(screen.getByText("Usage")).not.toBeNull()
     expect(screen.getByText("Configure Widget")).not.toBeNull()
     expect(screen.getByText("Advanced Security")).not.toBeNull()
+  })
+
+  it.each([
+    ["script", "<script src="],
+    ["react", "@warpy-ai/widget/react"],
+    ["vue", "@warpy-ai/widget/vue"],
+    ["angular", "@warpy-ai/widget/angular"],
+    ["svelte", "@warpy-ai/widget/svelte"],
+    ["vanilla", "mountWidget({"]
+  ])("renders %s usage snippet", (framework, expected) => {
+    renderPanelWithInstall({ framework, packageManager: "npm" })
+
+    const usageCode = screen.getByTestId("usage-code")
+    expect(usageCode.textContent).toContain(expected)
+  })
+
+  it.each([
+    ["npm", "npm install @warpy-ai/widget"],
+    ["pnpm", "pnpm add @warpy-ai/widget"],
+    ["yarn", "yarn add @warpy-ai/widget"]
+  ])("renders %s install command", (packageManager, expected) => {
+    renderPanelWithInstall({ framework: "react", packageManager })
+
+    const installCode = screen.getByTestId("install-code")
+    expect(installCode.textContent).toContain(expected)
   })
 
   it("shows widget config loading state when pending", () => {
@@ -477,8 +547,8 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByText("production"))
 
-    const scriptCode = screen.getByTestId("script-code")
-    expect(scriptCode.textContent).toContain('data-base-url="https://api.example.com"')
+    const usageCode = screen.getByTestId("usage-code")
+    expect(usageCode.textContent).toContain('baseUrl="https://api.example.com"')
   })
 
   it("shows copied state when copy button is clicked", async () => {
@@ -507,11 +577,50 @@ describe("AgentPanel", () => {
     render(<AgentPanel />, { wrapper: createWrapper() })
 
     expect(screen.getByText("Copy")).not.toBeNull()
-    await user.click(screen.getByTestId("copy-script-button"))
+    await user.click(screen.getByTestId("copy-usage-button"))
 
     await waitFor(() => {
       expect(screen.getByText("Copied")).not.toBeNull()
     })
+  })
+
+  it("persists widget install selections", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: baseFeatures,
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutate = jest.fn()
+    mockedUseUpdateAgentWidgetInstall.mockReturnValue({
+      mutate,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByLabelText("Framework"))
+    await user.click(screen.getByRole("option", { name: "Script tag" }))
+
+    expect(mutate).toHaveBeenCalledWith({ framework: "script", packageManager: "npm" })
+    await waitFor(() => {
+      expect(screen.queryByText("Install")).toBeNull()
+    })
+
+    await user.click(screen.getByLabelText("Package manager"))
+    await user.click(screen.getByRole("option", { name: "pnpm" }))
+
+    expect(mutate).toHaveBeenCalledWith({ framework: "script", packageManager: "pnpm" })
   })
 
   it("shows error toast when script copy fails", async () => {
@@ -541,7 +650,7 @@ describe("AgentPanel", () => {
 
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    fireEvent.click(screen.getByTestId("copy-script-button"))
+    fireEvent.click(screen.getByTestId("copy-usage-button"))
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalled()

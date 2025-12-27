@@ -140,3 +140,14 @@ export type AgentWidgetConfigResponse = {
 };
 
 export type AgentWidgetConfigUpdate = AgentWidgetConfigResponse;
+
+export type WidgetInstallFramework = "script" | "react" | "vue" | "angular" | "svelte" | "vanilla";
+
+export type WidgetInstallPackageManager = "npm" | "pnpm" | "yarn";
+
+export type AgentWidgetInstallResponse = {
+  framework: WidgetInstallFramework;
+  packageManager: WidgetInstallPackageManager;
+};
+
+export type AgentWidgetInstallUpdate = AgentWidgetInstallResponse;

@@ -2,6 +2,8 @@ import type {
   AgentResponse,
   AgentWidgetConfigResponse,
   AgentWidgetConfigUpdate,
+  AgentWidgetInstallResponse,
+  AgentWidgetInstallUpdate,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
@@ -135,6 +137,8 @@ export type {
   AgentResponse,
   AgentWidgetConfigResponse,
   AgentWidgetConfigUpdate,
+  AgentWidgetInstallResponse,
+  AgentWidgetInstallUpdate,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
@@ -242,6 +246,12 @@ export const apiClient = {
   getAgentWidgetConfig: () => request<AgentWidgetConfigResponse>("/agent/widget-config"),
   updateAgentWidgetConfig: (payload: AgentWidgetConfigUpdate) =>
     request<AgentWidgetConfigResponse>("/agent/widget-config", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  getAgentWidgetInstall: () => request<AgentWidgetInstallResponse>("/agent/widget-install"),
+  updateAgentWidgetInstall: (payload: AgentWidgetInstallUpdate) =>
+    request<AgentWidgetInstallResponse>("/agent/widget-install", {
       method: "PUT",
       body: JSON.stringify(payload),
     }),

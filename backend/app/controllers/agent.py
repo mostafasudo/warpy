@@ -10,6 +10,8 @@ from ..schemas.agent import (
     AgentResponse,
     AgentWidgetConfigResponse,
     AgentWidgetConfigUpdate,
+    AgentWidgetInstallResponse,
+    AgentWidgetInstallUpdate,
     ChatRequest,
     ChatResponse,
     ConversationCreate,
@@ -41,6 +43,10 @@ from ..services.agent_widget_security_service import (
 from ..services.agent_widget_config_service import (
     get_agent_widget_config,
     update_agent_widget_config,
+)
+from ..services.agent_widget_install_service import (
+    get_agent_widget_install,
+    update_agent_widget_install,
 )
 
 router = APIRouter()
@@ -285,3 +291,32 @@ async def update_agent_widget_config_route(
     except Exception as error:
         log_error("AgentController", "update_widget_config", "Failed to update widget config", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update widget config")
+
+
+@router.get("/agent/widget-install", response_model=AgentWidgetInstallResponse)
+async def get_agent_widget_install_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> AgentWidgetInstallResponse:
+    try:
+        return get_agent_widget_install(session, clerk_session.user_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "get_widget_install", "Failed to fetch widget install preferences", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch widget install preferences")
+
+
+@router.put("/agent/widget-install", response_model=AgentWidgetInstallResponse)
+async def update_agent_widget_install_route(
+    payload: AgentWidgetInstallUpdate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> AgentWidgetInstallResponse:
+    try:
+        return update_agent_widget_install(session, clerk_session.user_id, payload)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "update_widget_install", "Failed to update widget install preferences", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update widget install preferences")

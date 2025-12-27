@@ -158,3 +158,30 @@ def test_agent_widget_config_rejects_blank_title(client: TestClient):
         },
     )
     assert invalid.status_code == 400
+
+
+def test_agent_widget_install_preferences_get_and_update(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    fetched = client.get("/agent/widget-install", headers=auth_headers())
+    assert fetched.status_code == 200
+    body = fetched.json()
+    assert body["framework"] == "react"
+    assert body["packageManager"] == "npm"
+
+    updated = client.put(
+        "/agent/widget-install",
+        headers=auth_headers(),
+        json={"framework": "vue", "packageManager": "pnpm"},
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()
+    assert updated_body["framework"] == "vue"
+    assert updated_body["packageManager"] == "pnpm"
+
+    refetched = client.get("/agent/widget-install", headers=auth_headers())
+    assert refetched.status_code == 200
+    refetched_body = refetched.json()
+    assert refetched_body["framework"] == "vue"
+    assert refetched_body["packageManager"] == "pnpm"

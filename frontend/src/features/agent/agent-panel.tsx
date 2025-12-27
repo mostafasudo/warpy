@@ -15,6 +15,7 @@ import { getApiUrl } from "@/api/client"
 import { useAgentQuery } from "@/queries/use-agent"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
+import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
@@ -23,8 +24,10 @@ import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widge
 import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agent-widget-security-draft"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
+import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
+import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
 
@@ -84,66 +87,276 @@ const EnvironmentTabs = ({ environments, selected, onSelect }: EnvironmentTabsPr
   </div>
 )
 
-type ScriptDisplayProps = {
+type WidgetInstallDisplayProps = {
   agentId: string
   baseUrl: string
 }
 
-const ScriptDisplay = ({ agentId, baseUrl }: ScriptDisplayProps) => {
-  const [copied, setCopied] = useState(false)
+type CodeSnippetProps = {
+  code: string
+  copied: boolean
+  onCopy: () => void
+  testId: string
+  buttonTestId: string
+}
+
+const DEFAULT_WIDGET_INSTALL: {
+  framework: WidgetInstallFramework
+  packageManager: WidgetInstallPackageManager
+} = {
+  framework: "react",
+  packageManager: "npm"
+}
+
+const FRAMEWORK_OPTIONS: Array<{ value: WidgetInstallFramework; label: string }> = [
+  { value: "react", label: "React" },
+  { value: "angular", label: "Angular" },
+  { value: "vue", label: "Vue" },
+  { value: "svelte", label: "Svelte" },
+  { value: "vanilla", label: "Vanilla JS" },
+  { value: "script", label: "Script tag" }
+]
+
+const PACKAGE_MANAGER_OPTIONS: Array<{ value: WidgetInstallPackageManager; label: string }> = [
+  { value: "npm", label: "npm" },
+  { value: "pnpm", label: "pnpm" },
+  { value: "yarn", label: "yarn" }
+]
+
+const buildScriptSnippet = (agentId: string, baseUrl: string, scriptSrc: string) =>
+  `<script src="${scriptSrc}"
+  data-agent-id="${agentId}"
+  data-base-url="${baseUrl}"></script>`
+
+const buildInstallCommand = (packageManager: WidgetInstallPackageManager) => {
+  if (packageManager === "pnpm") return "pnpm add @warpy-ai/widget"
+  if (packageManager === "yarn") return "yarn add @warpy-ai/widget"
+  return "npm install @warpy-ai/widget"
+}
+
+const buildUsageSnippet = ({
+  framework,
+  agentId,
+  baseUrl,
+  scriptSrc,
+  scriptSnippet
+}: {
+  framework: WidgetInstallFramework
+  agentId: string
+  baseUrl: string
+  scriptSrc: string
+  scriptSnippet: string
+}) => {
+  if (framework === "script") return scriptSnippet
+  if (framework === "react") {
+    return `import { Widget } from "@warpy-ai/widget/react"
+
+<Widget
+  agentId="${agentId}"
+  baseUrl="${baseUrl}"
+  scriptSrc="${scriptSrc}"
+/>`
+  }
+  if (framework === "vue") {
+    return `import { Widget } from "@warpy-ai/widget/vue"
+
+<Widget
+  agentId="${agentId}"
+  baseUrl="${baseUrl}"
+  scriptSrc="${scriptSrc}"
+/>`
+  }
+  if (framework === "angular") {
+    return `import { WidgetComponent } from "@warpy-ai/widget/angular"
+
+<warpy-widget
+  agentId="${agentId}"
+  baseUrl="${baseUrl}"
+  scriptSrc="${scriptSrc}"
+></warpy-widget>`
+  }
+  if (framework === "svelte") {
+    return `import Widget from "@warpy-ai/widget/svelte"
+
+<Widget
+  agentId="${agentId}"
+  baseUrl="${baseUrl}"
+  scriptSrc="${scriptSrc}"
+/>`
+  }
+  return `import { mountWidget } from "@warpy-ai/widget"
+
+let widget = null
+const shouldShow = true
+
+if (shouldShow) {
+  widget = mountWidget({
+  agentId: "${agentId}",
+  baseUrl: "${baseUrl}",
+  scriptSrc: "${scriptSrc}"
+  })
+}
+
+const hideWidget = () => {
+  widget?.unmount()
+  widget = null
+}`
+}
+
+const CodeSnippet = ({ code, copied, onCopy, testId, buttonTestId }: CodeSnippetProps) => (
+  <div className="relative rounded-lg border border-border bg-muted/30">
+    <pre className="whitespace-pre-wrap break-words p-4 pr-20 font-mono text-sm leading-relaxed text-foreground" data-testid={testId}>
+      {code}
+    </pre>
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={onCopy}
+      className="absolute right-2 top-2"
+      data-testid={buttonTestId}
+    >
+      {copied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
+      {copied ? "Copied" : "Copy"}
+    </Button>
+  </div>
+)
+
+const WidgetInstallDisplay = ({ agentId, baseUrl }: WidgetInstallDisplayProps) => {
+  const { data } = useAgentWidgetInstallQuery()
+  const updateInstall = useUpdateAgentWidgetInstall()
+  const [framework, setFramework] = useState<WidgetInstallFramework>(DEFAULT_WIDGET_INSTALL.framework)
+  const [packageManager, setPackageManager] = useState<WidgetInstallPackageManager>(
+    DEFAULT_WIDGET_INSTALL.packageManager
+  )
+  const [copied, setCopied] = useState<string | null>(null)
   const addToast = useToastStore(toastSelectors.addToast)
 
-  const scriptSrc = getWidgetCdnUrl() || `${window.location.origin}/widget/agent.js`
-  const scriptCode = `<script src="${scriptSrc}"
-        data-agent-id="${agentId}"
-        data-base-url="${baseUrl}"></script>`
+  useEffect(() => {
+    if (!data) return
+    setFramework(data.framework)
+    setPackageManager(data.packageManager)
+  }, [data])
 
-  const handleCopy = async () => {
+  const handleCopy = async (value: string, key: string) => {
     try {
-      await navigator.clipboard.writeText(scriptCode)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(value)
+      setCopied(key)
+      setTimeout(() => setCopied(null), 2000)
     } catch {
       addToast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "error" })
     }
   }
 
+  const scriptSrc = getWidgetCdnUrl() || `${window.location.origin}/widget/agent.js`
+  const scriptCode = useMemo(
+    () => buildScriptSnippet(agentId, baseUrl, scriptSrc),
+    [agentId, baseUrl, scriptSrc]
+  )
+  const installCode = useMemo(() => buildInstallCommand(packageManager), [packageManager])
+  const usageCode = useMemo(
+    () =>
+      buildUsageSnippet({
+        framework,
+        agentId,
+        baseUrl,
+        scriptSrc,
+        scriptSnippet: scriptCode
+      }),
+    [framework, agentId, baseUrl, scriptSrc, scriptCode]
+  )
+  const showInstall = framework !== "script"
+
+  const handleFrameworkChange = (value: string) => {
+    const next = value as WidgetInstallFramework
+    if (next === framework) return
+    setFramework(next)
+    updateInstall.mutate({ framework: next, packageManager })
+  }
+
+  const handlePackageManagerChange = (value: string) => {
+    const next = value as WidgetInstallPackageManager
+    if (next === packageManager) return
+    setPackageManager(next)
+    updateInstall.mutate({ framework, packageManager: next })
+  }
+
   return (
     <div className="flex justify-center">
-      <div className="flex flex-col items-start gap-4">
-        <div>
-          <h4 className="mb-1 font-semibold">Activate Your Agent</h4>
-          <p className="text-sm text-muted-foreground">
-            To activate your agent, embed this script on your website.
-          </p>
+      <div className="w-full max-w-3xl space-y-6">
+        <div className="rounded-xl border border-border bg-card/70 p-4 shadow-sm">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="framework-select">Framework</Label>
+              <Select value={framework} onValueChange={handleFrameworkChange}>
+                <SelectTrigger id="framework-select" aria-label="Framework">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FRAMEWORK_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="package-manager-select">Package manager</Label>
+              <Select value={packageManager} onValueChange={handlePackageManagerChange}>
+                <SelectTrigger id="package-manager-select" aria-label="Package manager">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PACKAGE_MANAGER_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
-        <div className="relative rounded-lg border border-border bg-muted/30">
-          <pre
-            className="p-4 pr-20 font-mono text-sm leading-relaxed text-foreground"
-            data-testid="script-code"
-          >
-            {scriptCode}
-          </pre>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleCopy}
-            className="absolute right-2 top-2"
-            data-testid="copy-script-button"
-          >
-            {copied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
+
+        {showInstall ? (
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold">Install</h4>
+            <CodeSnippet
+              code={installCode}
+              copied={copied === "install"}
+              onCopy={() => handleCopy(installCode, "install")}
+              testId="install-code"
+              buttonTestId="copy-install-button"
+            />
+          </div>
+        ) : null}
+
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold">Usage</h4>
+          <CodeSnippet
+            code={usageCode}
+            copied={copied === "usage"}
+            onCopy={() => handleCopy(usageCode, "usage")}
+            testId="usage-code"
+            buttonTestId="copy-usage-button"
+          />
         </div>
+
         <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 text-sm">
           <Info className="h-4 w-4 shrink-0 text-primary" />
-          <p className="text-muted-foreground">
-            Paste before the closing{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-primary">
-              {"</body>"}
-            </code>{" "}
-            tag.
-          </p>
+          {framework === "script" ? (
+            <p className="text-muted-foreground">
+              Paste before the closing{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-primary">
+                {"</body>"}
+              </code>{" "}
+              tag.
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              Render this where you want the widget, and conditionally mount/unmount as needed.
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -806,7 +1019,7 @@ export const AgentPanel = () => {
 
   if (isPending || isCreating) {
     return (
-      <PanelShell title="Activate Agent" description="Install the script to enable your agent to perform actions on behalf of your users.">
+      <PanelShell title="Activate Agent" description="Install the widget with a script tag or an npm package.">
         <div className="space-y-4" data-testid="agent-panel-loading">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-40 w-full" />
@@ -817,7 +1030,7 @@ export const AgentPanel = () => {
 
   if (!hasEndpoints) {
     return (
-      <PanelShell title="Activate Agent" description="Install the script to enable your agent to perform actions on behalf of your users.">
+      <PanelShell title="Activate Agent" description="Install the widget with a script tag or an npm package.">
         <EmptyState />
       </PanelShell>
     )
@@ -828,7 +1041,7 @@ export const AgentPanel = () => {
   return (
     <PanelShell
       title="Activate Agent"
-      description="Install the script to enable your agent to perform actions on behalf of your users."
+      description="Install the widget with a script tag or an npm package."
     >
       <EnvironmentTabs
         environments={environments}
@@ -837,7 +1050,7 @@ export const AgentPanel = () => {
       />
       {agent ? (
         <>
-          <ScriptDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
+          <WidgetInstallDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
           <ConfigureWidgetPanel />
           <AdvancedSecurityPanel />
         </>

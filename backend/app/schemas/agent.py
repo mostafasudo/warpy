@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,6 +65,21 @@ class AgentWidgetConfigResponse(BaseModel):
 
 
 class AgentWidgetConfigUpdate(AgentWidgetConfigResponse):
+    pass
+
+
+WidgetInstallFramework = Literal["script", "react", "vue", "angular", "svelte", "vanilla"]
+WidgetInstallPackageManager = Literal["npm", "pnpm", "yarn"]
+
+
+class AgentWidgetInstallResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    framework: WidgetInstallFramework = Field(alias="framework")
+    package_manager: WidgetInstallPackageManager = Field(alias="packageManager")
+
+
+class AgentWidgetInstallUpdate(AgentWidgetInstallResponse):
     pass
 
 
