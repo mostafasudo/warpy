@@ -29,6 +29,9 @@ pnpm test src/__tests__/App.test.tsx
 ```
 Global styling variables live in `frontend/src/index.css`. Update the CSS custom properties there to change theme colors, fonts, and radii across every shadcn/ui component (Tailwind maps those variables in `frontend/tailwind.config.ts`).
 
+### Widget Testing
+The easiest way to test the widget is to embed the script tag in `frontend/index.html` before the `</body>` close tag. You may need to reattach the widget every time you make changes.
+
 ### Backend
 Copy `backend/.env.example` to `backend/.env`, then install dependencies and run tests or the API server.
 
