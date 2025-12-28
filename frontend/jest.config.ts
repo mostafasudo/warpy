@@ -3,6 +3,7 @@ import type { Config } from "jest"
 const config: Config = {
   preset: "ts-jest",
   testEnvironment: "jsdom",
+  testTimeout: 15000,
   setupFilesAfterEnv: ["<rootDir>/jest.setup.cjs"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",

@@ -576,7 +576,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    expect(screen.getByText("Copy")).not.toBeNull()
+    expect(screen.getByTestId("copy-usage-button")).not.toBeNull()
     await user.click(screen.getByTestId("copy-usage-button"))
 
     await waitFor(() => {

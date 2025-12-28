@@ -188,7 +188,6 @@ export const Shell = () => {
               )}
             >
               <p className="text-sm font-semibold">Warpy</p>
-              <p className="text-xs text-muted-foreground">Bend the Interface.</p>
             </div>
           </div>
 	          <nav className="mt-8 flex flex-col gap-2">
