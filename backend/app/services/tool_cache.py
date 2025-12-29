@@ -95,3 +95,5 @@ class ToolCache:
                 self._redis.delete(self._key)
             except RedisError as exc:
                 log_error("ToolCache", "clear", "Failed to clear cache", exc=exc)
+
+

@@ -100,3 +100,5 @@ def get_tool_context(session: Session, conversation_id: UUID) -> str | None:
         )
     )
     return msg.content if msg else None
+
+

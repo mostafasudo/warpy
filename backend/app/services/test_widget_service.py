@@ -227,3 +227,5 @@ def test_get_pending_state_not_found(db_session: Session):
 
     result = get_pending_state(db_session, conversation.id)
     assert result is None
+
+
