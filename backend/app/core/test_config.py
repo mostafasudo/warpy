@@ -7,9 +7,13 @@ def test_settings_overrides_env(monkeypatch):
     get_settings.cache_clear()
     monkeypatch.setenv("APP_NAME", "custom-app")
     monkeypatch.setenv("DEBUG", "true")
+    monkeypatch.setenv("AWS_ACCESS_KEY", "test-access-key")
+    monkeypatch.setenv("AWS_SECRET_KEY", "test-secret-key")
     settings = Settings()
     assert settings.app_name == "custom-app"
     assert settings.debug is True
+    assert settings.aws_access_key == "test-access-key"
+    assert settings.aws_secret_key == "test-secret-key"
 
 
 def test_get_settings_cached(monkeypatch):
@@ -18,4 +22,3 @@ def test_get_settings_cached(monkeypatch):
     cached = get_settings()
     same = get_settings()
     assert cached is same
-
