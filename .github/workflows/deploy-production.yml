@@ -183,6 +183,7 @@ jobs:
               --arg TEST_WIDGET_TOKEN_API_KEY "${TEST_WIDGET_TOKEN_API_KEY:-}" \
               '
                 def env(name; value): {"name": name, "value": value};
+                def optenv(name; value): if (value | length) > 0 then [env(name; value)] else [] end;
                 def managed_env: (
                   [
                     env("ENVIRONMENT"; "production"),
@@ -191,12 +192,12 @@ jobs:
                     env("CLERK_SECRET_KEY"; $CLERK_SECRET_KEY),
                     env("OPENAI_API_KEY"; $OPENAI_API_KEY)
                   ]
-                  + ($LANGSMITH_TRACING | select(length > 0) | [env("LANGSMITH_TRACING"; .)])
-                  + ($LANGSMITH_ENDPOINT | select(length > 0) | [env("LANGSMITH_ENDPOINT"; .)])
-                  + ($LANGSMITH_API_KEY | select(length > 0) | [env("LANGSMITH_API_KEY"; .)])
-                  + ($LANGSMITH_PROJECT | select(length > 0) | [env("LANGSMITH_PROJECT"; .)])
-                  + ($WIDGET_JWT_SECRET | select(length > 0) | [env("WIDGET_JWT_SECRET"; .)])
-                  + ($TEST_WIDGET_TOKEN_API_KEY | select(length > 0) | [env("TEST_WIDGET_TOKEN_API_KEY"; .)])
+                  + optenv("LANGSMITH_TRACING"; $LANGSMITH_TRACING)
+                  + optenv("LANGSMITH_ENDPOINT"; $LANGSMITH_ENDPOINT)
+                  + optenv("LANGSMITH_API_KEY"; $LANGSMITH_API_KEY)
+                  + optenv("LANGSMITH_PROJECT"; $LANGSMITH_PROJECT)
+                  + optenv("WIDGET_JWT_SECRET"; $WIDGET_JWT_SECRET)
+                  + optenv("TEST_WIDGET_TOKEN_API_KEY"; $TEST_WIDGET_TOKEN_API_KEY)
                 );
 
                 del(
