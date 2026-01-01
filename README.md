@@ -26,7 +26,7 @@ We use the GitHub Project in this repo (Projects tab) for planning and task trac
 
 ## Landing page
 
-The marketing/landing site lives in `LevwTech/warpy-landing`.
+The marketing/landing site: [LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing).
 
 ## Widget npm package
 
