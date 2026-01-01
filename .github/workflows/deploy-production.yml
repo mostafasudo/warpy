@@ -1,0 +1,302 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE_BACKEND: ${{ vars.ECS_SERVICE_BACKEND }}
+      ECS_SERVICE_FRONTEND: ${{ vars.ECS_SERVICE_FRONTEND }}
+      ECS_SERVICE_WORKER: ${{ vars.ECS_SERVICE_WORKER }}
+      ECR_REPOSITORY_BACKEND: ${{ vars.ECR_REPOSITORY_BACKEND }}
+      ECR_REPOSITORY_FRONTEND: ${{ vars.ECR_REPOSITORY_FRONTEND }}
+      VITE_API_URL: ${{ secrets.VITE_API_URL }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+      VITE_API_TIMEOUT_MS: ${{ secrets.VITE_API_TIMEOUT_MS }}
+      VITE_WIDGET_CDN_URL: ${{ secrets.VITE_WIDGET_CDN_URL }}
+      WIDGET_S3_BUCKET: ${{ vars.WIDGET_S3_BUCKET }}
+      WIDGET_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.WIDGET_CLOUDFRONT_DISTRIBUTION_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required config
+        run: |
+          set -euo pipefail
+          : "${AWS_REGION:?Missing AWS_REGION secret}"
+          : "${ECS_CLUSTER:?Missing ECS_CLUSTER variable}"
+          : "${ECS_SERVICE_BACKEND:?Missing ECS_SERVICE_BACKEND variable}"
+          : "${ECS_SERVICE_FRONTEND:?Missing ECS_SERVICE_FRONTEND variable}"
+          : "${ECS_SERVICE_WORKER:?Missing ECS_SERVICE_WORKER variable}"
+          : "${ECR_REPOSITORY_BACKEND:?Missing ECR_REPOSITORY_BACKEND variable}"
+          : "${ECR_REPOSITORY_FRONTEND:?Missing ECR_REPOSITORY_FRONTEND variable}"
+          : "${VITE_API_URL:?Missing VITE_API_URL secret}"
+          : "${VITE_CLERK_PUBLISHABLE_KEY:?Missing VITE_CLERK_PUBLISHABLE_KEY secret}"
+          : "${VITE_API_TIMEOUT_MS:?Missing VITE_API_TIMEOUT_MS secret}"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.18.2 --activate
+          pnpm install --frozen-lockfile
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: pnpm test
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pytest app -q
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_BACKEND }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_BACKEND }}:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_FRONTEND }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_FRONTEND }}:latest
+          build-args: |
+            VITE_API_URL=${{ env.VITE_API_URL }}
+            VITE_CLERK_PUBLISHABLE_KEY=${{ env.VITE_CLERK_PUBLISHABLE_KEY }}
+            VITE_API_TIMEOUT_MS=${{ env.VITE_API_TIMEOUT_MS }}
+            VITE_WIDGET_CDN_URL=${{ env.VITE_WIDGET_CDN_URL }}
+
+      - name: Deploy ECS services
+        env:
+          BACKEND_IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_BACKEND }}:${{ github.sha }}
+          FRONTEND_IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_FRONTEND }}:${{ github.sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LANGSMITH_TRACING: ${{ secrets.LANGSMITH_TRACING }}
+          LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+          WIDGET_JWT_SECRET: ${{ secrets.WIDGET_JWT_SECRET }}
+          TEST_WIDGET_TOKEN_API_KEY: ${{ secrets.TEST_WIDGET_TOKEN_API_KEY }}
+          ECS_TASK_EXECUTION_ROLE_ARN: ${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+
+          require_backend_env() {
+            : "${DATABASE_URL:?Missing DATABASE_URL secret}"
+            : "${REDIS_URL:?Missing REDIS_URL secret}"
+            : "${CLERK_SECRET_KEY:?Missing CLERK_SECRET_KEY secret}"
+            : "${OPENAI_API_KEY:?Missing OPENAI_API_KEY secret}"
+          }
+
+          ensure_execution_role() {
+            if [[ -n "${ECS_TASK_EXECUTION_ROLE_ARN:-}" ]]; then
+              return 0
+            fi
+
+            if aws iam get-role --role-name ecsTaskExecutionRole >/dev/null 2>&1; then
+              ECS_TASK_EXECUTION_ROLE_ARN="$(aws iam get-role --role-name ecsTaskExecutionRole --query 'Role.Arn' --output text)"
+              return 0
+            fi
+
+            local account_id
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            ECS_TASK_EXECUTION_ROLE_ARN="arn:aws:iam::${account_id}:role/ecsTaskExecutionRole"
+          }
+
+          render_task_definition() {
+            local kind="$1"
+            local image="$2"
+            local execution_role_arn="$3"
+            local input_path="$4"
+            local output_path="$5"
+
+            jq \
+              --arg KIND "$kind" \
+              --arg IMAGE "$image" \
+              --arg AWS_REGION "$AWS_REGION" \
+              --arg EXECUTION_ROLE_ARN "$execution_role_arn" \
+              --arg DATABASE_URL "${DATABASE_URL:-}" \
+              --arg REDIS_URL "${REDIS_URL:-}" \
+              --arg CLERK_SECRET_KEY "${CLERK_SECRET_KEY:-}" \
+              --arg OPENAI_API_KEY "${OPENAI_API_KEY:-}" \
+              --arg LANGSMITH_TRACING "${LANGSMITH_TRACING:-}" \
+              --arg LANGSMITH_ENDPOINT "${LANGSMITH_ENDPOINT:-}" \
+              --arg LANGSMITH_API_KEY "${LANGSMITH_API_KEY:-}" \
+              --arg LANGSMITH_PROJECT "${LANGSMITH_PROJECT:-}" \
+              --arg WIDGET_JWT_SECRET "${WIDGET_JWT_SECRET:-}" \
+              --arg TEST_WIDGET_TOKEN_API_KEY "${TEST_WIDGET_TOKEN_API_KEY:-}" \
+              '
+                def env(name; value): {"name": name, "value": value};
+                def managed_env: (
+                  [
+                    env("ENVIRONMENT"; "production"),
+                    env("DATABASE_URL"; $DATABASE_URL),
+                    env("REDIS_URL"; $REDIS_URL),
+                    env("CLERK_SECRET_KEY"; $CLERK_SECRET_KEY),
+                    env("OPENAI_API_KEY"; $OPENAI_API_KEY)
+                  ]
+                  + ($LANGSMITH_TRACING | select(length > 0) | [env("LANGSMITH_TRACING"; .)])
+                  + ($LANGSMITH_ENDPOINT | select(length > 0) | [env("LANGSMITH_ENDPOINT"; .)])
+                  + ($LANGSMITH_API_KEY | select(length > 0) | [env("LANGSMITH_API_KEY"; .)])
+                  + ($LANGSMITH_PROJECT | select(length > 0) | [env("LANGSMITH_PROJECT"; .)])
+                  + ($WIDGET_JWT_SECRET | select(length > 0) | [env("WIDGET_JWT_SECRET"; .)])
+                  + ($TEST_WIDGET_TOKEN_API_KEY | select(length > 0) | [env("TEST_WIDGET_TOKEN_API_KEY"; .)])
+                );
+
+                del(
+                  .taskDefinitionArn,
+                  .revision,
+                  .status,
+                  .requiresAttributes,
+                  .compatibilities,
+                  .registeredAt,
+                  .registeredBy
+                )
+                | .containerDefinitions[0].image = $IMAGE
+                | if ($EXECUTION_ROLE_ARN | length) > 0 then .executionRoleArn = $EXECUTION_ROLE_ARN else . end
+                | .containerDefinitions[0].logConfiguration.options["awslogs-region"] = $AWS_REGION
+                | if $KIND == "backend" or $KIND == "worker" then
+                    .containerDefinitions[0].environment = managed_env
+                  else
+                    .
+                  end
+                | if $KIND == "worker" then
+                    .containerDefinitions[0].command = ["sh", "-c", "rq worker default --url \"$REDIS_URL\""]
+                  else
+                    .
+                  end
+              ' "$input_path" > "$output_path"
+          }
+
+          bootstrap_task_definition() {
+            local family="$1"
+            local image="$2"
+            local template_path="$3"
+            local kind="$4"
+
+            ensure_execution_role
+            : "${AWS_REGION:?Missing AWS_REGION}"
+
+            if [[ "$kind" == "backend" || "$kind" == "worker" ]]; then
+              require_backend_env
+            fi
+
+            aws logs create-log-group --log-group-name "/ecs/$family" >/dev/null 2>&1 || true
+
+            aws ecs describe-task-definition --task-definition "$family" --query 'taskDefinition' --output json > task-definition.json 2>/dev/null || true
+
+            if [[ -s task-definition.json ]]; then
+              render_task_definition "$kind" "$image" "" "task-definition.json" "task-definition.next.json"
+              aws ecs register-task-definition --cli-input-json file://task-definition.next.json --query 'taskDefinition.taskDefinitionArn' --output text >/dev/null
+              return 0
+            fi
+
+            render_task_definition "$kind" "$image" "$ECS_TASK_EXECUTION_ROLE_ARN" "$template_path" "task-definition.next.json"
+
+            aws ecs register-task-definition --cli-input-json file://task-definition.next.json --query 'taskDefinition.taskDefinitionArn' --output text >/dev/null
+          }
+
+          deploy() {
+            local service="$1"
+            local image="$2"
+            local template_path="$3"
+            local kind="$4"
+            local task_definition_arn
+
+            task_definition_arn="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)"
+            if [[ -z "$task_definition_arn" || "$task_definition_arn" == "None" ]]; then
+              bootstrap_task_definition "$service" "$image" "$template_path" "$kind"
+              missing_services+=("$service")
+              return 0
+            fi
+
+            if [[ "$kind" == "backend" || "$kind" == "worker" ]]; then
+              require_backend_env
+            fi
+
+            aws ecs describe-task-definition --task-definition "$task_definition_arn" --query 'taskDefinition' --output json > task-definition.json
+            render_task_definition "$kind" "$image" "" "task-definition.json" "task-definition.next.json"
+
+            local next_task_definition_arn
+            next_task_definition_arn="$(aws ecs register-task-definition --cli-input-json file://task-definition.next.json --query 'taskDefinition.taskDefinitionArn' --output text)"
+
+            aws ecs update-service --cluster "$ECS_CLUSTER" --service "$service" --task-definition "$next_task_definition_arn" --force-new-deployment
+            deployed_services+=("$service")
+          }
+
+          missing_services=()
+          deployed_services=()
+
+          deploy "$ECS_SERVICE_BACKEND" "$BACKEND_IMAGE" "aws/ecs/warpy-prod-backend.taskdef.json" "backend"
+          deploy "$ECS_SERVICE_WORKER" "$BACKEND_IMAGE" "aws/ecs/warpy-prod-worker.taskdef.json" "worker"
+          deploy "$ECS_SERVICE_FRONTEND" "$FRONTEND_IMAGE" "aws/ecs/warpy-prod-frontend.taskdef.json" "frontend"
+
+          if [[ ${#deployed_services[@]} -gt 0 ]]; then
+            aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "${deployed_services[@]}"
+          fi
+
+          if [[ ${#missing_services[@]} -gt 0 ]]; then
+            echo "ECS services not found in cluster '$ECS_CLUSTER': ${missing_services[*]}"
+            echo "Task definitions were created/updated; create the services and re-run the workflow."
+            exit 1
+          fi
+
+      - name: Upload widget script
+        if: ${{ env.WIDGET_S3_BUCKET != '' && env.WIDGET_CLOUDFRONT_DISTRIBUTION_ID != '' }}
+        run: |
+          aws s3 cp frontend/public/widget/agent.js "s3://$WIDGET_S3_BUCKET/widget.js" \
+            --content-type "application/javascript; charset=utf-8" \
+            --cache-control "public, max-age=300"
+          aws cloudfront create-invalidation --distribution-id "$WIDGET_CLOUDFRONT_DISTRIBUTION_ID" --paths "/widget.js"

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="")
     aws_access_key: str = Field(default="")
     aws_secret_key: str = Field(default="")
+    aws_region: str = Field(default="")
     langsmith_tracing: bool = Field(default=False)
     langsmith_endpoint: str = Field(default="")
     langsmith_api_key: str = Field(default="")

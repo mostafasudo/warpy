@@ -5,6 +5,7 @@
   const UI_STORAGE_KEY = "cta_widget_ui_state";
   const API_TIMEOUT = 30000;
   const API_URL = "http://localhost:8000";
+  const PROD_API_URL = "https://api.warpy.ai";
   const MARKED_SRC = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";
   const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
@@ -185,6 +186,17 @@
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function resolveApiUrl() {
+    try {
+      const host = window.location && window.location.hostname ? window.location.hostname : "";
+      const localHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+      const isLocal = localHosts.has(host);
+      return (isLocal ? API_URL : PROD_API_URL).replace(/\/$/, "");
+    } catch {
+      return PROD_API_URL;
+    }
   }
 
   function getScriptData() {
@@ -1266,7 +1278,7 @@
   }
 
   function createWidget(config) {
-    const apiUrl = API_URL;
+    const apiUrl = resolveApiUrl();
     const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
     if (!state.voice) state.voice = {};
     if (!state.auth) state.auth = {};

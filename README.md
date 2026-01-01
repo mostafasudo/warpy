@@ -16,6 +16,20 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
+## Deployment
+
+Production AWS deployment guide: `AWS_DEPLOYMENT.md`.
+
+## Adding an environment variable
+
+Backend/worker env vars are sourced from GitHub Secrets in production (ECS task definitions get synced on deploy).
+
+- Backend code: add a typed field to `backend/app/core/config.py` (`Settings`). Env var name is the uppercased field name (e.g. `foo_bar` → `FOO_BAR`).
+- Local backend: add it to `backend/.env.example` (copy to `backend/.env` when running non-Docker).
+- Docker Compose: add it to `.env.example` (copy to `.env`) and thread it into `docker-compose.yml` for any services that need it (`backend`, `worker`, `frontend`).
+- Production deploy: add it as a GitHub Secret/Variable and wire it into `.github/workflows/deploy-production.yml` (`Deploy ECS services` step env + `render_task_definition`/`managed_env`).
+- Frontend (Vite): add `VITE_*` vars to `frontend/.env.example`, pass as workflow `build-args`, add `ARG/ENV` in `frontend/Dockerfile`, then read via `import.meta.env.VITE_*`.
+
 ## Non-Docker Setup
 ### Frontend
 Copy `frontend/.env.example` to `frontend/.env` and adjust values before running `pnpm dev`.

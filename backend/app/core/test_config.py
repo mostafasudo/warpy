@@ -9,11 +9,13 @@ def test_settings_overrides_env(monkeypatch):
     monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("AWS_ACCESS_KEY", "test-access-key")
     monkeypatch.setenv("AWS_SECRET_KEY", "test-secret-key")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
     settings = Settings()
     assert settings.app_name == "custom-app"
     assert settings.debug is True
     assert settings.aws_access_key == "test-access-key"
     assert settings.aws_secret_key == "test-secret-key"
+    assert settings.aws_region == "us-east-1"
 
 
 def test_get_settings_cached(monkeypatch):

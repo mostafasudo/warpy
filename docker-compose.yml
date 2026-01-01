@@ -18,6 +18,7 @@ services:
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile.dev
     env_file:
       - ./.env
     environment:
@@ -28,6 +29,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       AWS_ACCESS_KEY: ${AWS_ACCESS_KEY:-}
       AWS_SECRET_KEY: ${AWS_SECRET_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-true}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
@@ -45,6 +47,7 @@ services:
   worker:
     build:
       context: ./backend
+      dockerfile: Dockerfile.dev
     env_file:
       - ./.env
     environment:
@@ -54,6 +57,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       AWS_ACCESS_KEY: ${AWS_ACCESS_KEY:-}
       AWS_SECRET_KEY: ${AWS_SECRET_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
@@ -70,10 +74,12 @@ services:
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile.dev
     env_file:
       - ./.env
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_API_TIMEOUT_MS: ${VITE_API_TIMEOUT_MS:-5000}
       VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
     depends_on:
       - backend

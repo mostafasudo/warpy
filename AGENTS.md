@@ -21,6 +21,13 @@
 - **Environment:** when adding env vars or configuration, support both Docker and non-Docker setups.
 - **Logging:** always use `log_info`, `log_error`, `log_warning`, `log_debug` from `core.logger`; never `print()`. Format: `[scope] [method]: message` where scope is controller/service/worker name.
 
+## Adding env vars
+- Add the field to `backend/app/core/config.py` (`Settings`) and keep types/defaults strict.
+- Update `.env.example` (root, for Docker Compose) and `backend/.env.example` (non-Docker backend).
+- Thread it into `docker-compose.yml` for every service that needs it.
+- Production: add the GitHub Secret/Variable and wire it into `.github/workflows/deploy-production.yml` (`Deploy ECS services` step env + `render_task_definition`/`managed_env`). Backend/worker ECS env vars are overwritten from GitHub on deploy.
+- Frontend: `VITE_*` vars are build-time; update `frontend/.env.example`, workflow `build-args`, and `frontend/Dockerfile` `ARG/ENV`.
+
 ## Don't
 - Don’t introduce new patterns, abstractions, or heavy deps.
 - Don’t mock components; mock **HTTP layer only**: `apiDashboardMock`, `apiV1Mock`.

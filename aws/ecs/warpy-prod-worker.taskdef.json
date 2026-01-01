@@ -1,0 +1,26 @@
+{
+  "family": "warpy-prod-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "3072",
+  "executionRoleArn": "",
+  "containerDefinitions": [
+    {
+      "name": "warpy-prod-worker",
+      "image": "",
+      "essential": true,
+      "command": ["sh", "-c", "rq worker default --url \"$REDIS_URL\""],
+      "environment": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/warpy-prod-worker",
+          "awslogs-region": "",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "volumes": []
+}
