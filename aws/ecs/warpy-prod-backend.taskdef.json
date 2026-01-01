@@ -2,8 +2,8 @@
   "family": "warpy-prod-backend",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",
-  "memory": "3072",
+  "cpu": "512",
+  "memory": "1024",
   "executionRoleArn": "",
   "containerDefinitions": [
     {
