@@ -24,7 +24,9 @@ B2B SaaS platforms often struggle with user engagement and onboarding due to com
 
 - Dynamic tool mapping: each API endpoint is associated with a corresponding tool/function within the agent, facilitating direct backend interactions.
 - Secure frontend communication: the embedded script ensures that API requests are executed within the user's authenticated session.
-- Architecture diagram: TODO (add image)
+- Architecture diagram: 
+<img width="847" height="295" alt="image" src="https://github.com/user-attachments/assets/c99dee09-9efc-4044-aac8-59c8e69dff50" />
+
 
 ### Technologies
 
