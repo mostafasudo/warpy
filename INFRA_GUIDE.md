@@ -60,6 +60,10 @@ ACM validation records (from AWS ACM) must also remain **DNS only**.
 - ALB listener `443` uses the ACM certificate (app + api).
 - CloudFront uses an ACM certificate in `us-east-1` for `cdn.warpy.ai`.
 
+## Auth (Clerk)
+
+- Clerk is the auth provider; production enables Google sign-in (social connection) via Clerk Dashboard → SSO connections using custom Google OAuth credentials (Google Cloud Console OAuth client + Clerk redirect URI).
+
 ## Networking (VPC)
 
 Design: ALB + ECS tasks are in **public** subnets with **public IPs** enabled (no NAT). Aurora + Redis remain private.
