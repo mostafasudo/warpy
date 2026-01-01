@@ -21,6 +21,31 @@ if (Number.isNaN(apiTimeoutMs) || apiTimeoutMs <= 0) {
 
 configureApiClient({ apiUrl, apiTimeoutMs })
 
+const clerkAppearance = {
+  variables: {
+    colorPrimary: "hsl(var(--primary))",
+    colorPrimaryForeground: "hsl(var(--primary-foreground))",
+    colorBackground: "hsl(var(--background))",
+    colorForeground: "hsl(var(--foreground))",
+    colorText: "hsl(var(--foreground))",
+    colorTextSecondary: "hsl(var(--muted-foreground))",
+    colorMuted: "hsl(var(--muted))",
+    colorMutedForeground: "hsl(var(--muted-foreground))",
+    colorNeutral: "hsl(var(--foreground))",
+    colorInput: "hsl(var(--background))",
+    colorInputForeground: "hsl(var(--foreground))",
+    colorInputText: "hsl(var(--foreground))",
+    colorInputBackground: "hsl(var(--background))",
+    colorBorder: "hsl(var(--border))",
+    colorRing: "hsl(var(--ring))",
+    colorDanger: "hsl(var(--destructive))",
+    borderRadius: "var(--radius)"
+  },
+  captcha: {
+    theme: "auto"
+  }
+} as const
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -37,7 +62,7 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={publishableKey} afterSignOutUrl="/">
+    <ClerkProvider publishableKey={publishableKey} afterSignOutUrl="/" appearance={clerkAppearance}>
       <QueryClientProvider client={queryClient}>
         <App />
       </QueryClientProvider>
