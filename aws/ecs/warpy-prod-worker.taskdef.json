@@ -10,7 +10,11 @@
       "name": "warpy-prod-worker",
       "image": "",
       "essential": true,
-      "command": ["sh", "-c", "rq worker default --url \"$REDIS_URL\""],
+      "command": [
+        "sh",
+        "-c",
+        "rq worker default --url \"$REDIS_URL\" --worker-class app.workers.no_client_list_worker.NoClientListWorker"
+      ],
       "environment": [],
       "logConfiguration": {
         "logDriver": "awslogs",

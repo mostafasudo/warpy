@@ -224,7 +224,7 @@ jobs:
                     .
                   end
                 | if $KIND == "worker" then
-                    .containerDefinitions[0].command = ["sh", "-c", "rq worker default --url \"$REDIS_URL\""]
+                    .containerDefinitions[0].command = ["sh", "-c", "rq worker default --url \"$REDIS_URL\" --worker-class app.workers.no_client_list_worker.NoClientListWorker"]
                   else
                     .
                   end
