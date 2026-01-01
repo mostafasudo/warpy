@@ -28,6 +28,12 @@ We use the GitHub Project in this repo (Projects tab) for planning and task trac
 
 The marketing/landing site lives in `LevwTech/warpy-landing`.
 
+## Widget npm package
+
+The widget loader package is published as `@warpy-ai/widget` (source: `packages/widget`).
+
+- Publish a new version: bump `packages/widget/package.json` version, then `cd packages/widget && pnpm publish --access public`.
+
 ## Adding an environment variable
 
 Backend/worker env vars are sourced from GitHub Secrets in production (ECS task definitions get synced on deploy).
