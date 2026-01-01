@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client"
 
 import App from "./App"
 import { configureApiClient } from "./api/client"
+import logoUrl from "./assets/logo-primary.svg"
 import "./index.css"
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
@@ -22,6 +23,9 @@ if (Number.isNaN(apiTimeoutMs) || apiTimeoutMs <= 0) {
 configureApiClient({ apiUrl, apiTimeoutMs })
 
 const clerkAppearance = {
+  layout: {
+    logoImageUrl: logoUrl
+  },
   variables: {
     colorPrimary: "hsl(var(--primary))",
     colorPrimaryForeground: "hsl(var(--primary-foreground))",
