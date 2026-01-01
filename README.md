@@ -18,11 +18,15 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 
 ## Deployment
 
-Production infrastructure reference: `INFRA_GUIDE.md`.
+Production infrastructure reference: [INFRA_GUIDE.md](INFRA_GUIDE.md).
 
 ## Planning
 
 We use the GitHub Project in this repo (Projects tab) for planning and task tracking (no Linear / external PM tools).
+
+## Landing page
+
+The marketing/landing site lives in `LevwTech/warpy-landing`.
 
 ## Adding an environment variable
 
