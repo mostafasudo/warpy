@@ -13,6 +13,7 @@ import os
 def configure_rq_keyspace() -> None:
     hash_tag = os.getenv("RQ_REDIS_HASH_TAG", "warpy").strip()
     prefix = f"{{{hash_tag}}}"
+    format_prefix = f"{{{{{hash_tag}}}}}"
 
     from rq.job import Job
     from rq.queue import Queue
@@ -40,13 +41,13 @@ def configure_rq_keyspace() -> None:
     worker_registration.WORKERS_BY_QUEUE_KEY = prefix + worker_registration.WORKERS_BY_QUEUE_KEY
     worker_registration.REDIS_WORKER_KEYS = prefix + worker_registration.REDIS_WORKER_KEYS
 
-    registry.BaseRegistry.key_template = prefix + registry.BaseRegistry.key_template
-    registry.StartedJobRegistry.key_template = prefix + registry.StartedJobRegistry.key_template
-    registry.FinishedJobRegistry.key_template = prefix + registry.FinishedJobRegistry.key_template
-    registry.FailedJobRegistry.key_template = prefix + registry.FailedJobRegistry.key_template
-    registry.DeferredJobRegistry.key_template = prefix + registry.DeferredJobRegistry.key_template
-    registry.ScheduledJobRegistry.key_template = prefix + registry.ScheduledJobRegistry.key_template
-    registry.CanceledJobRegistry.key_template = prefix + registry.CanceledJobRegistry.key_template
+    registry.BaseRegistry.key_template = format_prefix + registry.BaseRegistry.key_template
+    registry.StartedJobRegistry.key_template = format_prefix + registry.StartedJobRegistry.key_template
+    registry.FinishedJobRegistry.key_template = format_prefix + registry.FinishedJobRegistry.key_template
+    registry.FailedJobRegistry.key_template = format_prefix + registry.FailedJobRegistry.key_template
+    registry.DeferredJobRegistry.key_template = format_prefix + registry.DeferredJobRegistry.key_template
+    registry.ScheduledJobRegistry.key_template = format_prefix + registry.ScheduledJobRegistry.key_template
+    registry.CanceledJobRegistry.key_template = format_prefix + registry.CanceledJobRegistry.key_template
 
     scheduler.SCHEDULER_KEY_TEMPLATE = prefix + scheduler.SCHEDULER_KEY_TEMPLATE
     scheduler.SCHEDULER_LOCKING_KEY_TEMPLATE = prefix + scheduler.SCHEDULER_LOCKING_KEY_TEMPLATE
@@ -62,7 +63,7 @@ def configure_rq_keyspace() -> None:
         return f"{prefix}rq:execution:{self.composite_key}"
 
     setattr(executions.Execution, "key", property(execution_key))
-    executions.ExecutionRegistry.key_template = prefix + executions.ExecutionRegistry.key_template
+    executions.ExecutionRegistry.key_template = format_prefix + executions.ExecutionRegistry.key_template
 
     def result_get_key(job_id: str) -> str:
         return f"{prefix}rq:results:{job_id}"

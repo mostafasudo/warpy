@@ -3,6 +3,7 @@ import rq.suspension as suspension
 import rq.worker_registration as worker_registration
 from rq.job import Job
 from rq.queue import Queue
+import rq.registry as registry
 from rq.worker import Worker
 
 from app.workers.rq_keyspace import configure_rq_keyspace
@@ -26,3 +27,6 @@ def test_configure_rq_keyspace_patches_core_rq_keys():
 
     assert group.Group.REDIS_GROUP_NAME_PREFIX.startswith("{warpy}")
     assert group.Group.REDIS_GROUP_KEY.startswith("{warpy}")
+
+    assert registry.BaseRegistry.key_template.format("default").startswith("{warpy}")
+    assert registry.FinishedJobRegistry.key_template.format("default").startswith("{warpy}")
