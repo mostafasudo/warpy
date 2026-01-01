@@ -20,6 +20,10 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 
 Production infrastructure reference: `INFRA_GUIDE.md`.
 
+## Planning
+
+We use the GitHub Project in this repo (Projects tab) for planning and task tracking (no Linear / external PM tools).
+
 ## Adding an environment variable
 
 Backend/worker env vars are sourced from GitHub Secrets in production (ECS task definitions get synced on deploy).
