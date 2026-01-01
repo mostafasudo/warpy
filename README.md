@@ -30,9 +30,9 @@ The marketing/landing site lives in `LevwTech/warpy-landing`.
 
 ## Widget npm package
 
-The widget loader package is published as `@warpy-ai/widget` (source: `packages/widget`).
+The widget loader package is published as `@warpy-ai/widget`. Source repo: [warpyai/widget](https://github.com/warpyai/widget).
 
-- Publish a new version: bump `packages/widget/package.json` version, then `cd packages/widget && pnpm publish --access public`.
+- Publish a new version: bump `package.json` version in `warpyai/widget`, then `pnpm publish --access public`.
 
 ## Adding an environment variable
 
