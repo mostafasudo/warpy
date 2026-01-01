@@ -266,17 +266,13 @@ Add:
 
 ## 11) First deploy + migrations
 
-1. Push to `main` to publish images + update ECS services.
-2. Run migrations once (recommended as a one-off ECS task):
-   - ECS → Clusters → `warpy` → Tasks → **Run new task**
-   - Task definition: `warpy-prod-backend`
-   - Override command: `alembic upgrade head`
-3. Scale services up to `1` desired task each:
+1. Push to `main` to publish images + update ECS services. The workflow runs `alembic upgrade head` automatically as a one-off ECS task before updating the services.
+2. Scale services up to `1` desired task each:
    - ECS → Clusters → `warpy` → Services → update:
      - `warpy-prod-backend` desired tasks = `1`
      - `warpy-prod-frontend` desired tasks = `1`
      - `warpy-prod-worker` desired tasks = `1`
-4. Confirm:
+3. Confirm:
    - `https://api.warpy.ai/health` returns `{"status":"healthy"}`
    - Frontend loads at `https://app.warpy.ai`
 

@@ -6,7 +6,7 @@ on:
 
 concurrency:
   group: production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -253,7 +253,7 @@ jobs:
             aws ecs register-task-definition --cli-input-json file://task-definition.next.json --query 'taskDefinition.taskDefinitionArn' --output text >/dev/null
           }
 
-          deploy() {
+          prepare_deploy() {
             local service="$1"
             local image="$2"
             local template_path="$3"
@@ -277,25 +277,116 @@ jobs:
             local next_task_definition_arn
             next_task_definition_arn="$(aws ecs register-task-definition --cli-input-json file://task-definition.next.json --query 'taskDefinition.taskDefinitionArn' --output text)"
 
-            aws ecs update-service --cluster "$ECS_CLUSTER" --service "$service" --task-definition "$next_task_definition_arn" --force-new-deployment
+            next_task_definition_arns["$service"]="$next_task_definition_arn"
+          }
+
+          run_migrations() {
+            local task_definition_arn="$1"
+            local network_config_json
+
+            network_config_json="$(
+              aws ecs describe-services \
+                --cluster "$ECS_CLUSTER" \
+                --services "$ECS_SERVICE_BACKEND" \
+                --query 'services[0].networkConfiguration' \
+                --output json
+            )"
+
+            if [[ -z "$network_config_json" || "$network_config_json" == "null" ]]; then
+              echo "Unable to determine network configuration for service '$ECS_SERVICE_BACKEND'"
+              exit 1
+            fi
+
+            echo "$network_config_json" > network-configuration.json
+
+            local overrides_json
+            overrides_json="$(
+              jq -n --arg NAME "$ECS_SERVICE_BACKEND" \
+                '{containerOverrides:[{name:$NAME,command:["alembic","upgrade","head"]}]}'
+            )"
+
+            local run_output_json
+            run_output_json="$(
+              aws ecs run-task \
+                --cluster "$ECS_CLUSTER" \
+                --launch-type FARGATE \
+                --platform-version LATEST \
+                --task-definition "$task_definition_arn" \
+                --network-configuration file://network-configuration.json \
+                --overrides "$overrides_json" \
+                --count 1 \
+                --query '{task: tasks[0].taskArn, failures: failures}' \
+                --output json
+            )"
+
+            local task_arn
+            task_arn="$(echo "$run_output_json" | jq -r '.task // empty')"
+            if [[ -z "$task_arn" ]]; then
+              echo "Failed to start migration task"
+              echo "$run_output_json" | jq -r '.failures[]? | "\(.arn): \(.reason)"'
+              exit 1
+            fi
+
+            aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$task_arn"
+
+            local exit_code
+            exit_code="$(
+              aws ecs describe-tasks \
+                --cluster "$ECS_CLUSTER" \
+                --tasks "$task_arn" \
+                --query 'tasks[0].containers[0].exitCode' \
+                --output text
+            )"
+
+            if [[ "$exit_code" != "0" ]]; then
+              local stopped_reason
+              stopped_reason="$(
+                aws ecs describe-tasks \
+                  --cluster "$ECS_CLUSTER" \
+                  --tasks "$task_arn" \
+                  --query 'tasks[0].stoppedReason' \
+                  --output text
+              )"
+              echo "Migration task failed (exit $exit_code): $stopped_reason"
+              exit 1
+            fi
+          }
+
+          update_service() {
+            local service="$1"
+            local task_definition_arn="$2"
+
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$service" \
+              --task-definition "$task_definition_arn" \
+              --force-new-deployment
+
             deployed_services+=("$service")
           }
 
           missing_services=()
           deployed_services=()
+          declare -A next_task_definition_arns
 
-          deploy "$ECS_SERVICE_BACKEND" "$BACKEND_IMAGE" "aws/ecs/warpy-prod-backend.taskdef.json" "backend"
-          deploy "$ECS_SERVICE_WORKER" "$BACKEND_IMAGE" "aws/ecs/warpy-prod-worker.taskdef.json" "worker"
-          deploy "$ECS_SERVICE_FRONTEND" "$FRONTEND_IMAGE" "aws/ecs/warpy-prod-frontend.taskdef.json" "frontend"
-
-          if [[ ${#deployed_services[@]} -gt 0 ]]; then
-            aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "${deployed_services[@]}"
-          fi
+          prepare_deploy "$ECS_SERVICE_BACKEND" "$BACKEND_IMAGE" "aws/ecs/warpy-prod-backend.taskdef.json" "backend"
+          prepare_deploy "$ECS_SERVICE_WORKER" "$BACKEND_IMAGE" "aws/ecs/warpy-prod-worker.taskdef.json" "worker"
+          prepare_deploy "$ECS_SERVICE_FRONTEND" "$FRONTEND_IMAGE" "aws/ecs/warpy-prod-frontend.taskdef.json" "frontend"
 
           if [[ ${#missing_services[@]} -gt 0 ]]; then
             echo "ECS services not found in cluster '$ECS_CLUSTER': ${missing_services[*]}"
             echo "Task definitions were created/updated; create the services and re-run the workflow."
             exit 1
+          fi
+
+          run_migrations "${next_task_definition_arns["$ECS_SERVICE_BACKEND"]}"
+
+          update_service "$ECS_SERVICE_BACKEND" "${next_task_definition_arns["$ECS_SERVICE_BACKEND"]}"
+          update_service "$ECS_SERVICE_WORKER" "${next_task_definition_arns["$ECS_SERVICE_WORKER"]}"
+          update_service "$ECS_SERVICE_FRONTEND" "${next_task_definition_arns["$ECS_SERVICE_FRONTEND"]}"
+
+          if [[ ${#deployed_services[@]} -gt 0 ]]; then
+            aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "${deployed_services[@]}"
           fi
 
       - name: Upload widget script
