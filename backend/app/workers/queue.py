@@ -4,6 +4,10 @@ from redis import Redis
 from rq import Queue
 
 from ..core.config import get_settings
+from .rq_keyspace import configure_rq_keyspace
+
+
+configure_rq_keyspace()
 
 
 @lru_cache
