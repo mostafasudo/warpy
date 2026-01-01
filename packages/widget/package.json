@@ -1,6 +1,6 @@
 {
   "name": "@warpy-ai/widget",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "type": "module",
   "main": "./core/mountWidget.js",
@@ -37,6 +37,7 @@
     "vue",
     "svelte",
     "vanilla",
+    "README.md",
     "LICENSE"
   ],
   "peerDependencies": {
