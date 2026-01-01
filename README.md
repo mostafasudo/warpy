@@ -18,7 +18,7 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 
 ## Deployment
 
-Production AWS deployment guide: `AWS_DEPLOYMENT.md`.
+Production infrastructure reference: `INFRA_GUIDE.md`.
 
 ## Adding an environment variable
 

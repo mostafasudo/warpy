@@ -3,6 +3,8 @@
 ## Modes
 - **Ask mode:** answers are short, clear, and strictly concise.
 
+Infra reference: `INFRA_GUIDE.md`.
+
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments. Follow existing patterns only.
 - **pnpm** for all JS tasks.

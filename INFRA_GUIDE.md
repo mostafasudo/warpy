@@ -1,4 +1,4 @@
-# AWS Production Infrastructure Reference
+# Production Infrastructure Reference
 
 This document describes the current production deployment (AWS + Cloudflare + Clerk). It is not a step-by-step setup guide.
 
@@ -13,7 +13,7 @@ This document describes the current production deployment (AWS + Cloudflare + Cl
 
 CI/CD is managed by `.github/workflows/deploy-production.yml`.
 
-## Key production values (as of 2026-01-01)
+## Key production values
 
 - Region: `us-east-1`
 - ECS cluster: `warpy`
@@ -78,6 +78,14 @@ Security groups:
 
 ## Compute (ECS Fargate)
 
+### Container images (ECR)
+
+- Images are built/pushed by `.github/workflows/deploy-production.yml` to ECR.
+- Tags: `${GITHUB_SHA}` and `latest` (deploy uses `${GITHUB_SHA}`).
+- Repos:
+  - backend: `warpy-backend`
+  - frontend: `warpy-frontend`
+
 ### Load balancer routing
 
 - Target group `warpy-prod-backend-tg`: HTTP `8000`, health check `/health`
@@ -93,15 +101,24 @@ Security groups:
 - `warpy-prod-frontend`: attached to `warpy-prod-frontend-tg`
 - `warpy-prod-worker`: no load balancer
 
+### Service auto scaling
+
+Configured per-service in ECS (Application Auto Scaling). Current baseline (update if changed):
+
+- Desired count range (backend/frontend/worker): min `1`, max `10`
+- Target tracking:
+  - CPU utilization: `50%`
+  - Memory utilization: `70%`
+
 ### Task definitions
 
 Source of truth is `aws/ecs/*.taskdef.json`. GitHub Actions registers revisions and syncs env vars from GitHub Secrets on deploy.
 
-Resource sizing (from templates):
+Resource sizing:
 
-- backend: `cpu=512`, `memory=1024`
-- worker: `cpu=512`, `memory=1024`
-- frontend: `cpu=256`, `memory=512`
+- backend: see `aws/ecs/warpy-prod-backend.taskdef.json` (`cpu`, `memory`)
+- worker: see `aws/ecs/warpy-prod-worker.taskdef.json` (`cpu`, `memory`)
+- frontend: see `aws/ecs/warpy-prod-frontend.taskdef.json` (`cpu`, `memory`)
 
 Logs:
 
