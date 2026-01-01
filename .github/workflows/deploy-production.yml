@@ -44,6 +44,12 @@ jobs:
           : "${VITE_CLERK_PUBLISHABLE_KEY:?Missing VITE_CLERK_PUBLISHABLE_KEY secret}"
           : "${VITE_API_TIMEOUT_MS:?Missing VITE_API_TIMEOUT_MS secret}"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -53,10 +59,7 @@ jobs:
 
       - name: Install frontend deps
         working-directory: frontend
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.18.2 --activate
-          pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Frontend tests
         working-directory: frontend
