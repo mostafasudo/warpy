@@ -170,6 +170,7 @@ class Agent(Base):
     widget_input_placeholder = Column(Text, nullable=False, server_default="Ask Warpy…")
     widget_install_framework = Column(Text, nullable=False, server_default="react")
     widget_install_package_manager = Column(Text, nullable=False, server_default="npm")
+    widget_security_disclosure_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

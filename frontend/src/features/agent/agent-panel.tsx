@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { getApiUrl } from "@/api/client"
 import { useAgentQuery } from "@/queries/use-agent"
@@ -392,6 +393,7 @@ type WidgetConfigDraft = {
   widgetEmptyTitle: string
   widgetEmptyDescription: string
   widgetInputPlaceholder: string
+  widgetSecurityDisclosureEnabled: boolean
 }
 
 const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
@@ -400,7 +402,8 @@ const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetIconUrl: null,
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
-  widgetInputPlaceholder: "Ask Warpy…"
+  widgetInputPlaceholder: "Ask Warpy…",
+  widgetSecurityDisclosureEnabled: true
 }
 
 const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
@@ -409,7 +412,8 @@ const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
   widgetIconUrl: value.widgetIconUrl?.trim() ? value.widgetIconUrl.trim() : null,
   widgetEmptyTitle: value.widgetEmptyTitle.trim(),
   widgetEmptyDescription: value.widgetEmptyDescription.trim(),
-  widgetInputPlaceholder: value.widgetInputPlaceholder.trim()
+  widgetInputPlaceholder: value.widgetInputPlaceholder.trim(),
+  widgetSecurityDisclosureEnabled: value.widgetSecurityDisclosureEnabled
 })
 
 const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
@@ -631,6 +635,22 @@ const ConfigureWidgetPanel = () => {
                       className="min-h-20"
                     />
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="security-disclosure-toggle" className="text-sm font-semibold">
+                        Show Security & Privacy Disclosure
+                      </Label>
+                      <span className="text-xs text-muted-foreground">(Recommended)</span>
+                    </div>
+                  </div>
+                  <Switch
+                    id="security-disclosure-toggle"
+                    checked={draft.widgetSecurityDisclosureEnabled}
+                    onCheckedChange={(checked) => setDraft({ ...draft, widgetSecurityDisclosureEnabled: checked })}
+                  />
                 </div>
 
                 <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">

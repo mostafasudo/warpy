@@ -137,6 +137,7 @@ export type AgentWidgetConfigResponse = {
   widgetEmptyTitle: string;
   widgetEmptyDescription: string;
   widgetInputPlaceholder: string;
+  widgetSecurityDisclosureEnabled: boolean;
 };
 
 export type AgentWidgetConfigUpdate = AgentWidgetConfigResponse;

@@ -228,7 +228,7 @@
   function saveState(state) {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+    } catch { }
   }
 
   function loadUiState() {
@@ -245,13 +245,13 @@
   function saveUiState(ui) {
     try {
       localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(ui || {}));
-    } catch {}
+    } catch { }
   }
 
   function clearState() {
     try {
       sessionStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch { }
   }
 
   async function fetchWithTimeout(url, options = {}, timeout = API_TIMEOUT) {
@@ -786,6 +786,165 @@
       .cta-widget-new-chat:focus-visible {
         outline: none;
         box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
+      .cta-widget-security-btn {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        background: transparent;
+        border: 1px solid var(--cta-border);
+        border-radius: 12px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.75;
+        transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+
+      .cta-widget-security-btn:hover {
+        opacity: 1;
+        border-color: var(--cta-accent);
+      }
+
+      .cta-widget-security-btn:active {
+        transform: translateY(1px);
+      }
+
+      .cta-widget-security-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
+      .cta-widget-security-btn svg {
+        width: 16px;
+        height: 16px;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-security-btn:hover svg {
+        color: var(--cta-fg);
+      }
+
+      .cta-security-panel {
+        position: absolute;
+        inset: 0;
+        background: var(--cta-surface-strong);
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+        transform: translateX(100%);
+        transition: transform 240ms cubic-bezier(0.2, 0.9, 0.2, 1);
+        backdrop-filter: blur(32px) saturate(180%);
+        -webkit-backdrop-filter: blur(32px) saturate(180%);
+      }
+
+      .cta-security-panel.open {
+        transform: translateX(0);
+      }
+
+      .cta-security-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        padding-top: calc(14px + env(safe-area-inset-top, 0px));
+        border-bottom: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+      }
+
+      .cta-security-back {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        background: transparent;
+        border: 1px solid var(--cta-border);
+        border-radius: 12px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 160ms ease, border-color 160ms ease;
+      }
+
+      .cta-security-back:hover {
+        border-color: var(--cta-accent);
+      }
+
+      .cta-security-back:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
+      .cta-security-back svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .cta-security-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .cta-security-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 16px;
+      }
+
+      .cta-security-section {
+        margin-bottom: 24px;
+      }
+
+      .cta-security-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .cta-security-section-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--cta-fg-muted);
+        margin: 0 0 12px;
+      }
+
+      .cta-security-provider {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .cta-security-provider-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--cta-bubble-assistant);
+        border: 1px solid var(--cta-border);
+      }
+
+      .cta-security-provider-icon svg {
+        width: 16px;
+        height: 16px;
+        color: var(--cta-accent);
+      }
+
+      .cta-security-provider-name {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .cta-security-text {
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--cta-fg-muted);
+        margin: 0;
       }
 
       .cta-widget-messages {
@@ -1325,6 +1484,8 @@
     let widgetEmptyTitle = "What would you like to do?";
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
     let widgetInputPlaceholder = "Ask Warpy…";
+    let securityDisclosureEnabled = true;
+    let isSecurityPanelOpen = false;
 
     const root = document.createElement("div");
 
@@ -1354,6 +1515,11 @@
           </div>
         </div>
         <div class="cta-widget-header-actions">
+          <button class="cta-widget-security-btn" aria-label="Security & Privacy" title="Security & Privacy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </button>
           <button class="cta-widget-new-chat">New chat</button>
           <button class="cta-widget-close" aria-label="Close (Esc)" aria-keyshortcuts="Escape" title="Close (Esc)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1395,6 +1561,37 @@
         <div class="cta-voice-hint" aria-live="polite"></div>
         <div class="cta-voice-error" aria-live="assertive"></div>
       </div>
+      <div class="cta-security-panel">
+        <div class="cta-security-header">
+          <button class="cta-security-back" aria-label="Back to chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <h2 class="cta-security-title">Security & privacy</h2>
+        </div>
+        <div class="cta-security-content">
+          <div class="cta-security-section">
+            <p class="cta-security-section-title">Provider</p>
+            <div class="cta-security-provider">
+              <div class="cta-security-provider-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </div>
+              <p class="cta-security-provider-name">Warpy.ai</p>
+            </div>
+          </div>
+          <div class="cta-security-section">
+            <p class="cta-security-section-title">Permissions</p>
+            <p class="cta-security-text">Executes only allowed actions and operates within your authenticated session. All requests are made on your behalf with your existing permissions.</p>
+          </div>
+          <div class="cta-security-section">
+            <p class="cta-security-section-title">Data Privacy</p>
+            <p class="cta-security-text">Your data remains secure and is never shared with third parties without your consent. Conversations are processed to provide helpful responses.</p>
+          </div>
+        </div>
+      </div>
     `;
 
     root.appendChild(scrim);
@@ -1414,6 +1611,9 @@
     const titleEl = panel.querySelector(".cta-widget-title");
     const subtitleEl = panel.querySelector(".cta-widget-subtitle");
     const avatarEl = panel.querySelector(".cta-widget-avatar");
+    const securityBtnEl = panel.querySelector(".cta-widget-security-btn");
+    const securityPanelEl = panel.querySelector(".cta-security-panel");
+    const securityBackEl = panel.querySelector(".cta-security-back");
     const renderMarkdown = createMarkdownRenderer(() => renderMessages());
 
     function getToggleAriaLabel() {
@@ -1449,9 +1649,16 @@
       }
     }
 
+    function syncSecurityButton() {
+      if (securityBtnEl) {
+        securityBtnEl.style.display = securityDisclosureEnabled ? "inline-flex" : "none";
+      }
+    }
+
     function applyWidgetUiConfig() {
       syncHeader();
       syncIcons();
+      syncSecurityButton();
       syncToggleAriaLabel();
       renderMessages();
     }
@@ -1500,7 +1707,7 @@
         if (event && toggle.hasPointerCapture(event.pointerId)) {
           toggle.releasePointerCapture(event.pointerId);
         }
-      } catch {}
+      } catch { }
       toggle.classList.remove("dragging");
       if (ignoreToggleClick) {
         persistLauncherPosition();
@@ -1521,7 +1728,7 @@
       toggle.classList.add("dragging");
       try {
         toggle.setPointerCapture(event.pointerId);
-      } catch {}
+      } catch { }
     });
 
     toggle.addEventListener("pointermove", (event) => {
@@ -1870,9 +2077,12 @@
           if (typeof data.widgetInputPlaceholder === "string" && data.widgetInputPlaceholder.trim()) {
             widgetInputPlaceholder = data.widgetInputPlaceholder.trim();
           }
+          if (typeof data.securityDisclosureEnabled === "boolean") {
+            securityDisclosureEnabled = data.securityDisclosureEnabled;
+          }
           applyWidgetUiConfig();
         }
-      } catch {}
+      } catch { }
     }
 
     function ensureConfigLoaded() {
@@ -2034,6 +2244,8 @@
     function closePanel({ restoreLauncherFocus = true } = {}) {
       if (!isOpen) return;
       isOpen = false;
+      isSecurityPanelOpen = false;
+      securityPanelEl.classList.remove("open");
       panel.classList.remove("open");
       scrim.classList.remove("open");
       toggle.classList.remove("open");
@@ -2074,6 +2286,14 @@
     });
     closeEl.addEventListener("click", togglePanel);
     newChatEl.addEventListener("click", startNewChat);
+    securityBtnEl.addEventListener("click", () => {
+      isSecurityPanelOpen = true;
+      securityPanelEl.classList.add("open");
+    });
+    securityBackEl.addEventListener("click", () => {
+      isSecurityPanelOpen = false;
+      securityPanelEl.classList.remove("open");
+    });
     document.addEventListener("keydown", (event) => {
       if (!isOpen) return;
       if (event.key !== "Escape") return;
@@ -2081,6 +2301,11 @@
       const isFromWidget = path.includes(panel) || path.includes(root);
       if (isFromWidget) {
         event.stopPropagation();
+      }
+      if (isSecurityPanelOpen) {
+        isSecurityPanelOpen = false;
+        securityPanelEl.classList.remove("open");
+        return;
       }
       closePanel({ restoreLauncherFocus: false });
     });

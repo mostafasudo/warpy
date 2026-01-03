@@ -18,6 +18,7 @@ def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfig
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
+        widget_security_disclosure_enabled=agent.widget_security_disclosure_enabled,
     )
 
 
@@ -36,6 +37,7 @@ def update_agent_widget_config(
     agent.widget_empty_title = _strip_required(payload.widget_empty_title, "Empty state title")
     agent.widget_empty_description = _strip_required(payload.widget_empty_description, "Empty state description")
     agent.widget_input_placeholder = _strip_required(payload.widget_input_placeholder, "Input placeholder")
+    agent.widget_security_disclosure_enabled = payload.widget_security_disclosure_enabled
 
     session.flush()
     log_info("AgentWidgetConfigService", "update", "Widget config updated", user_id=user_id)
@@ -46,6 +48,7 @@ def update_agent_widget_config(
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
+        widget_security_disclosure_enabled=agent.widget_security_disclosure_enabled,
     )
 
 

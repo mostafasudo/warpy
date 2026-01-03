@@ -62,6 +62,7 @@ class AgentWidgetConfigResponse(BaseModel):
     widget_empty_title: str = Field(alias="widgetEmptyTitle", min_length=1, max_length=120)
     widget_empty_description: str = Field(alias="widgetEmptyDescription", min_length=1, max_length=240)
     widget_input_placeholder: str = Field(alias="widgetInputPlaceholder", min_length=1, max_length=120)
+    widget_security_disclosure_enabled: bool = Field(default=True, alias="widgetSecurityDisclosureEnabled")
 
 
 class AgentWidgetConfigUpdate(AgentWidgetConfigResponse):

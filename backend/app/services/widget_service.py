@@ -33,6 +33,7 @@ def get_widget_config(session: Session, agent: Agent) -> WidgetConfigResponse:
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
+        security_disclosure_enabled=agent.widget_security_disclosure_enabled,
     )
 
 

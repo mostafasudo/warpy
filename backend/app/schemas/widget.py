@@ -29,6 +29,7 @@ class WidgetConfigResponse(BaseModel):
         alias="widgetEmptyDescription",
     )
     widget_input_placeholder: str = Field(default="Ask Warpy…", alias="widgetInputPlaceholder")
+    security_disclosure_enabled: bool = Field(default=True, alias="securityDisclosureEnabled")
 
 
 class ToolCallPayload(BaseModel):
