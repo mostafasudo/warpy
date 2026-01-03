@@ -137,7 +137,8 @@ const baseWidgetConfig = {
   widgetIconUrl: null,
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
-  widgetInputPlaceholder: "Ask Warpy…"
+  widgetInputPlaceholder: "Ask Warpy…",
+  widgetSecurityDisclosureEnabled: true
 }
 
 const renderPanelWithInstall = (install: { framework: string; packageManager: string }) => {

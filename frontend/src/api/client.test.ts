@@ -63,9 +63,9 @@ describe("apiClient", () => {
       })
 
     const getToken = jest.fn(async () => "token-123")
-    ;(globalThis as typeof globalThis & {
-      Clerk?: { session?: { getToken?: typeof getToken } }
-    }).Clerk = { session: { getToken } }
+      ; (globalThis as typeof globalThis & {
+        Clerk?: { session?: { getToken?: typeof getToken } }
+      }).Clerk = { session: { getToken } }
 
     await expect(apiClient.health()).resolves.toEqual({ status: "ready" })
     expect(fetchSpy).toHaveBeenCalled()
@@ -277,7 +277,8 @@ describe("apiClient", () => {
         widgetIconUrl: null,
         widgetEmptyTitle: "What would you like to do?",
         widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
-        widgetInputPlaceholder: "Ask Warpy…"
+        widgetInputPlaceholder: "Ask Warpy…",
+        widgetSecurityDisclosureEnabled: true
       }),
       jsonResponse({
         widgetTitle: "Acme Assistant",
@@ -285,7 +286,8 @@ describe("apiClient", () => {
         widgetIconUrl: "https://example.com/icon.png",
         widgetEmptyTitle: "How can we help?",
         widgetEmptyDescription: "Ask a question or request help.",
-        widgetInputPlaceholder: "Ask Acme…"
+        widgetInputPlaceholder: "Ask Acme…",
+        widgetSecurityDisclosureEnabled: true
       })
     ]
 
@@ -302,7 +304,8 @@ describe("apiClient", () => {
       widgetIconUrl: "https://example.com/icon.png",
       widgetEmptyTitle: "How can we help?",
       widgetEmptyDescription: "Ask a question or request help.",
-      widgetInputPlaceholder: "Ask Acme…"
+      widgetInputPlaceholder: "Ask Acme…",
+      widgetSecurityDisclosureEnabled: true
     })
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/agent/widget-config", "http://api.test"),
