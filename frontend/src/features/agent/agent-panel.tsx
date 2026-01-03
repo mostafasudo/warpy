@@ -343,21 +343,23 @@ const WidgetInstallDisplay = ({ agentId, baseUrl }: WidgetInstallDisplayProps) =
           />
         </div>
 
-        <div className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 text-sm">
-          <Info className="h-4 w-4 shrink-0 text-primary" />
-          {framework === "script" ? (
-            <p className="text-muted-foreground">
-              Paste before the closing{" "}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-primary">
-                {"</body>"}
-              </code>{" "}
-              tag.
-            </p>
-          ) : (
-            <p className="text-muted-foreground">
-              Render this where you want the widget, and conditionally mount/unmount as needed.
-            </p>
-          )}
+        <div className="text-sm">
+          <span className="inline-flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
+            <Info className="h-4 w-4 shrink-0 text-primary" />
+            {framework === "script" ? (
+              <span className="text-muted-foreground">
+                Paste before the closing{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-primary">
+                  {"</body>"}
+                </code>{" "}
+                tag.
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                Render this where you want the widget, and conditionally mount/unmount as needed.
+              </span>
+            )}
+          </span>
         </div>
       </div>
     </div>
