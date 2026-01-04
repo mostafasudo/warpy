@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,8 +25,21 @@ class Settings(BaseSettings):
     langsmith_project: str = Field(default="")
     widget_jwt_secret: str = Field(default="")
     test_widget_token_api_key: str = Field(default="")
+    lemon_squeezy_api_key: str = Field(default="")
+    lemon_squeezy_store_id: str = Field(default="")
+    lemon_squeezy_webhook_secret: str = Field(default="")
+    lemon_squeezy_basic_variant_id: str = Field(default="")
+    lemon_squeezy_pro_variant_id: str = Field(default="")
+    lemon_squeezy_enterprise_variant_id: str = Field(default="")
+    lemon_squeezy_topup_1000_variant_id: str = Field(default="")
+    lemon_squeezy_topup_5000_variant_id: str = Field(default="")
+    lemon_squeezy_topup_10000_variant_id: str = Field(default="")
+    lemon_squeezy_redirect_url: str = Field(default="")
+    lemon_squeezy_test_mode: bool = Field(default=False)
+    billing_admin_token: str = Field(default="")
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    env_file = None if os.getenv("PYTEST_CURRENT_TEST") else ".env"
+    return Settings(_env_file=env_file)

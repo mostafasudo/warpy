@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-type Section = "dashboard" | "api" | "features" | "agent" | "contact"
+type Section = "dashboard" | "api" | "features" | "agent" | "billing" | "contact"
 
 type NavigationState = {
   section: Section

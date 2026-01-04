@@ -18,6 +18,8 @@ class WidgetConfigResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     headers: dict[str, SessionHeaderConfig] = {}
+    is_widget_hidden: bool = Field(default=False, alias="isWidgetHidden")
+    actions_remaining: int = Field(default=0, alias="actionsRemaining")
     require_signed_widget_token: bool = Field(default=False, alias="requireSignedWidgetToken")
     widget_refresh_endpoint_path: str = Field(default="/widget-token", alias="widgetRefreshEndpointPath")
     widget_title: str = Field(default="Warpy", alias="widgetTitle")
@@ -76,6 +78,8 @@ class WidgetChatResponse(BaseModel):
     messages: list[WidgetMessagePayload] = []
     tool_calls: list[ToolCallPayload] = Field(default=[], alias="toolCalls")
     done: bool = False
+    is_widget_hidden: bool = Field(default=False, alias="isWidgetHidden")
+    actions_remaining: int = Field(default=0, alias="actionsRemaining")
 
 
 class TranscriptionResponse(BaseModel):

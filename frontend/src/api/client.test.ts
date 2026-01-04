@@ -332,4 +332,49 @@ describe("apiClient", () => {
       expect.objectContaining({ method: "PUT" })
     )
   })
+
+  it("supports billing operations", async () => {
+    const responses = [
+      jsonResponse({
+        plan: "free",
+        actionsRemaining: 500,
+        monthlyActionsRemaining: 0,
+        monthlyActionQuota: 0,
+        topupActionsRemaining: 0,
+        lifetimeActionsRemaining: 500,
+        isWidgetHidden: false,
+        canManageSubscription: false,
+        subscriptionStatus: null,
+        subscriptionRenewsAt: null
+      }),
+      jsonResponse({ url: "https://checkout.test/basic" }),
+      jsonResponse({ url: "https://checkout.test/topup" }),
+      jsonResponse({ url: "https://portal.test" })
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getBillingSummary()
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/billing", "http://api.test"), expect.any(Object))
+
+    await apiClient.createSubscriptionCheckout("basic")
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/billing/checkout/subscription", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await apiClient.createTopupCheckout("1000")
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/billing/checkout/topup", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await apiClient.openBillingPortal()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/billing/portal", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+  })
 })

@@ -44,6 +44,29 @@ Backend/worker env vars are sourced from GitHub Secrets in production (ECS task 
 - Production deploy: add it as a GitHub Secret/Variable and wire it into `.github/workflows/deploy-production.yml` (`Deploy ECS services` step env + `render_task_definition`/`managed_env`).
 - Frontend (Vite): add `VITE_*` vars to `frontend/.env.example`, pass as workflow `build-args`, add `ARG/ENV` in `frontend/Dockerfile`, then read via `import.meta.env.VITE_*`.
 
+## Lemon Squeezy (Local development)
+
+Warpy ships with a Lemon Squeezy integration for subscriptions and one-time action top-ups.
+
+- Create a Lemon Squeezy account + Store, then create subscription and one-time top-up variants.
+- Set all required `LEMON_SQUEEZY_*` env vars in your environment (API key, Store ID, Variant IDs, webhook secret, optional redirect URL, test mode).
+- Setup webhook: use ngrok and set the Lemon webhook URL to `https://<ngrok-host>/webhooks/lemon-squeezy`.
+- For testing payments checkout, use Lemon Squeezy test mode: https://docs.lemonsqueezy.com/help/getting-started/test-mode
+
+## Enterprise Accounts (Lemon Squeezy)
+
+How we onboard enterprise customers and create enterprise plans.
+
+- Create an **Enterprise** subscription variant in Lemon Squeezy (a “shell” variant) and set `LEMON_SQUEEZY_ENTERPRISE_VARIANT_ID`.
+- Agree on the plan terms with the customer:
+  - `customPriceCents` (monthly price, in cents)
+  - `monthlyActions` (monthly action quota)
+- Generate a checkout link (admin-only):
+  - Call `POST /billing/checkout/enterprise` with header `x-warpy-admin-token: <BILLING_ADMIN_TOKEN>` and body `{ "customPriceCents": 12345, "monthlyActions": 100000 }`.
+  - Generate the link while authenticated as the customer (Warpy encodes `user_id` in checkout custom data for webhook syncing).
+- After purchase, Lemon webhooks sync the subscription in Warpy and set the customer’s monthly quota to `monthlyActions`.
+- If you need fixed enterprise tiers, create additional private variants and extend the enterprise checkout endpoint to select the variant per tier.
+
 ## Non-Docker Setup
 ### Frontend
 Copy `frontend/.env.example` to `frontend/.env` and adjust values before running `pnpm dev`.

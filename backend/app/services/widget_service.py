@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..core.logger import log_info
 from ..models import Agent, AuthType, Conversation, Message, SessionHeader
 from ..schemas.widget import SessionHeaderConfig, WidgetConfigResponse
+from .billing_service import get_billing_actions_summary
 
 
 def get_agent_by_id(session: Session, agent_id: UUID) -> Agent | None:
@@ -13,6 +14,7 @@ def get_agent_by_id(session: Session, agent_id: UUID) -> Agent | None:
 
 
 def get_widget_config(session: Session, agent: Agent) -> WidgetConfigResponse:
+    summary = get_billing_actions_summary(session, agent.user_id)
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == agent.user_id)).all()
     header_map = {}
     for header in headers:
@@ -25,6 +27,8 @@ def get_widget_config(session: Session, agent: Agent) -> WidgetConfigResponse:
         header_map[header.header_name] = SessionHeaderConfig(**config_kwargs)
     return WidgetConfigResponse(
         headers=header_map,
+        is_widget_hidden=summary.is_widget_hidden,
+        actions_remaining=summary.total_remaining,
         require_signed_widget_token=agent.widget_auth_enabled,
         widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path,
         widget_title=agent.widget_title,
@@ -101,5 +105,3 @@ def get_tool_context(session: Session, conversation_id: UUID) -> str | None:
         )
     )
     return msg.content if msg else None
-
-

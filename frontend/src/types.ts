@@ -152,3 +152,26 @@ export type AgentWidgetInstallResponse = {
 };
 
 export type AgentWidgetInstallUpdate = AgentWidgetInstallResponse;
+
+export type BillingPlan = "free" | "basic" | "pro" | "enterprise";
+
+export type BillingSummaryResponse = {
+  plan: BillingPlan;
+  actionsRemaining: number;
+  monthlyActionsRemaining: number;
+  monthlyActionQuota: number;
+  topupActionsRemaining: number;
+  lifetimeActionsRemaining: number;
+  isWidgetHidden: boolean;
+  canManageSubscription: boolean;
+  subscriptionStatus: string | null;
+  subscriptionRenewsAt: string | null;
+};
+
+export type BillingCheckoutResponse = {
+  url: string;
+};
+
+export type BillingPortalResponse = {
+  url: string;
+};
