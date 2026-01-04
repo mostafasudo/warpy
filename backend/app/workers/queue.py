@@ -7,7 +7,8 @@ from ..core.config import get_settings
 from .rq_keyspace import configure_rq_keyspace
 
 
-configure_rq_keyspace()
+if get_settings().environment == "production":
+    configure_rq_keyspace()
 
 
 @lru_cache
