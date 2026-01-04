@@ -131,3 +131,9 @@ Local testing helper (no customer endpoint needed):
 - In **Advanced Security → Widget Refresh Endpoint**, set the path to `/test-widget-token` and **Deploy Changes**
 
 `POST /test-widget-token` is for testing only (disabled when `ENVIRONMENT=production`); it proxies `POST /widget-token` using `TEST_WIDGET_TOKEN_API_KEY`.
+
+## Tracing (LangSmith)
+
+If you wish to use LangSmith for tracing:
+1. Create an account at [LangSmith](https://smith.langchain.com/).
+2. Add your own API key in the `LANGSMITH_API_KEY` environment variable.
