@@ -1,11 +1,12 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, LayoutDashboard, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { Braces, LayoutDashboard, Mail, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
 import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
 import { ApiConfigPanel } from "@/features/api-config/api-config-panel"
+import { ContactPanel } from "@/features/contact/contact-panel"
 import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
@@ -22,7 +23,7 @@ type NavButtonProps = {
 
 const sectionQueryKey = "tab"
 type Section = ReturnType<typeof navigationSelectors.section>
-const navigationSections: Section[] = ["dashboard", "api", "features", "agent"]
+const navigationSections: Section[] = ["dashboard", "api", "features", "agent", "contact"]
 
 const getSectionFromUrl = (): Section | null => {
   if (typeof window === "undefined") return null
@@ -219,6 +220,13 @@ export const Shell = () => {
               collapsed={sidebarCollapsed}
               onClick={() => setSection("agent")}
             />
+            <NavButton
+              active={section === "contact"}
+              label="Contact Us"
+              icon={<Mail className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("contact")}
+            />
           </nav>
           <div className="mt-auto pt-8">
             <NavButton
@@ -241,6 +249,7 @@ export const Shell = () => {
 	          {section === "api" && <ApiConfigPanel />}
 	          {section === "features" && <EndpointsPanel />}
 	          {section === "agent" && <AgentPanel />}
+            {section === "contact" && <ContactPanel />}
 	        </div>
 	      </div>
       {isMobile && <MobileGuard />}

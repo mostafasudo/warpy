@@ -28,6 +28,10 @@ jest.mock("@/features/agent/agent-panel", () => ({
   AgentPanel: () => <div data-testid="agent-panel" />
 }))
 
+jest.mock("@/features/contact/contact-panel", () => ({
+  ContactPanel: () => <div data-testid="contact-panel" />
+}))
+
 const renderShell = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
@@ -68,6 +72,11 @@ describe("Shell", () => {
     expect(screen.getByTestId("agent-panel")).not.toBeNull()
     await waitFor(() => {
       expect(new URL(window.location.href).searchParams.get("tab")).toBe("agent")
+    })
+    await user.click(screen.getByRole("button", { name: "Contact Us" }))
+    expect(screen.getByTestId("contact-panel")).not.toBeNull()
+    await waitFor(() => {
+      expect(new URL(window.location.href).searchParams.get("tab")).toBe("contact")
     })
     await user.click(screen.getByRole("button", { name: "Overview" }))
     expect(screen.getByTestId("dashboard-panel")).not.toBeNull()
