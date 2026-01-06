@@ -253,12 +253,12 @@ export const Shell = () => {
 	              <UserButton />
 	            </div>
 	          </header>
-          {section === "dashboard" && <DashboardPanel />}
-          {section === "api" && <ApiConfigPanel />}
-          {section === "features" && <EndpointsPanel />}
-          {section === "agent" && <AgentPanel />}
-          {section === "billing" && <BillingPanel />}
-          {section === "contact" && <ContactPanel />}
+	          {section === "dashboard" && <DashboardPanel />}
+	          {section === "api" && <ApiConfigPanel />}
+	          {section === "features" && <EndpointsPanel />}
+	          {section === "agent" && <AgentPanel />}
+            {section === "billing" && <BillingPanel />}
+            {section === "contact" && <ContactPanel />}
 	        </div>
 	      </div>
       {isMobile && <MobileGuard />}
