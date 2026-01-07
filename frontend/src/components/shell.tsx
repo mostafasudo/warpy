@@ -1,9 +1,10 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, LayoutDashboard, Mail, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { Braces, CreditCard, LayoutDashboard, Mail, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
+import { BillingPanel } from "@/features/billing/billing-panel"
 import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
 import { ApiConfigPanel } from "@/features/api-config/api-config-panel"
 import { ContactPanel } from "@/features/contact/contact-panel"
@@ -23,7 +24,7 @@ type NavButtonProps = {
 
 const sectionQueryKey = "tab"
 type Section = ReturnType<typeof navigationSelectors.section>
-const navigationSections: Section[] = ["dashboard", "api", "features", "agent", "contact"]
+const navigationSections: Section[] = ["dashboard", "api", "features", "agent", "billing", "contact"]
 
 const getSectionFromUrl = (): Section | null => {
   if (typeof window === "undefined") return null
@@ -221,6 +222,13 @@ export const Shell = () => {
               onClick={() => setSection("agent")}
             />
             <NavButton
+              active={section === "billing"}
+              label="Billing"
+              icon={<CreditCard className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("billing")}
+            />
+            <NavButton
               active={section === "contact"}
               label="Contact Us"
               icon={<Mail className="h-4 w-4" />}
@@ -249,6 +257,7 @@ export const Shell = () => {
 	          {section === "api" && <ApiConfigPanel />}
 	          {section === "features" && <EndpointsPanel />}
 	          {section === "agent" && <AgentPanel />}
+            {section === "billing" && <BillingPanel />}
             {section === "contact" && <ContactPanel />}
 	        </div>
 	      </div>

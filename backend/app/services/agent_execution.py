@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_error, log_info
+from ..core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
 from ..models import Endpoint, Environment
+from .billing_service import consume_action_for_server_execution
 
 
 def substitute_path_params(path: str, params: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -24,7 +26,14 @@ def substitute_path_params(path: str, params: dict[str, Any]) -> tuple[str, dict
     return re.sub(pattern, replace_param, path), remaining
 
 
-def execute_endpoint(session: Session, user_id: str, endpoint: Endpoint, args: dict[str, Any]) -> dict[str, Any]:
+def execute_endpoint(
+    session: Session,
+    user_id: str,
+    endpoint: Endpoint,
+    args: dict[str, Any],
+    *,
+    enforce_billing: bool = True,
+) -> dict[str, Any]:
     environment = session.scalar(select(Environment).where(Environment.user_id == user_id).limit(1))
     if not environment:
         return {"error": "No environment configured. Please set up an environment with a base URL first."}
@@ -60,6 +69,15 @@ def execute_endpoint(session: Session, user_id: str, endpoint: Endpoint, args: d
         request_kwargs["json"] = body_data
     if header_data:
         request_kwargs["headers"] = header_data
+
+    if enforce_billing:
+        try:
+            consume_result = consume_action_for_server_execution(session, user_id)
+            if consume_result.consumed <= 0:
+                return {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
+        except Exception as error:
+            log_error("AgentChain", "execute_endpoint", "Failed to consume action", exc=error, endpoint_id=str(endpoint.id))
+            return {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
 
     try:
         with httpx.Client() as client:

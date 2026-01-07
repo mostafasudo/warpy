@@ -30,7 +30,7 @@ class DummySession:
 def test_execute_endpoint_invalid_scheme():
     session = DummySession(environment=DummyEnvironment("ftp://example"))
     endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {})
+    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=False)
     assert "Invalid URL scheme" in result["error"]
 
 
@@ -48,7 +48,7 @@ def test_execute_endpoint_timeout(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: TimeoutClient(), TimeoutException=Exception))
     session = DummySession(environment=DummyEnvironment("http://api.test"))
     endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {})
+    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=False)
     assert result["error"] == "Request timed out"
 
 
@@ -67,7 +67,7 @@ def test_execute_endpoint_other_error(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: ErrorClient(), TimeoutException=Timeout))
     session = DummySession(environment=DummyEnvironment("http://api.test"))
     endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {})
+    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=False)
     assert "boom" in result["error"]
 
 
@@ -88,5 +88,5 @@ def test_execute_endpoint_handles_unused_params_and_text_body(monkeypatch: pytes
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: Client(), TimeoutException=type("T", (Exception,), {})))
     session = DummySession(environment=DummyEnvironment("http://api.test"))
     endpoint = DummyEndpoint("/users/{id}", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {"params": {"id": 1, "extra": 2}})
+    result = execute_endpoint(session, "user", endpoint, {"params": {"id": 1, "extra": 2}}, enforce_billing=False)
     assert result == {"status_code": 200, "body": "plain"}

@@ -106,6 +106,59 @@ class UserStats(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class BillingPlan(str, enum.Enum):
+    free = "free"
+    basic = "basic"
+    pro = "pro"
+    enterprise = "enterprise"
+
+
+class BillingAccount(Base):
+    __tablename__ = "billing_accounts"
+
+    user_id = Column(Text, primary_key=True)
+    plan = Column(Enum(BillingPlan, name="billing_plan", native_enum=True, validate_strings=True), nullable=False)
+    monthly_action_quota = Column(Integer, nullable=False, server_default="0")
+    monthly_actions_remaining = Column(Integer, nullable=False, server_default="0")
+    topup_actions_remaining = Column(Integer, nullable=False, server_default="0")
+    lifetime_actions_remaining = Column(Integer, nullable=False, server_default="0")
+    lemon_customer_id = Column(Text, nullable=True, index=True)
+    lemon_subscription_id = Column(Text, nullable=True, index=True)
+    lemon_subscription_status = Column(Text, nullable=True)
+    lemon_subscription_variant_id = Column(Text, nullable=True)
+    lemon_subscription_renews_at = Column(DateTime(timezone=True), nullable=True)
+    lemon_subscription_ends_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class BillingTopUpCredit(Base):
+    __tablename__ = "billing_topup_credits"
+    __table_args__ = (
+        UniqueConstraint("lemon_order_id", name="uq_billing_topup_credits_lemon_order_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    lemon_order_id = Column(Text, nullable=False)
+    actions = Column(Integer, nullable=False)
+    refunded_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class BillingActionConsumption(Base):
+    __tablename__ = "billing_action_consumptions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "conversation_id", "tool_call_id", name="uq_billing_action_consumptions_key"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    conversation_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    tool_call_id = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Endpoint(Base):
     __tablename__ = "endpoints"
     __table_args__ = (

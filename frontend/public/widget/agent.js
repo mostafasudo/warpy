@@ -265,6 +265,24 @@
     }
   }
 
+  function shouldHideWidget(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    if (payload.isWidgetHidden === true) return true;
+    const remaining = typeof payload.actionsRemaining === "number" ? payload.actionsRemaining : Number(payload.actionsRemaining);
+    return Number.isFinite(remaining) && remaining <= 0;
+  }
+
+  async function fetchWidgetConfig(apiUrl, agentId, timeoutMs = API_TIMEOUT) {
+    try {
+      const res = await fetchWithTimeout(`${apiUrl}/widget/config/${agentId}`, {}, timeoutMs);
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      return data && typeof data === "object" ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
   function extractHeaderValue(source, key) {
     if (source === "localStorage") {
       return localStorage.getItem(key);
@@ -1436,7 +1454,7 @@
     return style;
   }
 
-  function createWidget(config) {
+  function createWidget(config, initialConfigData) {
     const apiUrl = resolveApiUrl();
     const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
     if (!state.voice) state.voice = {};
@@ -1488,6 +1506,15 @@
     let isSecurityPanelOpen = false;
 
     const root = document.createElement("div");
+    let widgetHidden = false;
+
+    function hideWidget() {
+      if (widgetHidden) return;
+      widgetHidden = true;
+      closePanel({ restoreLauncherFocus: false });
+      root.style.display = "none";
+      root.setAttribute("aria-hidden", "true");
+    }
 
     const scrim = document.createElement("div");
     scrim.className = "cta-widget-scrim";
@@ -2054,40 +2081,47 @@
       inputEl.selectionEnd = inputEl.value.length;
     }
 
+    function applyRemoteConfig(data) {
+      if (widgetHidden) return;
+      if (!data || typeof data !== "object") return;
+      if (shouldHideWidget(data)) {
+        hideWidget();
+        return;
+      }
+      headerConfig = data.headers || {};
+      widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
+      if (typeof data.widgetTitle === "string" && data.widgetTitle.trim()) {
+        widgetTitle = data.widgetTitle.trim();
+      }
+      if (typeof data.widgetSubtitle === "string" && data.widgetSubtitle.trim()) {
+        widgetSubtitle = data.widgetSubtitle.trim();
+      }
+      widgetIconUrl = typeof data.widgetIconUrl === "string" && data.widgetIconUrl.trim() ? data.widgetIconUrl.trim() : null;
+      if (typeof data.widgetEmptyTitle === "string" && data.widgetEmptyTitle.trim()) {
+        widgetEmptyTitle = data.widgetEmptyTitle.trim();
+      }
+      if (typeof data.widgetEmptyDescription === "string" && data.widgetEmptyDescription.trim()) {
+        widgetEmptyDescription = data.widgetEmptyDescription.trim();
+      }
+      if (typeof data.widgetInputPlaceholder === "string" && data.widgetInputPlaceholder.trim()) {
+        widgetInputPlaceholder = data.widgetInputPlaceholder.trim();
+      }
+      if (typeof data.securityDisclosureEnabled === "boolean") {
+        securityDisclosureEnabled = data.securityDisclosureEnabled;
+      }
+      applyWidgetUiConfig();
+    }
+
     async function fetchConfig() {
-      try {
-        const res = await fetchWithTimeout(`${apiUrl}/widget/config/${config.agentId}`);
-        if (res.ok) {
-          const data = await res.json();
-          headerConfig = data.headers || {};
-          widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
-          if (typeof data.widgetTitle === "string" && data.widgetTitle.trim()) {
-            widgetTitle = data.widgetTitle.trim();
-          }
-          if (typeof data.widgetSubtitle === "string" && data.widgetSubtitle.trim()) {
-            widgetSubtitle = data.widgetSubtitle.trim();
-          }
-          widgetIconUrl = typeof data.widgetIconUrl === "string" && data.widgetIconUrl.trim() ? data.widgetIconUrl.trim() : null;
-          if (typeof data.widgetEmptyTitle === "string" && data.widgetEmptyTitle.trim()) {
-            widgetEmptyTitle = data.widgetEmptyTitle.trim();
-          }
-          if (typeof data.widgetEmptyDescription === "string" && data.widgetEmptyDescription.trim()) {
-            widgetEmptyDescription = data.widgetEmptyDescription.trim();
-          }
-          if (typeof data.widgetInputPlaceholder === "string" && data.widgetInputPlaceholder.trim()) {
-            widgetInputPlaceholder = data.widgetInputPlaceholder.trim();
-          }
-          if (typeof data.securityDisclosureEnabled === "boolean") {
-            securityDisclosureEnabled = data.securityDisclosureEnabled;
-          }
-          applyWidgetUiConfig();
-        }
-      } catch { }
+      const data = await fetchWidgetConfig(apiUrl, config.agentId);
+      if (data) {
+        applyRemoteConfig(data);
+      }
     }
 
     function ensureConfigLoaded() {
       if (!configPromise) {
-        configPromise = fetchConfig();
+        configPromise = initialConfigData ? Promise.resolve(applyRemoteConfig(initialConfigData)) : fetchConfig();
       }
       return configPromise;
     }
@@ -2149,7 +2183,7 @@
     }
 
     async function sendMessage(text) {
-      if (!text.trim() || isLoading) return;
+      if (!text.trim() || isLoading || widgetHidden) return;
 
       state.messages.push({ role: "user", content: text.trim() });
       saveState(state);
@@ -2157,6 +2191,7 @@
       setLoading(true);
 
       let didReceiveAssistant = false;
+      let shouldHide = false;
       try {
         const payload = {
           agentId: config.agentId,
@@ -2174,35 +2209,39 @@
         state.conversationId = data.conversationId;
         saveState(state);
 
-        const MAX_ITERATIONS = 25;
-        let iterations = 0;
-        while (!data.done) {
-          if (++iterations > MAX_ITERATIONS) {
-            throw new Error("Too many tool call iterations");
-          }
-
-          if (data.toolCalls && data.toolCalls.length > 0) {
-            const toolResults = await Promise.all(
-              data.toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig))
-            );
-
-            response = await postWidgetChat({
-              agentId: config.agentId,
-              conversationId: state.conversationId,
-              toolResults,
-            });
-
-            if (!response.ok) {
-              throw new Error("Tool result request failed");
+        shouldHide = shouldHideWidget(data);
+        if (!shouldHide) {
+          const MAX_ITERATIONS = 25;
+          let iterations = 0;
+          while (!data.done && !shouldHide) {
+            if (++iterations > MAX_ITERATIONS) {
+              throw new Error("Too many tool call iterations");
             }
 
-            data = await response.json();
-          } else {
-            break;
+            if (data.toolCalls && data.toolCalls.length > 0) {
+              const toolResults = await Promise.all(
+                data.toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig))
+              );
+
+              response = await postWidgetChat({
+                agentId: config.agentId,
+                conversationId: state.conversationId,
+                toolResults,
+              });
+
+              if (!response.ok) {
+                throw new Error("Tool result request failed");
+              }
+
+              data = await response.json();
+              shouldHide = shouldHideWidget(data);
+            } else {
+              break;
+            }
           }
         }
 
-        if (data.messages && data.messages.length > 0) {
+        if (!shouldHide && data.messages && data.messages.length > 0) {
           for (const msg of data.messages) {
             state.messages.push({ role: msg.role, content: msg.content });
             if (msg.role === "assistant") {
@@ -2211,22 +2250,31 @@
           }
         }
 
-        saveState(state);
+        if (!shouldHide) {
+          saveState(state);
+        }
       } catch (error) {
-        state.messages.push({
-          role: "assistant",
-          content: "Sorry, something went wrong. Please try again.",
-        });
-        didReceiveAssistant = true;
-        saveState(state);
+        if (!shouldHide) {
+          state.messages.push({
+            role: "assistant",
+            content: "Sorry, something went wrong. Please try again.",
+          });
+          didReceiveAssistant = true;
+          saveState(state);
+        }
+      } finally {
+        setLoading(false);
+      }
+
+      if (shouldHide) {
+        hideWidget();
+        return;
       }
 
       if (!isOpen && didReceiveAssistant) {
         setUnread(true);
         playUnreadPulse();
       }
-
-      setLoading(false);
     }
 
     function openPanel() {
@@ -2275,8 +2323,12 @@
       renderMessages();
     }
 
-    toggle.addEventListener("click", () => {
-      if (ignoreToggleClick) return;
+    toggle.addEventListener("click", async () => {
+      if (ignoreToggleClick || widgetHidden) return;
+      if (!isOpen) {
+        await fetchConfig();
+      }
+      if (widgetHidden) return;
       togglePanel();
     });
     toggle.addEventListener("animationend", (event) => {
@@ -2367,24 +2419,37 @@
     return root;
   }
 
-  function init() {
-    const config = getScriptData();
-    if (!config || !config.agentId) {
-      console.warn("[Warpy] Missing data-agent-id attribute");
-      return;
-    }
+  async function init() {
+    try {
+      const config = getScriptData();
+      if (!config || !config.agentId) {
+        console.warn("[Warpy] Missing data-agent-id attribute");
+        return;
+      }
 
-    if (document.getElementById(WIDGET_CONTAINER_ID)) {
-      return;
-    }
+      const apiUrl = resolveApiUrl();
+      const initialConfigData = await fetchWidgetConfig(apiUrl, config.agentId, 2500);
+      if (initialConfigData && shouldHideWidget(initialConfigData)) {
+        const existing = document.getElementById(WIDGET_CONTAINER_ID);
+        if (existing) {
+          existing.style.display = "none";
+          existing.setAttribute("aria-hidden", "true");
+        }
+        return;
+      }
 
-    const host = document.createElement("div");
-    host.id = WIDGET_CONTAINER_ID;
-    const shadowRoot = host.attachShadow({ mode: "open" });
-    shadowRoot.appendChild(createStyles());
-    shadowRoot.appendChild(createWidget(config));
-    observeTheme(host);
-    document.body.appendChild(host);
+      if (document.getElementById(WIDGET_CONTAINER_ID)) {
+        return;
+      }
+
+      const host = document.createElement("div");
+      host.id = WIDGET_CONTAINER_ID;
+      const shadowRoot = host.attachShadow({ mode: "open" });
+      shadowRoot.appendChild(createStyles());
+      shadowRoot.appendChild(createWidget(config, initialConfigData));
+      observeTheme(host);
+      document.body.appendChild(host);
+    } catch { }
   }
 
   if (document.readyState === "loading") {

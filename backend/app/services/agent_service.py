@@ -6,12 +6,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..core.logger import log_info
 from ..models import Agent, Conversation, Message
+from .billing_service import get_or_create_billing_account
 
 
 def create_agent(session: Session, user_id: str) -> Agent:
     existing = session.scalar(select(Agent).where(Agent.user_id == user_id))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Agent already exists")
+    get_or_create_billing_account(session, user_id)
     agent = Agent(user_id=user_id)
     session.add(agent)
     session.flush()
@@ -64,4 +66,3 @@ def get_messages(session: Session, conversation_id: UUID) -> list[Message]:
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
     ).all())
-

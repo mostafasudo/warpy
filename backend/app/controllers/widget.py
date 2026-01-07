@@ -9,6 +9,7 @@ from ..core.config import get_settings
 from ..core.database import get_session
 from ..core.logger import log_error, log_info
 from ..core.llm_config import llm_config
+from ..core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
 from ..schemas.widget import (
     TranscriptionResponse,
     ToolResultPayload,
@@ -18,6 +19,7 @@ from ..schemas.widget import (
     WidgetMessagePayload,
 )
 from ..services.agent_chain import AgentExecutor
+from ..services.billing_service import consume_actions_for_tool_results, get_billing_actions_summary
 from ..services.transcription_service import transcribe_audio
 from ..workers.queue import get_redis_connection
 from ..services.widget_service import (
@@ -128,6 +130,34 @@ async def widget_chat(
         else:
             conversation = create_widget_conversation(session, payload.agent_id)
 
+        if payload.tool_results:
+            consume_result = consume_actions_for_tool_results(
+                session,
+                agent.user_id,
+                conversation.id,
+                [result.id for result in payload.tool_results],
+            )
+            actions_remaining = consume_result.remaining
+        else:
+            summary = get_billing_actions_summary(session, agent.user_id)
+            actions_remaining = summary.total_remaining
+            if summary.is_widget_hidden:
+                message = ASSISTANT_UNAVAILABLE_MESSAGE
+                log_info(
+                    "WidgetController",
+                    "widget_chat",
+                    "Widget hidden due to action limit",
+                    agent_id=str(payload.agent_id),
+                )
+                return WidgetChatResponse(
+                    conversationId=conversation.id,
+                    messages=[WidgetMessagePayload(role="assistant", content=message)],
+                    toolCalls=[],
+                    done=True,
+                    isWidgetHidden=True,
+                    actionsRemaining=actions_remaining,
+                )
+
         db_messages = get_widget_messages(session, conversation.id)
         history = [
             {"role": m.role, "content": m.content}
@@ -143,6 +173,23 @@ async def widget_chat(
             save_widget_message(session, conversation.id, "user", payload.message)
 
         if payload.tool_results:
+            if actions_remaining <= 0:
+                message = ASSISTANT_UNAVAILABLE_MESSAGE
+                log_info(
+                    "WidgetController",
+                    "widget_chat",
+                    "Widget hidden after action consumption",
+                    conversation_id=str(conversation.id),
+                )
+                session.commit()
+                return WidgetChatResponse(
+                    conversationId=conversation.id,
+                    messages=[WidgetMessagePayload(role="assistant", content=message)],
+                    toolCalls=[],
+                    done=True,
+                    isWidgetHidden=True,
+                    actionsRemaining=actions_remaining,
+                )
             tool_results = payload.tool_results
             pending_state = get_pending_state(session, conversation.id)
             if pending_state:
@@ -182,7 +229,9 @@ async def widget_chat(
                 conversationId=conversation.id,
                 messages=response_messages,
                 toolCalls=[],
-                done=True
+                done=True,
+                isWidgetHidden=actions_remaining <= 0,
+                actionsRemaining=actions_remaining,
             )
 
         if result.tool_calls:
@@ -194,7 +243,9 @@ async def widget_chat(
                 conversationId=conversation.id,
                 messages=[],
                 toolCalls=result.tool_calls,
-                done=False
+                done=False,
+                isWidgetHidden=False,
+                actionsRemaining=actions_remaining,
             )
 
         if result.messages:
@@ -204,7 +255,9 @@ async def widget_chat(
             conversationId=conversation.id,
             messages=[],
             toolCalls=[],
-            done=True
+            done=True,
+            isWidgetHidden=actions_remaining <= 0,
+            actionsRemaining=actions_remaining,
         )
 
     except HTTPException:

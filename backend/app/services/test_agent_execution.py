@@ -2,6 +2,7 @@ import types
 
 import pytest
 
+from app.core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
 from app.models import HttpMethod
 from app.services import agent_execution
 from app.services.agent_execution import execute_endpoint, substitute_path_params
@@ -64,7 +65,7 @@ def test_substitute_path_params_tracks_remaining():
 def test_execute_endpoint_requires_environment():
     session = DummySession(environment=None)
     endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {})
+    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=False)
     assert result["error"]
 
 
@@ -73,6 +74,11 @@ def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
     dummy_response = DummyResponse(200, RuntimeError("no json"))
     client = DummyHttpClient(dummy_response, calls)
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
+    monkeypatch.setattr(
+        agent_execution,
+        "consume_action_for_server_execution",
+        lambda _session, _user_id: types.SimpleNamespace(consumed=1),
+    )
 
     session = DummySession(environment=DummyEnvironment("http://api.test"))
     endpoint = DummyEndpoint("/users/{id}", HttpMethod.post)
@@ -80,7 +86,8 @@ def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
         session,
         "user",
         endpoint,
-        {"params": {"id": 9}, "query": {"q": "x"}, "body": {"k": "v"}, "headers": {"H": "1"}}
+        {"params": {"id": 9}, "query": {"q": "x"}, "body": {"k": "v"}, "headers": {"H": "1"}},
+        enforce_billing=True,
     )
 
     assert result == {"status_code": 200, "body": "text"}
@@ -89,6 +96,42 @@ def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
     assert calls[0]["kwargs"]["params"] == {"q": "x"}
     assert calls[0]["kwargs"]["json"] == {"k": "v"}
     assert calls[0]["kwargs"]["headers"] == {"H": "1"}
+
+
+def test_execute_endpoint_blocks_when_no_actions(monkeypatch: pytest.MonkeyPatch):
+    calls: list = []
+    client = DummyHttpClient(DummyResponse(200, {"ok": True}), calls)
+    monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
+    monkeypatch.setattr(
+        agent_execution,
+        "consume_action_for_server_execution",
+        lambda _session, _user_id: types.SimpleNamespace(consumed=0),
+    )
+
+    session = DummySession(environment=DummyEnvironment("http://api.test"))
+    endpoint = DummyEndpoint("/users", HttpMethod.get)
+    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=True)
+
+    assert result == {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
+    assert calls == []
+
+
+def test_execute_endpoint_handles_billing_error(monkeypatch: pytest.MonkeyPatch):
+    calls: list = []
+    client = DummyHttpClient(DummyResponse(200, {"ok": True}), calls)
+    monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
+
+    def raise_error(_session, _user_id):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(agent_execution, "consume_action_for_server_execution", raise_error)
+
+    session = DummySession(environment=DummyEnvironment("http://api.test"))
+    endpoint = DummyEndpoint("/users", HttpMethod.get)
+    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=True)
+
+    assert result == {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
+    assert calls == []
 
 
 def test_execute_endpoint_rejects_get_body(monkeypatch: pytest.MonkeyPatch):

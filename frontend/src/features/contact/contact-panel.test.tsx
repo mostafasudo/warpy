@@ -15,4 +15,3 @@ describe("ContactPanel", () => {
     expect(screen.getByRole("link", { name: "Email support" })).toHaveAttribute("href", "mailto:support@warpy.ai")
   })
 })
-

@@ -16,7 +16,11 @@ const apiClient: Record<string, any> = {
   createFeature: jest.fn(),
   updateFeature: jest.fn(),
   toggleFeature: jest.fn(),
-  deleteFeature: jest.fn()
+  deleteFeature: jest.fn(),
+  getBillingSummary: jest.fn(),
+  createSubscriptionCheckout: jest.fn(),
+  createTopupCheckout: jest.fn(),
+  openBillingPortal: jest.fn()
 }
 
 jest.mock("@/api/client", () => ({ apiClient }))
@@ -165,5 +169,55 @@ describe("react-query hooks", () => {
     ;(apiClient.deleteFeature as any).mockResolvedValue(undefined)
     await useDeleteFeature().mutateAsync("f1")
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(8)
+  })
+
+  it("fetches billing summary", () => {
+    queryMock.useQuery.mockImplementation((options: any) => {
+      options.queryFn()
+      return { data: { plan: "free", actionsRemaining: 500 } }
+    })
+    const { useBillingSummaryQuery } = require("./use-billing-summary")
+    ;(apiClient.getBillingSummary as any).mockResolvedValue({ plan: "free", actionsRemaining: 500 })
+
+    useBillingSummaryQuery()
+
+    expect(apiClient.getBillingSummary).toHaveBeenCalled()
+  })
+
+  it("creates subscription checkout", async () => {
+    queryMock.useMutation.mockImplementation((args: any) => {
+      const { mutationFn } = args
+      return {
+        mutateAsync: async (payload: any) => mutationFn(payload)
+      }
+    })
+    const { useCreateSubscriptionCheckout } = require("../mutations/use-create-subscription-checkout")
+    ;(apiClient.createSubscriptionCheckout as any).mockResolvedValue({ url: "https://checkout.test" })
+
+    const result = await useCreateSubscriptionCheckout().mutateAsync("basic")
+
+    expect(apiClient.createSubscriptionCheckout).toHaveBeenCalledWith("basic")
+    expect(result.url).toBe("https://checkout.test")
+  })
+
+  it("creates top-up checkout and opens portal", async () => {
+    queryMock.useMutation.mockImplementation((args: any) => {
+      const { mutationFn } = args
+      return {
+        mutateAsync: async (payload: any) => mutationFn(payload)
+      }
+    })
+    const { useCreateTopupCheckout } = require("../mutations/use-create-topup-checkout")
+    const { useOpenBillingPortal } = require("../mutations/use-open-billing-portal")
+    ;(apiClient.createTopupCheckout as any).mockResolvedValue({ url: "https://checkout.test/topup" })
+    ;(apiClient.openBillingPortal as any).mockResolvedValue({ url: "https://portal.test" })
+
+    const topup = await useCreateTopupCheckout().mutateAsync("5000")
+    const portal = await useOpenBillingPortal().mutateAsync()
+
+    expect(apiClient.createTopupCheckout).toHaveBeenCalledWith("5000")
+    expect(topup.url).toBe("https://checkout.test/topup")
+    expect(apiClient.openBillingPortal).toHaveBeenCalled()
+    expect(portal.url).toBe("https://portal.test")
   })
 })

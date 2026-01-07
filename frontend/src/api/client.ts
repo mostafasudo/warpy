@@ -4,6 +4,9 @@ import type {
   AgentWidgetConfigUpdate,
   AgentWidgetInstallResponse,
   AgentWidgetInstallUpdate,
+  BillingCheckoutResponse,
+  BillingPortalResponse,
+  BillingSummaryResponse,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
@@ -139,6 +142,9 @@ export type {
   AgentWidgetConfigUpdate,
   AgentWidgetInstallResponse,
   AgentWidgetInstallUpdate,
+  BillingCheckoutResponse,
+  BillingPortalResponse,
+  BillingSummaryResponse,
   ConfigResponse,
   EndpointPayload,
   EndpointResponse,
@@ -254,5 +260,20 @@ export const apiClient = {
     request<AgentWidgetInstallResponse>("/agent/widget-install", {
       method: "PUT",
       body: JSON.stringify(payload),
+    }),
+  getBillingSummary: () => request<BillingSummaryResponse>("/billing"),
+  createSubscriptionCheckout: (plan: "basic" | "pro") =>
+    request<BillingCheckoutResponse>("/billing/checkout/subscription", {
+      method: "POST",
+      body: JSON.stringify({ plan }),
+    }),
+  createTopupCheckout: (pkg: "1000" | "5000" | "10000") =>
+    request<BillingCheckoutResponse>("/billing/checkout/topup", {
+      method: "POST",
+      body: JSON.stringify({ package: pkg }),
+    }),
+  openBillingPortal: () =>
+    request<BillingPortalResponse>("/billing/portal", {
+      method: "POST",
     }),
 };

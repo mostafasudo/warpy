@@ -6,8 +6,10 @@ from fastapi.testclient import TestClient
 
 from app.core.llm_config import LLMConfig
 from app.main import create_app
+from app.models import BillingAccount
 from app.schemas.auth import ClerkSession
 from app.services.agent_chain import StepResult
+from app.services.billing_service import get_or_create_billing_account
 
 
 @pytest.fixture(autouse=True)
@@ -81,12 +83,66 @@ def test_widget_config_returns_headers(client: TestClient):
     assert config.status_code == 200
     body = config.json()
     assert "headers" in body
+    assert body["isWidgetHidden"] is False
+    assert body["actionsRemaining"] == 500
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetSubtitle"] == "Ready to act"
     assert body["widgetIconUrl"] is None
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
+
+
+def test_widget_hides_when_actions_exhausted(client: TestClient):
+    from app.core.database import session_scope
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 0
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    config = client.get(f"/widget/config/{agent_id}")
+    assert config.status_code == 200
+    assert config.json()["isWidgetHidden"] is True
+    assert config.json()["actionsRemaining"] == 0
+
+    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "hello"})
+    assert response.status_code == 200
+    assert response.json()["isWidgetHidden"] is True
+    assert response.json()["done"] is True
+
+
+def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestClient):
+    from app.core.database import session_scope
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 1
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    first = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
+    convo_id = first.json()["conversationId"]
+
+    second = client.post("/widget/chat", json={
+        "agentId": agent_id,
+        "conversationId": convo_id,
+        "toolResults": [{"id": "tc_1", "statusCode": 200, "body": {"ok": True}}]
+    })
+    assert second.status_code == 200
+    assert second.json()["isWidgetHidden"] is True
+    assert second.json()["actionsRemaining"] == 0
 
 
 def test_widget_chat_agent_not_found(client: TestClient):

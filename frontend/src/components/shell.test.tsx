@@ -16,6 +16,10 @@ jest.mock("@/features/dashboard/dashboard-panel", () => ({
   DashboardPanel: () => <div data-testid="dashboard-panel" />
 }))
 
+jest.mock("@/features/billing/billing-panel", () => ({
+  BillingPanel: () => <div data-testid="billing-panel" />
+}))
+
 jest.mock("@/features/api-config/api-config-panel", () => ({
   ApiConfigPanel: () => <div data-testid="api-panel" />
 }))
@@ -63,6 +67,11 @@ describe("Shell", () => {
     })
 
     expect(screen.getByTestId("dashboard-panel")).not.toBeNull()
+    await user.click(screen.getByRole("button", { name: "Billing" }))
+    expect(screen.getByTestId("billing-panel")).not.toBeNull()
+    await waitFor(() => {
+      expect(new URL(window.location.href).searchParams.get("tab")).toBe("billing")
+    })
     await user.click(screen.getByRole("button", { name: "API config" }))
     expect(screen.getByTestId("api-panel")).not.toBeNull()
     await waitFor(() => {
