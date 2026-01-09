@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Activity, Braces, CreditCard, LayoutDashboard, Mail, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { Braces, CreditCard, LayoutDashboard, Mail, MousePointerClick, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
@@ -193,18 +193,18 @@ export const Shell = () => {
               <p className="text-sm font-semibold">Warpy</p>
             </div>
           </div>
-	          <nav className="mt-8 flex flex-col gap-2">
-	            <NavButton
-	              active={section === "dashboard"}
-	              label="Overview"
-	              icon={<LayoutDashboard className="h-4 w-4" />}
-	              collapsed={sidebarCollapsed}
-	              onClick={() => setSection("dashboard")}
-	            />
+          <nav className="mt-8 flex flex-col gap-2">
+            <NavButton
+              active={section === "dashboard"}
+              label="Overview"
+              icon={<LayoutDashboard className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("dashboard")}
+            />
             <NavButton
               active={section === "activity"}
               label="User activity"
-              icon={<Activity className="h-4 w-4" />}
+              icon={<MousePointerClick className="h-4 w-4" />}
               collapsed={sidebarCollapsed}
               onClick={() => setSection("activity")}
             />
@@ -253,23 +253,23 @@ export const Shell = () => {
               onClick={toggleSidebarCollapsed}
             />
           </div>
-	        </aside>
-	        <div className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-10 md:py-8">
-	          <header className="flex items-center justify-end gap-3">
-	            <ThemeToggle />
-	            <div className="rounded-full">
-	              <UserButton />
-	            </div>
-	          </header>
-	          {section === "dashboard" && <DashboardPanel />}
-            {section === "activity" && <ActivityPanel />}
-	          {section === "api" && <ApiConfigPanel />}
-	          {section === "features" && <EndpointsPanel />}
-	          {section === "agent" && <AgentPanel />}
-            {section === "billing" && <BillingPanel />}
-            {section === "contact" && <ContactPanel />}
-	        </div>
-	      </div>
+        </aside>
+        <div className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-10 md:py-8">
+          <header className="flex items-center justify-end gap-3">
+            <ThemeToggle />
+            <div className="rounded-full">
+              <UserButton />
+            </div>
+          </header>
+          {section === "dashboard" && <DashboardPanel />}
+          {section === "activity" && <ActivityPanel />}
+          {section === "api" && <ApiConfigPanel />}
+          {section === "features" && <EndpointsPanel />}
+          {section === "agent" && <AgentPanel />}
+          {section === "billing" && <BillingPanel />}
+          {section === "contact" && <ContactPanel />}
+        </div>
+      </div>
       {isMobile && <MobileGuard />}
     </div>
   )

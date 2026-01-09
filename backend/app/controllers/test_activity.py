@@ -111,7 +111,7 @@ def test_activity_summary_counts_conversations_and_top_actions(client: TestClien
     body = response.json()
     assert body["conversationCount"] == 1
     assert body["actionCount"] == 2
-    assert body["topActions"] == [{"feature": "Catalog", "action": "Fetch products", "count": 2}]
+    assert body["topActions"] == [{"feature": "Catalog", "action": "List products", "count": 2}]
 
 
 def test_activity_summary_rejects_invalid_date_range(client: TestClient):
@@ -276,7 +276,7 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
     assert body["nextMessageCursor"]
     assert len(body["actions"]) == 1
     assert body["actions"][0]["feature"] == "Catalog"
-    assert body["actions"][0]["action"] == "Fetch products"
+    assert body["actions"][0]["action"] == "List products"
     assert body["nextActionCursor"]
 
     earlier = client.get(
@@ -295,5 +295,5 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
     assert action_earlier.status_code == 200
     action_body = action_earlier.json()
     assert len(action_body["actions"]) == 1
-    assert action_body["actions"][0]["action"] == "Fetch products"
+    assert action_body["actions"][0]["action"] == "List products"
     assert action_body["nextActionCursor"] is None
