@@ -299,7 +299,7 @@ const FeatureCard = ({
               >
                 {endpoint.method}
               </Badge>
-              <div className="min-w-[200px] flex-1 space-y-1">
+              <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <div
                     className="truncate font-medium"

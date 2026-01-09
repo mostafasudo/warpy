@@ -72,11 +72,13 @@ def _humanize_action_from_name(value: str) -> str:
 def action_label(endpoint: Endpoint) -> str:
     tool = endpoint.tool or {}
     function = tool.get("function") or {}
+    name = str(function.get("name") or "").strip()
+    if name:
+        return _humanize_action_from_name(name)
     description = str(function.get("description") or "").strip()
     if _is_safe_description(description):
         return description
-    name = str(function.get("name") or "").strip()
-    return _humanize_action_from_name(name)
+    return "Performed an action"
 
 
 def _get_agent(session: Session, user_id: str) -> Agent | None:
