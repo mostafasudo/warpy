@@ -315,7 +315,7 @@ const FeatureCard = ({
                   </div>
                 </div>
                 <div
-                  className="truncate text-xs text-muted-foreground"
+                  className="line-clamp-1 break-all text-xs text-muted-foreground"
                   title={endpoint.tool.function.description}
                 >
                   {endpoint.tool.function.description}
