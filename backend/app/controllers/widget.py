@@ -33,6 +33,7 @@ from ..services.widget_service import (
     save_tool_context,
     save_widget_message,
 )
+from ..services.conversation_actions_service import ToolCallForLog, record_widget_tool_results
 from ..services.widget_auth_service import WidgetJwtError, verify_widget_jwt
 
 router = APIRouter(prefix="/widget", tags=["widget"])
@@ -50,22 +51,50 @@ def deserialize_messages(data: str) -> list:
         return []
 
 
-def serialize_state(messages: list, active_endpoint_ids: list[UUID]) -> str:
+def serialize_state(messages: list, active_endpoint_ids: list[UUID], tool_calls: list[ToolCallForLog]) -> str:
     return json.dumps({
         "messages": messages_to_dict(messages),
-        "endpoint_ids": [str(eid) for eid in active_endpoint_ids]
+        "endpoint_ids": [str(eid) for eid in active_endpoint_ids],
+        "tool_calls": [
+            {
+                "id": call.id,
+                "endpoint_id": str(call.endpoint_id),
+                "params": call.params,
+                "query": call.query,
+                "body": call.body,
+            }
+            for call in tool_calls
+        ],
     })
 
 
-def deserialize_state(state: str) -> tuple[list, list[UUID]]:
+def deserialize_state(state: str) -> tuple[list, list[UUID], list[ToolCallForLog]]:
     try:
         data = json.loads(state)
         messages = messages_from_dict(data["messages"])
         endpoint_ids = [UUID(eid) for eid in data["endpoint_ids"]]
-        return messages, endpoint_ids
-    except (json.JSONDecodeError, TypeError, KeyError) as exc:
+        tool_calls: list[ToolCallForLog] = []
+        for call in data.get("tool_calls") or []:
+            try:
+                if not isinstance(call, dict):
+                    continue
+                call_id = str(call.get("id") or "").strip()
+                endpoint_id = str(call.get("endpoint_id") or "").strip()
+                if not call_id or not endpoint_id:
+                    continue
+                tool_calls.append(ToolCallForLog(
+                    id=call_id,
+                    endpoint_id=UUID(endpoint_id),
+                    params=call.get("params") or {},
+                    query=call.get("query") or {},
+                    body=call.get("body") or {},
+                ))
+            except Exception:
+                continue
+        return messages, endpoint_ids, tool_calls
+    except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
         log_error("WidgetController", "deserialize_state", "Failed to deserialize", exc=exc)
-        return [], []
+        return [], [], []
 
 
 def require_widget_auth(request: Request, agent_id: UUID, enabled: bool) -> None:
@@ -173,6 +202,18 @@ async def widget_chat(
             save_widget_message(session, conversation.id, "user", payload.message)
 
         if payload.tool_results:
+            tool_results = payload.tool_results
+            pending_state = get_pending_state(session, conversation.id)
+            if pending_state:
+                pending_messages, active_endpoint_ids, pending_tool_calls = deserialize_state(pending_state)
+                if pending_tool_calls:
+                    record_widget_tool_results(
+                        session,
+                        agent.user_id,
+                        conversation.id,
+                        tool_results=tool_results,
+                        tool_calls=pending_tool_calls,
+                    )
             if actions_remaining <= 0:
                 message = ASSISTANT_UNAVAILABLE_MESSAGE
                 log_info(
@@ -190,10 +231,6 @@ async def widget_chat(
                     isWidgetHidden=True,
                     actionsRemaining=actions_remaining,
                 )
-            tool_results = payload.tool_results
-            pending_state = get_pending_state(session, conversation.id)
-            if pending_state:
-                pending_messages, active_endpoint_ids = deserialize_state(pending_state)
         else:
             tool_context_data = get_tool_context(session, conversation.id)
             if tool_context_data:
@@ -235,7 +272,21 @@ async def widget_chat(
             )
 
         if result.tool_calls:
-            state = serialize_state(result.messages, result.active_endpoint_ids)
+            state = serialize_state(
+                result.messages,
+                result.active_endpoint_ids,
+                [
+                    ToolCallForLog(
+                        id=call.id,
+                        endpoint_id=call.endpoint_id,
+                        params=call.params or {},
+                        query=call.query or {},
+                        body=call.body or {},
+                    )
+                    for call in result.tool_calls
+                    if call.id
+                ],
+            )
             save_widget_message(session, conversation.id, "pending_state", state)
             session.commit()
             log_info("WidgetController", "widget_chat", "Tool calls pending", conversation_id=str(conversation.id), tool_count=len(result.tool_calls))

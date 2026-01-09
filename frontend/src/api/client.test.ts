@@ -377,4 +377,69 @@ describe("apiClient", () => {
       expect.objectContaining({ method: "POST" })
     )
   })
+
+  it("supports activity operations", async () => {
+    const responses = [
+      jsonResponse({
+        conversationCount: 3,
+        actionCount: 10,
+        topActions: [{ feature: "Catalog", action: "Fetch products", count: 4 }]
+      }),
+      jsonResponse({
+        items: [
+          {
+            id: "c1",
+            participant: "widget",
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-02T00:00:00Z",
+            userMessageCount: 2,
+            actionCount: 1
+          }
+        ],
+        nextCursor: "cursor-1"
+      }),
+      jsonResponse({
+        id: "c1",
+        participant: "widget",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-02T00:00:00Z",
+        messages: [{ role: "user", content: "hi", createdAt: "2026-01-02T00:00:00Z" }],
+        nextMessageCursor: null,
+        actions: [
+          {
+            id: "a1",
+            createdAt: "2026-01-02T00:00:00Z",
+            feature: "Catalog",
+            action: "Fetch products",
+            statusCode: 200,
+            error: null,
+            request: { params: {}, query: {}, body: {} }
+          }
+        ],
+        nextActionCursor: null
+      })
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getActivitySummary("2026-01-01", "2026-01-31")
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/activity/summary?start_date=2026-01-01&end_date=2026-01-31", "http://api.test"),
+      expect.any(Object)
+    )
+
+    await apiClient.listActivityConversations({ startDate: "2026-01-01", endDate: "2026-01-31", limit: 50, cursor: "cursor" })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/activity/conversations?start_date=2026-01-01&end_date=2026-01-31&limit=50&cursor=cursor", "http://api.test"),
+      expect.any(Object)
+    )
+
+    await apiClient.getActivityConversationDetail("c1", { messageLimit: 10, actionLimit: 5 })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/activity/conversations/c1?message_limit=10&action_limit=5", "http://api.test"),
+      expect.any(Object)
+    )
+  })
 })

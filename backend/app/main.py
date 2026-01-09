@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .controllers.agent import router as agent_router
+from .controllers.activity import router as activity_router
 from .controllers.billing import router as billing_router
 from .controllers.config import router as config_router
 from .controllers.features import router as features_router
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(features_router)
     app.include_router(endpoints_router)
     app.include_router(agent_router)
+    app.include_router(activity_router)
     app.include_router(billing_router)
     app.include_router(widget_router)
     app.include_router(widget_token_router)

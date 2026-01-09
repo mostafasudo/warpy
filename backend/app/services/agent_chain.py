@@ -14,6 +14,7 @@ from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
 from ..models import Endpoint
 from ..schemas.widget import ToolCallPayload, ToolResultPayload
+from .agent_execution import execute_endpoint
 from .agent_schema import SchemaFactory, serialize_args
 from .agent_tools import create_find_actions_tool, get_endpoint_tools
 from .hallucination_checker import HallucinationChecker
@@ -129,7 +130,13 @@ class AgentExecutor:
 
     def _get_tools(self):
         tools = [create_find_actions_tool(self.session, self.user_id)]
-        tools.extend(get_endpoint_tools(self.session, self.user_id, self.active_endpoint_ids, self.schema_factory))
+        tools.extend(get_endpoint_tools(
+            self.session,
+            self.user_id,
+            self.active_endpoint_ids,
+            self.schema_factory,
+            conversation_id=self.conversation_id,
+        ))
         return tools
 
     def _get_endpoint_by_tool_name(self, tool_name: str) -> Endpoint | None:
@@ -426,15 +433,12 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
                 tool = next((item for item in tools if item.name == tool_name), None)
-                if not tool:
-                    tool_result = f"Tool '{tool_name}' not found"
-                else:
+                if tool_name == "find_actions" and tool:
                     try:
                         tool_result = tool.invoke(tool_args)
                     except Exception as error:
-                        log_error("AgentExecutor", "run", f"Tool execution failed: {tool_name}", exc=error)
+                        log_error("AgentExecutor", "run", "find_actions failed", exc=error)
                         tool_result = f"Error executing tool: {str(error)}"
-                if tool_name == "find_actions":
                     new_ids = self._parse_endpoint_ids_from_response(tool_result)
                     added_ids: list[UUID] = []
                     for endpoint_id in new_ids:
@@ -443,6 +447,33 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                             added_ids.append(endpoint_id)
                     if added_ids:
                         self._update_cache_after_discovery(added_ids)
+                    messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
+                    continue
+
+                endpoint = self._get_endpoint_by_tool_name(tool_name)
+                if endpoint:
+                    serialized = serialize_args(tool_args)
+                    filtered = {k: v for k, v in serialized.items() if v is not None}
+                    result = execute_endpoint(
+                        self.session,
+                        self.user_id,
+                        endpoint,
+                        filtered,
+                        conversation_id=self.conversation_id,
+                        tool_call_id=tool_call.get("id"),
+                    )
+                    tool_result = json.dumps(result, indent=2)
+                    messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
+                    continue
+
+                if not tool:
+                    tool_result = f"Tool '{tool_name}' not found"
+                else:
+                    try:
+                        tool_result = tool.invoke(tool_args)
+                    except Exception as error:
+                        log_error("AgentExecutor", "run", f"Tool execution failed: {tool_name}", exc=error)
+                        tool_result = f"Error executing tool: {str(error)}"
                 messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
         log_info("AgentExecutor", "run", "Max iterations reached")
         return await self._generate_max_iterations_response(user_message)

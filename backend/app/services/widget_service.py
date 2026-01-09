@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_info
@@ -59,6 +59,9 @@ def get_widget_conversation(session: Session, conversation_id: UUID, agent_id: U
 
 
 def save_widget_message(session: Session, conversation_id: UUID, role: str, content: str) -> Message:
+    conversation = session.get(Conversation, conversation_id)
+    if conversation:
+        conversation.updated_at = func.now()
     message = Message(conversation_id=conversation_id, role=role, content=content)
     session.add(message)
     session.flush()

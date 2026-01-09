@@ -52,7 +52,7 @@ class DummySession:
 def test_create_endpoint_tool_invokes_executor(monkeypatch: pytest.MonkeyPatch):
     captured = {}
 
-    def fake_execute(session, user_id, endpoint, args):
+    def fake_execute(session, user_id, endpoint, args, conversation_id=None):
         captured["session"] = session
         captured["user_id"] = user_id
         captured["endpoint"] = endpoint

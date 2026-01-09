@@ -55,7 +55,7 @@ def test_agent_executor_runs_with_tool_calls(monkeypatch):
 
     endpoint_calls: list[list[UUID]] = []
 
-    def fake_get_endpoint_tools(_session, _user_id, endpoint_ids, _schema_factory):
+    def fake_get_endpoint_tools(_session, _user_id, endpoint_ids, _schema_factory, conversation_id=None):
         endpoint_calls.append(list(endpoint_ids))
         return []
 

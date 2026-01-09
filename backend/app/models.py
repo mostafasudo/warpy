@@ -2,7 +2,7 @@ import enum
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Index, JSON, Column, DateTime, Enum, ForeignKey, Integer, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -232,6 +232,10 @@ class Agent(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_agent_updated_at", "agent_id", "updated_at"),
+        Index("ix_conversations_agent_created_at", "agent_id", "created_at"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -253,3 +257,24 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class ConversationAction(Base):
+    __tablename__ = "conversation_actions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "conversation_id", "tool_call_id", name="uq_conversation_actions_key"),
+        Index("ix_conversation_actions_user_created_at", "user_id", "created_at"),
+        Index("ix_conversation_actions_conversation_created_at", "conversation_id", "created_at"),
+        Index("ix_conversation_actions_user_endpoint_created_at", "user_id", "endpoint_id", "created_at"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint_id = Column(UUID(as_uuid=True), ForeignKey("endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    feature_id = Column(UUID(as_uuid=True), ForeignKey("features.id", ondelete="CASCADE"), nullable=False, index=True)
+    tool_call_id = Column(Text, nullable=False)
+    request = Column(json_type, nullable=False)
+    status_code = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

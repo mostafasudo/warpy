@@ -63,7 +63,8 @@ def create_endpoint_tool(
     session: Session,
     user_id: str,
     endpoint: Endpoint,
-    schema_factory: SchemaFactory | None = None
+    schema_factory: SchemaFactory | None = None,
+    conversation_id: UUID | None = None,
 ) -> StructuredTool:
     factory = schema_factory or SchemaFactory()
     tool_spec = endpoint.tool or {}
@@ -76,7 +77,7 @@ def create_endpoint_tool(
     def execute_func(**kwargs: Any) -> str:
         serialized = serialize_args(kwargs)
         filtered = {key: value for key, value in serialized.items() if value is not None}
-        result = execute_endpoint(session, user_id, endpoint, filtered)
+        result = execute_endpoint(session, user_id, endpoint, filtered, conversation_id=conversation_id)
         return json.dumps(result, indent=2)
 
     return StructuredTool.from_function(
@@ -91,7 +92,8 @@ def get_endpoint_tools(
     session: Session,
     user_id: str,
     endpoint_ids: list[UUID],
-    schema_factory: SchemaFactory | None = None
+    schema_factory: SchemaFactory | None = None,
+    conversation_id: UUID | None = None,
 ) -> list[StructuredTool]:
     if not endpoint_ids:
         return []
@@ -103,4 +105,4 @@ def get_endpoint_tools(
         )
     ).all()
     factory = schema_factory or SchemaFactory()
-    return [create_endpoint_tool(session, user_id, endpoint, factory) for endpoint in endpoints]
+    return [create_endpoint_tool(session, user_id, endpoint, factory, conversation_id=conversation_id) for endpoint in endpoints]

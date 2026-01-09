@@ -1,14 +1,16 @@
 import re
 from typing import Any
 from urllib.parse import urlparse
+from uuid import UUID
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_error, log_info
+from ..core.constants import SENSITIVE_KEY_FRAGMENTS
 from ..core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
-from ..models import Endpoint, Environment
+from ..models import ConversationAction, Endpoint, Environment
 from .billing_service import consume_action_for_server_execution
 
 
@@ -26,6 +28,48 @@ def substitute_path_params(path: str, params: dict[str, Any]) -> tuple[str, dict
     return re.sub(pattern, replace_param, path), remaining
 
 
+def _sanitize_request(value: Any) -> Any:
+
+    def is_sensitive(key: str) -> bool:
+        lowered = key.strip().lower()
+        return any(fragment in lowered for fragment in SENSITIVE_KEY_FRAGMENTS)
+
+    if isinstance(value, dict):
+        return {
+            str(key): ("***" if is_sensitive(str(key)) else _sanitize_request(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_request(item) for item in value]
+    return value
+
+
+def _record_action(
+    session: Session,
+    user_id: str,
+    conversation_id: UUID,
+    endpoint: Endpoint,
+    *,
+    tool_call_id: str,
+    request: dict[str, Any],
+    status_code: int | None,
+    error: str | None,
+) -> None:
+    try:
+        session.add(ConversationAction(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            endpoint_id=endpoint.id,
+            feature_id=endpoint.feature_id,
+            tool_call_id=tool_call_id,
+            request=request,
+            status_code=status_code,
+            error=error,
+        ))
+    except Exception as exc:
+        log_error("AgentChain", "execute_endpoint", "Failed to record action", exc=exc, endpoint_id=str(endpoint.id))
+
+
 def execute_endpoint(
     session: Session,
     user_id: str,
@@ -33,10 +77,28 @@ def execute_endpoint(
     args: dict[str, Any],
     *,
     enforce_billing: bool = True,
+    conversation_id: UUID | None = None,
+    tool_call_id: str | None = None,
 ) -> dict[str, Any]:
+    def record_action(request: dict[str, Any], status_code: int | None, error: str | None) -> None:
+        if not conversation_id or not tool_call_id:
+            return
+        _record_action(
+            session,
+            user_id,
+            conversation_id,
+            endpoint,
+            tool_call_id=tool_call_id,
+            request=request,
+            status_code=status_code,
+            error=error,
+        )
+
     environment = session.scalar(select(Environment).where(Environment.user_id == user_id).limit(1))
     if not environment:
-        return {"error": "No environment configured. Please set up an environment with a base URL first."}
+        error = "No environment configured. Please set up an environment with a base URL first."
+        record_action({"params": {}, "query": {}, "body": {}}, None, error)
+        return {"error": error}
 
     path_params = args.get("params", {})
     query_params = args.get("query", {})
@@ -56,12 +118,32 @@ def execute_endpoint(
     url = f"{environment.base_url.rstrip('/')}/{path.lstrip('/')}"
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        return {"error": f"Invalid URL scheme: {parsed.scheme}. Only http and https are allowed."}
+        error = f"Invalid URL scheme: {parsed.scheme}. Only http and https are allowed."
+        record_action(
+            {
+                "params": _sanitize_request(path_params),
+                "query": _sanitize_request(query_params),
+                "body": _sanitize_request(body_data),
+            },
+            None,
+            error,
+        )
+        return {"error": error}
 
     method = endpoint.method.value.upper()
     if method == "GET" and body_data:
         log_error("AgentChain", "execute_endpoint", "GET request cannot include a body", endpoint_id=str(endpoint.id))
-        return {"error": "GET requests cannot include a body"}
+        error = "GET requests cannot include a body"
+        record_action(
+            {
+                "params": _sanitize_request(path_params),
+                "query": _sanitize_request(query_params),
+                "body": _sanitize_request(body_data),
+            },
+            None,
+            error,
+        )
+        return {"error": error}
     request_kwargs: dict[str, Any] = {"timeout": 30.0}
     if query_params:
         request_kwargs["params"] = query_params
@@ -93,10 +175,39 @@ def execute_endpoint(
                 endpoint_id=str(endpoint.id),
                 status=response.status_code
             )
+            record_action(
+                {
+                    "params": _sanitize_request(path_params),
+                    "query": _sanitize_request(query_params),
+                    "body": _sanitize_request(body_data),
+                },
+                response.status_code,
+                None,
+            )
             return {"status_code": response.status_code, "body": body}
     except httpx.TimeoutException:
         log_error("AgentChain", "execute_endpoint", "Request timeout", endpoint_id=str(endpoint.id))
-        return {"error": "Request timed out"}
+        error = "Request timed out"
+        record_action(
+            {
+                "params": _sanitize_request(path_params),
+                "query": _sanitize_request(query_params),
+                "body": _sanitize_request(body_data),
+            },
+            None,
+            error,
+        )
+        return {"error": error}
     except Exception as error:
         log_error("AgentChain", "execute_endpoint", "Request failed", exc=error, endpoint_id=str(endpoint.id))
-        return {"error": str(error)}
+        error_text = str(error)
+        record_action(
+            {
+                "params": _sanitize_request(path_params),
+                "query": _sanitize_request(query_params),
+                "body": _sanitize_request(body_data),
+            },
+            None,
+            error_text,
+        )
+        return {"error": error_text}

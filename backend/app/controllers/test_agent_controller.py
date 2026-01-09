@@ -37,7 +37,7 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
 
 
 class FakeExecutor:
-    def __init__(self, session, user_id):
+    def __init__(self, session, user_id, conversation_id=None):
         self.calls = []
 
     async def run(self, message, history):

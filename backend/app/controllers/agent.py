@@ -165,7 +165,7 @@ async def chat_route(
 
         user_message = save_message(session, conversation_id, "user", payload.message)
 
-        executor = AgentExecutor(session, clerk_session.user_id)
+        executor = AgentExecutor(session, clerk_session.user_id, conversation_id=conversation_id)
         response_content = await executor.run(payload.message, history)
         
         assistant_message = save_message(session, conversation_id, "assistant", response_content)

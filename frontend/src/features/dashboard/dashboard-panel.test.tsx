@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, expect, it, jest, beforeEach } from "@jest/globals"
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { DashboardPanel } from "./dashboard-panel"
@@ -14,8 +14,13 @@ jest.mock("@/queries/use-features", () => ({
   useFeaturesQuery: jest.fn()
 }))
 
+jest.mock("@/queries/use-activity-summary", () => ({
+  useActivitySummaryQuery: jest.fn()
+}))
+
 const mockedUseConfigQuery = require("@/queries/use-config").useConfigQuery as jest.Mock
 const mockedUseFeaturesQuery = require("@/queries/use-features").useFeaturesQuery as jest.Mock
+const mockedUseActivitySummaryQuery = require("@/queries/use-activity-summary").useActivitySummaryQuery as jest.Mock
 
 describe("DashboardPanel", () => {
   beforeEach(() => {
@@ -34,12 +39,22 @@ describe("DashboardPanel", () => {
       ],
       isPending: false
     })
+    mockedUseActivitySummaryQuery.mockReturnValue({
+      data: { conversationCount: 2, actionCount: 5, topActions: [] },
+      isPending: false
+    })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
 
     render(<DashboardPanel />)
 
-    expect(screen.getByText("2")).not.toBeNull()
+    const featuresLabel = screen.getByText("Features")
+    const featuresCard = featuresLabel.closest("div")?.parentElement?.parentElement
+    expect(featuresCard).not.toBeNull()
+    expect(within(featuresCard as HTMLElement).getByText("2")).not.toBeNull()
     expect(screen.getByText("3 endpoints mapped.")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: "View all" }))
+    expect(useNavigationStore.getState().section).toBe("activity")
 
     await user.click(screen.getByRole("button", { name: "Configure API" }))
     expect(useNavigationStore.getState().section).toBe("api")
@@ -58,6 +73,10 @@ describe("DashboardPanel", () => {
       data: [{ id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }],
       isPending: false
     })
+    mockedUseActivitySummaryQuery.mockReturnValue({
+      data: { conversationCount: 0, actionCount: 0, topActions: [] },
+      isPending: false
+    })
 
     render(<DashboardPanel />)
 
@@ -67,6 +86,7 @@ describe("DashboardPanel", () => {
   it("renders loading skeletons when pending", () => {
     mockedUseConfigQuery.mockReturnValue({ data: null, isPending: true })
     mockedUseFeaturesQuery.mockReturnValue({ data: null, isPending: true })
+    mockedUseActivitySummaryQuery.mockReturnValue({ data: null, isPending: true })
 
     render(<DashboardPanel />)
 

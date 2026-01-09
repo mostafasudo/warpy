@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals"
 
-const queryMock = { useQuery: jest.fn(), useMutation: jest.fn(), useQueryClient: jest.fn() }
+const queryMock = { useQuery: jest.fn(), useMutation: jest.fn(), useQueryClient: jest.fn(), useInfiniteQuery: jest.fn() }
 
 jest.mock("@tanstack/react-query", () => queryMock)
 
@@ -20,7 +20,10 @@ const apiClient: Record<string, any> = {
   getBillingSummary: jest.fn(),
   createSubscriptionCheckout: jest.fn(),
   createTopupCheckout: jest.fn(),
-  openBillingPortal: jest.fn()
+  openBillingPortal: jest.fn(),
+  getActivitySummary: jest.fn(),
+  listActivityConversations: jest.fn(),
+  getActivityConversationDetail: jest.fn(),
 }
 
 jest.mock("@/api/client", () => ({ apiClient }))
@@ -31,6 +34,7 @@ describe("react-query hooks", () => {
     queryMock.useQuery.mockReset()
     queryMock.useMutation.mockReset()
     queryMock.useQueryClient.mockReset()
+    queryMock.useInfiniteQuery.mockReset()
   })
 
   it("configures health query", () => {
@@ -219,5 +223,63 @@ describe("react-query hooks", () => {
     expect(topup.url).toBe("https://checkout.test/topup")
     expect(apiClient.openBillingPortal).toHaveBeenCalled()
     expect(portal.url).toBe("https://portal.test")
+  })
+
+  it("fetches activity summary", () => {
+    queryMock.useQuery.mockImplementation((options: any) => {
+      options.queryFn()
+      return { data: { conversationCount: 0, actionCount: 0, topActions: [] } }
+    })
+    const { useActivitySummaryQuery } = require("./use-activity-summary")
+    ;(apiClient.getActivitySummary as any).mockResolvedValue({ conversationCount: 0, actionCount: 0, topActions: [] })
+
+    useActivitySummaryQuery("2026-01-01", "2026-01-31")
+
+    expect(apiClient.getActivitySummary).toHaveBeenCalledWith("2026-01-01", "2026-01-31")
+  })
+
+  it("fetches activity conversations with infinite query", () => {
+    queryMock.useInfiniteQuery.mockImplementation((options: any) => {
+      options.queryFn({ pageParam: undefined })
+      return { data: { pages: [] } }
+    })
+    const { useActivityConversationsInfiniteQuery } = require("./use-activity-conversations")
+    ;(apiClient.listActivityConversations as any).mockResolvedValue({ items: [], nextCursor: null })
+
+    useActivityConversationsInfiniteQuery({ startDate: "2026-01-01", endDate: "2026-01-31", limit: 50 })
+
+    expect(apiClient.listActivityConversations).toHaveBeenCalledWith({
+      startDate: "2026-01-01",
+      endDate: "2026-01-31",
+      limit: 50,
+      cursor: undefined
+    })
+  })
+
+  it("fetches activity conversation detail with infinite query", () => {
+    queryMock.useInfiniteQuery.mockImplementation((options: any) => {
+      options.queryFn({ pageParam: undefined })
+      return { data: { pages: [] } }
+    })
+    const { useActivityConversationDetailInfiniteQuery } = require("./use-activity-conversation-detail")
+    ;(apiClient.getActivityConversationDetail as any).mockResolvedValue({
+      id: "c1",
+      participant: "widget",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      messages: [],
+      nextMessageCursor: null,
+      actions: [],
+      nextActionCursor: null
+    })
+
+    useActivityConversationDetailInfiniteQuery({ conversationId: "c1", messageLimit: 50, actionLimit: 25 })
+
+    expect(apiClient.getActivityConversationDetail).toHaveBeenCalledWith("c1", {
+      messageLimit: 50,
+      messageCursor: undefined,
+      actionLimit: 25,
+      actionCursor: undefined
+    })
   })
 })

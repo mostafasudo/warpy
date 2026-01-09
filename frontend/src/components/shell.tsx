@@ -1,11 +1,12 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, CreditCard, LayoutDashboard, Mail, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { Activity, Braces, CreditCard, LayoutDashboard, Mail, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
 import { BillingPanel } from "@/features/billing/billing-panel"
 import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
+import { ActivityPanel } from "@/features/activity/activity-panel"
 import { ApiConfigPanel } from "@/features/api-config/api-config-panel"
 import { ContactPanel } from "@/features/contact/contact-panel"
 import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
@@ -24,7 +25,7 @@ type NavButtonProps = {
 
 const sectionQueryKey = "tab"
 type Section = ReturnType<typeof navigationSelectors.section>
-const navigationSections: Section[] = ["dashboard", "api", "features", "agent", "billing", "contact"]
+const navigationSections: Section[] = ["dashboard", "activity", "api", "features", "agent", "billing", "contact"]
 
 const getSectionFromUrl = (): Section | null => {
   if (typeof window === "undefined") return null
@@ -201,6 +202,13 @@ export const Shell = () => {
 	              onClick={() => setSection("dashboard")}
 	            />
             <NavButton
+              active={section === "activity"}
+              label="User activity"
+              icon={<Activity className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("activity")}
+            />
+            <NavButton
               active={section === "api"}
               label="API config"
               icon={<Braces className="h-4 w-4" />}
@@ -254,6 +262,7 @@ export const Shell = () => {
 	            </div>
 	          </header>
 	          {section === "dashboard" && <DashboardPanel />}
+            {section === "activity" && <ActivityPanel />}
 	          {section === "api" && <ApiConfigPanel />}
 	          {section === "features" && <EndpointsPanel />}
 	          {section === "agent" && <AgentPanel />}

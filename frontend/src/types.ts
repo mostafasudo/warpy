@@ -175,3 +175,62 @@ export type BillingCheckoutResponse = {
 export type BillingPortalResponse = {
   url: string;
 };
+
+export type ActivityTopAction = {
+  feature: string;
+  action: string;
+  count: number;
+};
+
+export type ActivitySummaryResponse = {
+  conversationCount: number;
+  actionCount: number;
+  topActions: ActivityTopAction[];
+};
+
+export type ActivityConversationRow = {
+  id: string;
+  participant: string;
+  createdAt: string;
+  updatedAt: string;
+  userMessageCount: number;
+  actionCount: number;
+};
+
+export type ActivityConversationsResponse = {
+  items: ActivityConversationRow[];
+  nextCursor: string | null;
+};
+
+export type ActivityMessage = {
+  role: string;
+  content: string;
+  createdAt: string;
+};
+
+export type ActivityActionRequest = {
+  params: Record<string, unknown>;
+  query: Record<string, unknown>;
+  body: Record<string, unknown>;
+};
+
+export type ActivityActionEvent = {
+  id: string;
+  createdAt: string;
+  feature: string;
+  action: string;
+  statusCode: number | null;
+  error: string | null;
+  request: ActivityActionRequest;
+};
+
+export type ActivityConversationDetailResponse = {
+  id: string;
+  participant: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ActivityMessage[];
+  nextMessageCursor: string | null;
+  actions: ActivityActionEvent[];
+  nextActionCursor: string | null;
+};

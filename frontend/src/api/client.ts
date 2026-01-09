@@ -1,4 +1,7 @@
 import type {
+  ActivityConversationDetailResponse,
+  ActivityConversationsResponse,
+  ActivitySummaryResponse,
   AgentResponse,
   AgentWidgetConfigResponse,
   AgentWidgetConfigUpdate,
@@ -137,6 +140,9 @@ export type HealthResponse = {
 };
 
 export type {
+  ActivityConversationDetailResponse,
+  ActivityConversationsResponse,
+  ActivitySummaryResponse,
   AgentResponse,
   AgentWidgetConfigResponse,
   AgentWidgetConfigUpdate,
@@ -276,4 +282,37 @@ export const apiClient = {
     request<BillingPortalResponse>("/billing/portal", {
       method: "POST",
     }),
+  getActivitySummary: (startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams()
+    if (startDate) params.set("start_date", startDate)
+    if (endDate) params.set("end_date", endDate)
+    const query = params.toString()
+    const path = query ? `/activity/summary?${query}` : "/activity/summary"
+    return request<ActivitySummaryResponse>(path)
+  },
+  listActivityConversations: (options: { startDate?: string; endDate?: string; limit?: number; cursor?: string | null }) => {
+    const params = new URLSearchParams()
+    if (options.startDate) params.set("start_date", options.startDate)
+    if (options.endDate) params.set("end_date", options.endDate)
+    if (options.limit) params.set("limit", String(options.limit))
+    if (options.cursor) params.set("cursor", options.cursor)
+    const query = params.toString()
+    const path = query ? `/activity/conversations?${query}` : "/activity/conversations"
+    return request<ActivityConversationsResponse>(path)
+  },
+  getActivityConversationDetail: (
+    conversationId: string,
+    options: { messageLimit?: number; messageCursor?: string | null; actionLimit?: number; actionCursor?: string | null },
+  ) => {
+    const params = new URLSearchParams()
+    if (options.messageLimit) params.set("message_limit", String(options.messageLimit))
+    if (options.messageCursor) params.set("message_cursor", options.messageCursor)
+    if (options.actionLimit) params.set("action_limit", String(options.actionLimit))
+    if (options.actionCursor) params.set("action_cursor", options.actionCursor)
+    const query = params.toString()
+    const path = query
+      ? `/activity/conversations/${encodeURIComponent(conversationId)}?${query}`
+      : `/activity/conversations/${encodeURIComponent(conversationId)}`
+    return request<ActivityConversationDetailResponse>(path)
+  },
 };
