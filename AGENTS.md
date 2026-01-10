@@ -6,7 +6,8 @@
 Infra reference: `INFRA_GUIDE.md`.
 
 ## Do
-- Keep code **DRY, clean, elegant, small**. No comments. Follow existing patterns only.
+- Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.
+- Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.
