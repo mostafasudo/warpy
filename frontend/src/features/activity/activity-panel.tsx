@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Calendar as CalendarIcon, ChevronDown, MessageCircle, Sparkles } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, Link2, MessageCircle, Sparkles } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
 import { PanelShell } from "@/components/panel-shell"
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { useActivityConversationDetailInfiniteQuery } from "@/queries/use-activity-conversation-detail"
 import { useActivityConversationsInfiniteQuery } from "@/queries/use-activity-conversations"
 import { useActivitySummaryQuery } from "@/queries/use-activity-summary"
@@ -99,6 +100,25 @@ const EmptyState = ({ title, description }: { title: string; description: string
     <p className="mt-1 text-sm text-muted-foreground">{description}</p>
   </div>
 )
+
+const UserActivityEmptyState = () => {
+  const setSection = useNavigationStore(navigationSelectors.setSection)
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+        <Sparkles className="h-10 w-10 text-primary" />
+      </div>
+      <h3 className="mb-2 text-xl font-semibold">No activity yet</h3>
+      <p className="mb-6 max-w-md text-sm text-muted-foreground">
+        Once your agent starts interacting with users, you’ll see their conversations and actions here.
+      </p>
+      <Button onClick={() => setSection("agent")}>
+        <Link2 className="mr-2 h-4 w-4" />
+        Agent Setup
+      </Button>
+    </div>
+  )
+}
 
 const ConversationDetailDialog = ({
   conversationId,
@@ -490,65 +510,75 @@ export const ActivityPanel = () => {
     conversationsQuery.fetchNextPage,
   ])
 
+  const isEmpty = !summaryQuery.isPending && !summaryQuery.data?.conversationCount && !summaryQuery.data?.actionCount
+
   return (
     <PanelShell
       title="User activity"
       description="Understand how people are using your widget."
       action={
-        <div className="flex items-center gap-2">
-          <Select value={range.preset} onValueChange={(value) => range.applyPreset(value as RangePreset)}>
-            <SelectTrigger className="w-[170px]">
-              <SelectValue placeholder="Time range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7d">Last week</SelectItem>
-              <SelectItem value="30d">Last month</SelectItem>
-              <SelectItem value="6m">Last 6 months</SelectItem>
-              <SelectItem value="12m">Last year</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-          {range.preset === "custom" ? (
-            <DateRangePicker
-              value={range.customRange}
-              onChange={range.applyCustomRange}
-              testId="custom-range"
-            />
-          ) : null}
-        </div>
+        !isEmpty ? (
+          <div className="flex items-center gap-2">
+            <Select value={range.preset} onValueChange={(value) => range.applyPreset(value as RangePreset)}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Time range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">Last week</SelectItem>
+                <SelectItem value="30d">Last month</SelectItem>
+                <SelectItem value="6m">Last 6 months</SelectItem>
+                <SelectItem value="12m">Last year</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            {range.preset === "custom" ? (
+              <DateRangePicker
+                value={range.customRange}
+                onChange={range.applyCustomRange}
+                testId="custom-range"
+              />
+            ) : null}
+          </div>
+        ) : null
       }
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <StatCard label="Conversations" value={summaryQuery.data?.conversationCount ?? 0} loading={summaryQuery.isPending} />
-        <StatCard label="Actions" value={summaryQuery.data?.actionCount ?? 0} loading={summaryQuery.isPending} />
-      </div>
+      {isEmpty ? (
+        <UserActivityEmptyState />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            <StatCard label="Conversations" value={summaryQuery.data?.conversationCount ?? 0} loading={summaryQuery.isPending} />
+            <StatCard label="Actions" value={summaryQuery.data?.actionCount ?? 0} loading={summaryQuery.isPending} />
+          </div>
 
-      <div className="mt-6">
-        <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-          <Sparkles className="h-4 w-4 text-primary" />
-          Insights
-        </div>
-        {summaryQuery.isPending ? (
-          <Skeleton className="h-32 w-full" />
-        ) : topActions.length ? (
-          <TopActionsTable items={topActions} />
-        ) : (
-          <EmptyState title="No actions yet" description="No actions during this time period." />
-        )}
-      </div>
+          <div className="mt-6">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Insights
+            </div>
+            {summaryQuery.isPending ? (
+              <Skeleton className="h-32 w-full" />
+            ) : topActions.length ? (
+              <TopActionsTable items={topActions} />
+            ) : (
+              <EmptyState title="No actions yet" description="No actions during this time period." />
+            )}
+          </div>
 
-      <div className="mt-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-sm font-medium">Conversations</p>
-        </div>
-        <ConversationsTable
-          rows={conversations}
-          loading={conversationsQuery.isPending}
-          fetchingMore={conversationsQuery.isFetchingNextPage}
-          onSelect={(id) => setSelectedConversationId(id)}
-        />
-        <div ref={loadMoreRef} className="h-8" />
-      </div>
+          <div className="mt-6">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-medium">Conversations</p>
+            </div>
+            <ConversationsTable
+              rows={conversations}
+              loading={conversationsQuery.isPending}
+              fetchingMore={conversationsQuery.isFetchingNextPage}
+              onSelect={(id) => setSelectedConversationId(id)}
+            />
+            <div ref={loadMoreRef} className="h-8" />
+          </div>
+        </>
+      )}
 
       <ConversationDetailDialog
         conversationId={selectedConversationId}

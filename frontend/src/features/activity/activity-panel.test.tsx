@@ -117,7 +117,7 @@ describe("ActivityPanel", () => {
     expect(screen.getByText(/"q": "shoes"/)).not.toBeNull()
   })
 
-  it("shows updated empty states", () => {
+  it("shows global empty state when no activity", () => {
     mockedSummary.mockReturnValue({
       data: { conversationCount: 0, actionCount: 0, topActions: [] },
       isPending: false
@@ -140,13 +140,52 @@ describe("ActivityPanel", () => {
 
     render(<ActivityPanel />)
 
+    expect(screen.getByRole("heading", { name: "No activity yet" })).not.toBeNull()
+    expect(screen.getByText("Once your agent starts interacting with users, you’ll see their conversations and actions here.")).not.toBeNull()
+    expect(screen.getByRole("button", { name: /agent setup/i })).not.toBeNull()
+
+    // Assert that StatCards and DateRangePicker are NOT present
+    expect(screen.queryByText("Conversations")).toBeNull()
+    expect(screen.queryByText("Actions")).toBeNull()
+    expect(screen.queryByRole("combobox")).toBeNull() // Select trigger for time range
+  })
+
+  it("shows specific empty states when partial activity", () => {
+    mockedSummary.mockReturnValue({
+      data: { conversationCount: 5, actionCount: 0, topActions: [] },
+      isPending: false
+    })
+    mockedConversations.mockReturnValue({
+      data: { pages: [{ items: [{ id: "c1", updatedAt: "2026-01-01", userMessageCount: 1, actionCount: 0 }], nextCursor: null }] },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+    mockedDetail.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+
+    render(<ActivityPanel />)
+
+    expect(screen.getByText("No actions yet")).not.toBeNull()
     expect(screen.getByText("No actions during this time period.")).not.toBeNull()
-    expect(screen.getByText("No conversations during this time period.")).not.toBeNull()
+    // Validation for conversation table presence
+    const conversationsElements = screen.getAllByText("Conversations")
+    expect(conversationsElements.length).toBeGreaterThan(0)
+    expect(screen.queryByText("Actions")).not.toBeNull() // Stat card should be present
+    expect(screen.queryByRole("combobox")).not.toBeNull() // Date picker should be present
+    expect(screen.queryByText("No conversations during this time period.")).toBeNull()
   })
 
   it("renders custom date pickers and infinite scroll sentinel", async () => {
     mockedSummary.mockReturnValue({
-      data: { conversationCount: 0, actionCount: 0, topActions: [] },
+      data: { conversationCount: 10, actionCount: 20, topActions: [] },
       isPending: false
     })
 
@@ -176,8 +215,8 @@ describe("ActivityPanel", () => {
         constructor(callback: any) {
           lastCallback = callback
         }
-        observe() {}
-        disconnect() {}
+        observe() { }
+        disconnect() { }
       } as any
 
       render(<ActivityPanel />)
@@ -189,7 +228,7 @@ describe("ActivityPanel", () => {
       expect(screen.queryByTestId("apply-custom")).toBeNull()
 
       expect(lastCallback).not.toBeNull()
-      ;(lastCallback as any)([{ isIntersecting: true }], {})
+        ; (lastCallback as any)([{ isIntersecting: true }], {})
       expect(fetchNextPage).toHaveBeenCalledTimes(1)
       expect(screen.queryByRole("button", { name: /load more/i })).toBeNull()
     } finally {
