@@ -144,10 +144,9 @@ describe("ActivityPanel", () => {
     expect(screen.getByText("Once your agent starts interacting with users, you’ll see their conversations and actions here.")).not.toBeNull()
     expect(screen.getByRole("button", { name: /agent setup/i })).not.toBeNull()
 
-    // Assert that StatCards and DateRangePicker are NOT present
     expect(screen.queryByText("Conversations")).toBeNull()
     expect(screen.queryByText("Actions")).toBeNull()
-    expect(screen.queryByRole("combobox")).toBeNull() // Select trigger for time range
+    expect(screen.queryByRole("combobox")).toBeNull()
   })
 
   it("shows specific empty states when partial activity", () => {
@@ -178,8 +177,8 @@ describe("ActivityPanel", () => {
     // Validation for conversation table presence
     const conversationsElements = screen.getAllByText("Conversations")
     expect(conversationsElements.length).toBeGreaterThan(0)
-    expect(screen.getAllByText("Actions").length).toBeGreaterThan(0) // Stat card + Table Head
-    expect(screen.queryByRole("combobox")).not.toBeNull() // Date picker should be present
+    expect(screen.getAllByText("Actions").length).toBeGreaterThan(0)
+    expect(screen.queryByRole("combobox")).not.toBeNull()
     expect(screen.queryByText("No conversations during this time period.")).toBeNull()
   })
 
