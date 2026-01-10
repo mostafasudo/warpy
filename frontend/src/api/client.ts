@@ -18,6 +18,8 @@ import type {
   FeatureTogglePayload,
   FeatureWithEndpoints,
   PaginatedEndpoints,
+  UserRateLimitsResponse,
+  UserRateLimitsUpdate,
   WidgetApiKeyCreateResponse,
   WidgetSecurityDraftUpdate,
   WidgetSecurityResponse,
@@ -159,6 +161,8 @@ export type {
   FeatureTogglePayload,
   FeatureWithEndpoints,
   PaginatedEndpoints,
+  UserRateLimitsResponse,
+  UserRateLimitsUpdate,
   WidgetApiKeyCreateResponse,
   WidgetSecurityDraftUpdate,
   WidgetSecurityResponse,
@@ -315,4 +319,10 @@ export const apiClient = {
       : `/activity/conversations/${encodeURIComponent(conversationId)}`
     return request<ActivityConversationDetailResponse>(path)
   },
+  getAgentUserRateLimits: () => request<UserRateLimitsResponse>("/agent/user-rate-limits"),
+  updateAgentUserRateLimits: (payload: UserRateLimitsUpdate) =>
+    request<UserRateLimitsResponse>("/agent/user-rate-limits", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
 };

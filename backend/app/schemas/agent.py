@@ -121,3 +121,20 @@ class ChatResponse(BaseModel):
 
     message: MessageResponse
     response: MessageResponse
+
+
+class UserRateLimitsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool
+    daily_limit: int | None = Field(default=None, alias="dailyLimit")
+    monthly_limit: int | None = Field(default=None, alias="monthlyLimit")
+
+
+class UserRateLimitsUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool
+    daily_limit: int | None = Field(default=None, alias="dailyLimit", ge=1)
+    monthly_limit: int | None = Field(default=None, alias="monthlyLimit", ge=1)
+

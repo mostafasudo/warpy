@@ -234,3 +234,12 @@ export type ActivityConversationDetailResponse = {
   actions: ActivityActionEvent[];
   nextActionCursor: string | null;
 };
+
+export type UserRateLimitsResponse = {
+  enabled: boolean;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+};
+
+export type UserRateLimitsUpdate = UserRateLimitsResponse;
+

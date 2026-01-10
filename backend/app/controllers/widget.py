@@ -35,6 +35,11 @@ from ..services.widget_service import (
 )
 from ..services.conversation_actions_service import ToolCallForLog, record_widget_tool_results
 from ..services.widget_auth_service import WidgetJwtError, verify_widget_jwt
+from ..services.user_rate_limit_service import (
+    extract_client_ip,
+    increment_rate_limit_usage,
+    is_rate_limited,
+)
 
 router = APIRouter(prefix="/widget", tags=["widget"])
 
@@ -123,6 +128,7 @@ def require_widget_auth(request: Request, agent_id: UUID, enabled: bool) -> None
 
 @router.get("/config/{agent_id}", response_model=WidgetConfigResponse)
 def get_widget_config_route(
+    request: Request,
     agent_id: UUID,
     session: Session = Depends(get_session)
 ) -> WidgetConfigResponse:
@@ -130,7 +136,15 @@ def get_widget_config_route(
         agent = get_agent_by_id(session, agent_id)
         if not agent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-        config = get_widget_config(session, agent)
+        
+        # Get Redis and client IP for rate limit checking
+        try:
+            redis_client = get_redis_connection()
+        except Exception:
+            redis_client = None
+        client_ip = extract_client_ip(request)
+        
+        config = get_widget_config(session, agent, redis_client, client_ip)
         log_info("WidgetController", "get_widget_config", "Config fetched", agent_id=str(agent_id))
         return config
     except HTTPException:
@@ -152,6 +166,31 @@ async def widget_chat(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
         require_widget_auth(request, payload.agent_id, agent.widget_auth_enabled)
 
+        # Extract client IP for rate limiting
+        client_ip = extract_client_ip(request)
+        try:
+            redis_client = get_redis_connection()
+        except Exception:
+            redis_client = None
+
+        # Check user rate limits
+        if (
+            agent.user_rate_limit_enabled
+            and redis_client
+            and (agent.user_rate_limit_daily or agent.user_rate_limit_monthly)
+        ):
+            if is_rate_limited(
+                redis_client,
+                agent.id,
+                client_ip,
+                agent.user_rate_limit_daily,
+                agent.user_rate_limit_monthly,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="You've reached your usage limit. Please try again later."
+                )
+
         if payload.conversation_id:
             conversation = get_widget_conversation(session, payload.conversation_id, payload.agent_id)
             if not conversation:
@@ -167,6 +206,9 @@ async def widget_chat(
                 [result.id for result in payload.tool_results],
             )
             actions_remaining = consume_result.remaining
+            # Increment user rate limit usage for each consumed action
+            if consume_result.consumed > 0 and redis_client and agent.user_rate_limit_enabled:
+                increment_rate_limit_usage(redis_client, agent.id, client_ip, consume_result.consumed)
         else:
             summary = get_billing_actions_summary(session, agent.user_id)
             actions_remaining = summary.total_remaining
@@ -236,10 +278,6 @@ async def widget_chat(
             if tool_context_data:
                 pending_messages = deserialize_messages(tool_context_data)
 
-        try:
-            redis_client = get_redis_connection()
-        except Exception:
-            redis_client = None
         executor = AgentExecutor(
             session,
             agent.user_id,
