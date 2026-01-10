@@ -134,6 +134,30 @@ const ConversationDetailDialog = ({
   const messages = useMemo(() => pages.slice().reverse().flatMap((page) => page.messages), [pages])
   const actions = useMemo(() => pages.slice().reverse().flatMap((page) => page.actions), [pages])
 
+  const messagesStartRef = useRef<HTMLDivElement | null>(null)
+  const actionsStartRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (typeof IntersectionObserver !== "function") return
+    if (!detailQuery.hasNextPage) return
+    if (detailQuery.isFetchingNextPage) return
+
+
+    const handleIntersect = (entries: IntersectionObserverEntry[]) => {
+      const isIntersecting = entries.some((entry) => entry.isIntersecting)
+      if (isIntersecting && !detailQuery.isFetchingNextPage && detailQuery.hasNextPage) {
+        void detailQuery.fetchNextPage()
+      }
+    }
+
+    const observer = new IntersectionObserver(handleIntersect, { root: null, rootMargin: "100px" })
+
+    if (messagesStartRef.current) observer.observe(messagesStartRef.current)
+    if (actionsStartRef.current) observer.observe(actionsStartRef.current)
+
+    return () => observer.disconnect()
+  }, [detailQuery.hasNextPage, detailQuery.isFetchingNextPage, detailQuery.fetchNextPage, messages.length, actions.length])
+
   return (
     <Dialog open={Boolean(conversationId)} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
@@ -160,20 +184,13 @@ const ConversationDetailDialog = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold">Messages</p>
-                {detailQuery.hasNextPage ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={detailQuery.isFetchingNextPage}
-                    onClick={() => detailQuery.fetchNextPage()}
-                    data-testid="load-earlier"
-                  >
-                    {detailQuery.isFetchingNextPage ? "Loading…" : "Load earlier"}
-                  </Button>
+                {detailQuery.isFetchingNextPage ? (
+                  <p className="text-xs text-muted-foreground">Loading older messages…</p>
                 ) : null}
               </div>
               <ScrollArea className="h-[520px] rounded-xl border border-border/60 bg-muted/10 p-4">
                 <div className="space-y-3">
+                  <div ref={messagesStartRef} className="h-px w-full" />
                   {messages.map((message, index) => (
                     <div
                       key={`${message.createdAt}-${index}`}
@@ -201,12 +218,13 @@ const ConversationDetailDialog = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold">Actions</p>
-                {detailQuery.hasNextPage ? (
-                  <p className="text-xs text-muted-foreground">Load earlier to see older actions.</p>
+                {detailQuery.isFetchingNextPage ? (
+                  <p className="text-xs text-muted-foreground">Loading older actions…</p>
                 ) : null}
               </div>
               <ScrollArea className="h-[520px] rounded-xl border border-border/60 bg-muted/10 p-4">
                 <div className="space-y-3">
+                  <div ref={actionsStartRef} className="h-px w-full" />
                   {actions.map((action) => (
                     <ActionEventCard key={action.id} action={action} />
                   ))}
