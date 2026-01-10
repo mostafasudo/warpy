@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, Copy, Info, Link2, Sparkles, Terminal, RotateCw } from "lucide-react"
+import { Check, ChevronDown, Copy, Info, Network, Sparkles, Terminal, RotateCw } from "lucide-react"
 import clsx from "clsx"
 
 import { PanelShell } from "@/components/panel-shell"
@@ -45,7 +45,7 @@ const EmptyState = () => {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-        <Sparkles className="h-10 w-10 text-primary" />
+        <Network className="h-10 w-10 text-primary" />
       </div>
       <h3 className="mb-2 text-xl font-semibold">Activate Your Agent</h3>
       <p className="mb-6 max-w-md text-sm text-muted-foreground">
@@ -53,7 +53,7 @@ const EmptyState = () => {
         need you to define your endpoints in the Features tab.
       </p>
       <Button onClick={() => setSection("features")}>
-        <Link2 className="mr-2 h-4 w-4" />
+        <Network className="mr-2 h-4 w-4" />
         Configure Features
       </Button>
     </div>

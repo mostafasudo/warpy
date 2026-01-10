@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Calendar as CalendarIcon, ChevronDown, Link2, MessageCircle, Sparkles } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, MessageCircle, Sparkles } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
 import { PanelShell } from "@/components/panel-shell"
@@ -113,7 +113,7 @@ const UserActivityEmptyState = () => {
         Once your agent starts interacting with users, you’ll see their conversations and actions here.
       </p>
       <Button onClick={() => setSection("agent")}>
-        <Link2 className="mr-2 h-4 w-4" />
+        <Sparkles className="mr-2 h-4 w-4" />
         Agent Setup
       </Button>
     </div>
