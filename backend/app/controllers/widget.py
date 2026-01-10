@@ -166,14 +166,12 @@ async def widget_chat(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
         require_widget_auth(request, payload.agent_id, agent.widget_auth_enabled)
 
-        # Extract client IP for rate limiting
         client_ip = extract_client_ip(request)
         try:
             redis_client = get_redis_connection()
         except Exception:
             redis_client = None
 
-        # Check user rate limits
         if (
             agent.user_rate_limit_enabled
             and redis_client
@@ -206,7 +204,6 @@ async def widget_chat(
                 [result.id for result in payload.tool_results],
             )
             actions_remaining = consume_result.remaining
-            # Increment user rate limit usage for each consumed action
             if consume_result.consumed > 0 and redis_client and agent.user_rate_limit_enabled:
                 increment_rate_limit_usage(redis_client, agent.id, client_ip, consume_result.consumed)
         else:
