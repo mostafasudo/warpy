@@ -178,7 +178,7 @@ describe("ActivityPanel", () => {
     // Validation for conversation table presence
     const conversationsElements = screen.getAllByText("Conversations")
     expect(conversationsElements.length).toBeGreaterThan(0)
-    expect(screen.queryByText("Actions")).not.toBeNull() // Stat card should be present
+    expect(screen.getAllByText("Actions").length).toBeGreaterThan(0) // Stat card + Table Head
     expect(screen.queryByRole("combobox")).not.toBeNull() // Date picker should be present
     expect(screen.queryByText("No conversations during this time period.")).toBeNull()
   })
