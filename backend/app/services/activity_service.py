@@ -35,6 +35,14 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
     return datetime.fromisoformat(raw_ts), UUID(raw_id)
 
 
+def _encode_message_cursor(sequence: int) -> str:
+    return str(sequence)
+
+
+def _decode_message_cursor(cursor: str) -> int:
+    return int(cursor)
+
+
 def _is_safe_description(value: str) -> bool:
     trimmed = value.strip()
     if not trimmed:
@@ -230,19 +238,16 @@ def get_activity_conversation_detail(
         Message.role.in_(("user", "assistant")),
     )
     if message_cursor:
-        cursor_time, cursor_id = _decode_cursor(message_cursor)
-        msg_query = msg_query.where(or_(
-            Message.created_at < cursor_time,
-            and_(Message.created_at == cursor_time, Message.id < cursor_id),
-        ))
+        cursor_seq = _decode_message_cursor(message_cursor)
+        msg_query = msg_query.where(Message.sequence < cursor_seq)
     messages = list(session.scalars(
-        msg_query.order_by(Message.created_at.desc(), Message.id.desc()).limit(message_limit + 1)
+        msg_query.order_by(Message.sequence.desc()).limit(message_limit + 1)
     ).all())
 
     next_message_cursor = None
     if len(messages) > message_limit:
         messages.pop()
-        next_message_cursor = _encode_cursor(messages[-1].created_at, messages[-1].id)
+        next_message_cursor = _encode_message_cursor(messages[-1].sequence)
     messages.reverse()
 
     action_query = select(ConversationAction).where(

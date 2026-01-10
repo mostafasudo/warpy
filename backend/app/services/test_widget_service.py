@@ -166,6 +166,39 @@ def test_save_and_get_widget_messages(db_session: Session):
     assert messages[1].content == "hi there"
 
 
+def test_save_widget_message_increments_sequence(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    msg1 = save_widget_message(db_session, conversation.id, "user", "first")
+    msg2 = save_widget_message(db_session, conversation.id, "assistant", "second")
+    msg3 = save_widget_message(db_session, conversation.id, "user", "third")
+
+    assert msg1.sequence == 1
+    assert msg2.sequence == 2
+    assert msg3.sequence == 3
+
+
+def test_messages_ordered_by_sequence_not_uuid(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_widget_message(db_session, conversation.id, "user", "first")
+    save_widget_message(db_session, conversation.id, "assistant", "second")
+    save_widget_message(db_session, conversation.id, "user", "third")
+    save_widget_message(db_session, conversation.id, "assistant", "fourth")
+
+    messages = get_widget_messages(db_session, conversation.id)
+    contents = [m.content for m in messages]
+    assert contents == ["first", "second", "third", "fourth"]
+
+
 def test_save_and_get_tool_context(db_session: Session):
     agent = Agent(user_id="user_1")
     db_session.add(agent)

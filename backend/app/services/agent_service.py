@@ -54,7 +54,11 @@ def save_message(session: Session, conversation_id: UUID, role: str, content: st
     conversation = session.get(Conversation, conversation_id)
     if conversation:
         conversation.updated_at = func.now()
-    message = Message(conversation_id=conversation_id, role=role, content=content)
+    next_seq = (session.scalar(
+        select(func.coalesce(func.max(Message.sequence), 0))
+        .where(Message.conversation_id == conversation_id)
+    ) or 0) + 1
+    message = Message(conversation_id=conversation_id, role=role, content=content, sequence=next_seq)
     session.add(message)
     session.flush()
     return message
@@ -64,7 +68,7 @@ def get_messages(session: Session, conversation_id: UUID) -> list[Message]:
     return list(session.scalars(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at)
+        .order_by(Message.sequence)
     ).all())
 
 

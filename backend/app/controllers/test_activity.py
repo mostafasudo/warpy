@@ -153,10 +153,10 @@ def test_activity_conversations_paginates_and_includes_counts(client: TestClient
             conversations.append(conversation)
 
         session.add_all([
-            Message(conversation_id=conversations[0].id, role="user", content="u1"),
-            Message(conversation_id=conversations[0].id, role="user", content="u2"),
-            Message(conversation_id=conversations[0].id, role="assistant", content="a1"),
-            Message(conversation_id=conversations[1].id, role="user", content="u3"),
+            Message(conversation_id=conversations[0].id, role="user", content="u1", sequence=1),
+            Message(conversation_id=conversations[0].id, role="user", content="u2", sequence=2),
+            Message(conversation_id=conversations[0].id, role="assistant", content="a1", sequence=3),
+            Message(conversation_id=conversations[1].id, role="user", content="u3", sequence=1),
         ])
 
         session.add_all([
@@ -240,9 +240,9 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
         session.flush()
 
         session.add_all([
-            Message(conversation_id=conversation.id, role="user", content="m1", created_at=now - timedelta(minutes=3)),
-            Message(conversation_id=conversation.id, role="assistant", content="m2", created_at=now - timedelta(minutes=2)),
-            Message(conversation_id=conversation.id, role="user", content="m3", created_at=now - timedelta(minutes=1)),
+            Message(conversation_id=conversation.id, role="user", content="m1", sequence=1, created_at=now - timedelta(minutes=3)),
+            Message(conversation_id=conversation.id, role="assistant", content="m2", sequence=2, created_at=now - timedelta(minutes=2)),
+            Message(conversation_id=conversation.id, role="user", content="m3", sequence=3, created_at=now - timedelta(minutes=1)),
         ])
 
         session.add_all([

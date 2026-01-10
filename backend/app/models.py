@@ -247,16 +247,20 @@ class Conversation(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     agent = relationship("Agent", back_populates="conversations")
-    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.sequence")
 
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_conversation_sequence", "conversation_id", "sequence"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
+    sequence = Column(Integer, nullable=False, server_default="0", default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")

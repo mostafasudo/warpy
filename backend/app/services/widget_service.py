@@ -105,7 +105,11 @@ def save_widget_message(session: Session, conversation_id: UUID, role: str, cont
     conversation = session.get(Conversation, conversation_id)
     if conversation:
         conversation.updated_at = func.now()
-    message = Message(conversation_id=conversation_id, role=role, content=content)
+    next_seq = (session.scalar(
+        select(func.coalesce(func.max(Message.sequence), 0))
+        .where(Message.conversation_id == conversation_id)
+    ) or 0) + 1
+    message = Message(conversation_id=conversation_id, role=role, content=content, sequence=next_seq)
     session.add(message)
     session.flush()
     return message
@@ -115,7 +119,7 @@ def get_widget_messages(session: Session, conversation_id: UUID) -> list[Message
     return list(session.scalars(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at)
+        .order_by(Message.sequence)
     ).all())
 
 
@@ -124,7 +128,7 @@ def get_pending_state(session: Session, conversation_id: UUID) -> str | None:
         select(Message).where(
             Message.conversation_id == conversation_id,
             Message.role == "pending_state"
-        ).order_by(Message.created_at.desc())
+        ).order_by(Message.sequence.desc())
     )
     return msg.content if msg else None
 
@@ -139,7 +143,11 @@ def save_tool_context(session: Session, conversation_id: UUID, content: str) -> 
     if existing:
         existing.content = content
     else:
-        session.add(Message(conversation_id=conversation_id, role="tool_context", content=content))
+        next_seq = (session.scalar(
+            select(func.coalesce(func.max(Message.sequence), 0))
+            .where(Message.conversation_id == conversation_id)
+        ) or 0) + 1
+        session.add(Message(conversation_id=conversation_id, role="tool_context", content=content, sequence=next_seq))
     session.flush()
 
 
