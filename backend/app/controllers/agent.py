@@ -18,6 +18,8 @@ from ..schemas.agent import (
     ConversationResponse,
     ConversationWithMessagesResponse,
     MessageResponse,
+    UserRateLimitsResponse,
+    UserRateLimitsUpdate,
     WidgetApiKeyCreateResponse,
     WidgetSecurityDraftUpdate,
     WidgetSecurityResponse,
@@ -32,6 +34,7 @@ from ..services.agent_service import (
     get_messages,
     list_conversations,
     save_message,
+    update_user_rate_limits,
 )
 from ..services.agent_widget_security_service import (
     create_widget_api_key_draft,
@@ -320,3 +323,50 @@ async def update_agent_widget_install_route(
     except Exception as error:
         log_error("AgentController", "update_widget_install", "Failed to update widget install preferences", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update widget install preferences")
+
+
+@router.get("/agent/user-rate-limits", response_model=UserRateLimitsResponse)
+async def get_user_rate_limits_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> UserRateLimitsResponse:
+    try:
+        agent = get_agent(session, clerk_session.user_id)
+        if not agent:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        return UserRateLimitsResponse(
+            enabled=agent.user_rate_limit_enabled,
+            daily_limit=agent.user_rate_limit_daily,
+            monthly_limit=agent.user_rate_limit_monthly,
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "get_user_rate_limits", "Failed to fetch user rate limits", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch user rate limits")
+
+
+@router.put("/agent/user-rate-limits", response_model=UserRateLimitsResponse)
+async def update_user_rate_limits_route(
+    payload: UserRateLimitsUpdate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> UserRateLimitsResponse:
+    try:
+        agent = update_user_rate_limits(
+            session,
+            clerk_session.user_id,
+            payload.enabled,
+            payload.daily_limit,
+            payload.monthly_limit,
+        )
+        return UserRateLimitsResponse(
+            enabled=agent.user_rate_limit_enabled,
+            daily_limit=agent.user_rate_limit_daily,
+            monthly_limit=agent.user_rate_limit_monthly,
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "update_user_rate_limits", "Failed to update user rate limits", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user rate limits")

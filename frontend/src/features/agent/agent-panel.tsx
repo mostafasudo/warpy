@@ -26,9 +26,11 @@ import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agen
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
+import { useUpdateAgentUserRateLimits } from "@/mutations/use-update-agent-user-rate-limits"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
+import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
 
@@ -689,6 +691,207 @@ const ConfigureWidgetPanel = () => {
   )
 }
 
+const UserRateLimitsPanel = () => {
+  const { data, isPending } = useAgentUserRateLimitsQuery()
+  const updateMutation = useUpdateAgentUserRateLimits()
+  const addToast = useToastStore(toastSelectors.addToast)
+  const [isOpen, setIsOpen] = useState(false)
+  const [enabled, setEnabled] = useState(false)
+  const [dailyLimit, setDailyLimit] = useState<string>("")
+  const [monthlyLimit, setMonthlyLimit] = useState<string>("")
+
+  useEffect(() => {
+    if (!data) return
+    setEnabled(data.enabled)
+    setDailyLimit(data.dailyLimit?.toString() ?? "")
+    setMonthlyLimit(data.monthlyLimit?.toString() ?? "")
+  }, [data])
+
+  const isDirty = useMemo(() => {
+    if (!data) return false
+    const currentDaily = dailyLimit.trim() ? parseInt(dailyLimit, 10) : null
+    const currentMonthly = monthlyLimit.trim() ? parseInt(monthlyLimit, 10) : null
+    return (
+      enabled !== data.enabled ||
+      currentDaily !== data.dailyLimit ||
+      currentMonthly !== data.monthlyLimit
+    )
+  }, [data, enabled, dailyLimit, monthlyLimit])
+
+  const handleSave = async () => {
+    const daily = dailyLimit.trim() ? parseInt(dailyLimit, 10) : null
+    const monthly = monthlyLimit.trim() ? parseInt(monthlyLimit, 10) : null
+    if ((daily !== null && (isNaN(daily) || daily < 1)) ||
+      (monthly !== null && (isNaN(monthly) || monthly < 1))) {
+      addToast({ title: "Invalid limits", description: "Limits must be positive numbers.", variant: "error" })
+      return
+    }
+    try {
+      await updateMutation.mutateAsync({
+        enabled,
+        dailyLimit: daily,
+        monthlyLimit: monthly,
+      })
+      addToast({ title: "Saved", description: "User rate limits updated.", variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update rate limits"
+      addToast({ title: "Save failed", description: message, variant: "error" })
+    }
+  }
+
+  const handleDiscard = () => {
+    if (!data) return
+    setEnabled(data.enabled)
+    setDailyLimit(data.dailyLimit?.toString() ?? "")
+    setMonthlyLimit(data.monthlyLimit?.toString() ?? "")
+  }
+
+  if (isPending || !data) {
+    return (
+      <div
+        className="mt-6 rounded-xl border border-border bg-card/70 p-6 shadow-sm"
+        data-testid="user-rate-limits-loading"
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <div className="mt-6 space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
+        <div className="p-6">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">User Rate Limits</h3>
+                  {isDirty ? (
+                    <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                      Unsaved
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="text-sm text-muted-foreground">Limit actions per user (by IP)</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge variant={enabled ? "default" : "secondary"}>
+                  {enabled ? "Enabled" : "Disabled"}
+                </Badge>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    aria-label={isOpen ? "Collapse user rate limits" : "Expand user rate limits"}
+                  >
+                    <span className="text-sm font-medium">{isOpen ? "Hide" : "Show"}</span>
+                    <ChevronDown
+                      className={clsx("h-4 w-4 transition-transform", isOpen && "rotate-180")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+
+            <CollapsibleContent>
+              <div className="space-y-6">
+                <div className="h-px bg-border" />
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold">Enable rate limiting</p>
+                      <p id="rate-limit-description" className="text-sm text-muted-foreground">
+                        Limit how many actions each user can perform daily or monthly.
+                      </p>
+                    </div>
+                    <Label htmlFor="rate-limit-toggle" className="sr-only">
+                      Enable rate limiting
+                    </Label>
+                    <Switch
+                      id="rate-limit-toggle"
+                      checked={enabled}
+                      onCheckedChange={setEnabled}
+                      aria-describedby="rate-limit-description"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="daily-limit">Daily limit (per user)</Label>
+                    <Input
+                      id="daily-limit"
+                      type="number"
+                      min="1"
+                      placeholder="Unlimited"
+                      value={dailyLimit}
+                      onChange={(e) => setDailyLimit(e.target.value)}
+                      disabled={!enabled}
+                    />
+                    <p className="text-xs text-muted-foreground">Max actions per user per day</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="monthly-limit">Monthly limit (per user)</Label>
+                    <Input
+                      id="monthly-limit"
+                      type="number"
+                      min="1"
+                      placeholder="Unlimited"
+                      value={monthlyLimit}
+                      onChange={(e) => setMonthlyLimit(e.target.value)}
+                      disabled={!enabled}
+                    />
+                    <p className="text-xs text-muted-foreground">Max actions per user per month</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Rate limits are tracked by IP address. When a user exceeds their limit, the widget will hide for them until the limit resets.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+                  <Button
+                    variant="ghost"
+                    onClick={handleDiscard}
+                    disabled={!isDirty || updateMutation.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Discard changes
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={!isDirty || updateMutation.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Save changes
+                  </Button>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </div>
+      </div>
+    </Collapsible>
+  )
+}
+
 const AdvancedSecurityPanel = () => {
   const { data, isPending } = useAgentWidgetSecurityQuery()
   const updateDraft = useUpdateAgentWidgetSecurityDraft()
@@ -815,16 +1018,16 @@ const AdvancedSecurityPanel = () => {
         <div className="p-6">
           <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div>
+              <div>
+                <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold">Advanced Security</h3>
-                  <p className="text-sm text-muted-foreground">Optional Widget JWT Auth</p>
+                  {hasStagedChanges ? (
+                    <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                      Staged
+                    </Badge>
+                  ) : null}
                 </div>
-                {hasStagedChanges ? (
-                  <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                    Staged
-                  </Badge>
-                ) : null}
+                <p className="text-sm text-muted-foreground">Optional Widget JWT Auth</p>
               </div>
               <div className="flex items-center gap-3">
                 <Badge variant={effectiveRequireSignedWidgetToken ? "default" : "secondary"}>
@@ -1075,6 +1278,7 @@ export const AgentPanel = () => {
           <WidgetInstallDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
           <ConfigureWidgetPanel />
           <AdvancedSecurityPanel />
+          <UserRateLimitsPanel />
         </>
       ) : null}
     </PanelShell>

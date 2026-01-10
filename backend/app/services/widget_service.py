@@ -1,20 +1,63 @@
 from uuid import UUID
 
+from redis import Redis
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..core.logger import log_info
+from ..core.logger import log_info, log_warning
 from ..models import Agent, AuthType, Conversation, Message, SessionHeader
 from ..schemas.widget import SessionHeaderConfig, WidgetConfigResponse
 from .billing_service import get_billing_actions_summary
+from .user_rate_limit_service import is_rate_limited
 
 
 def get_agent_by_id(session: Session, agent_id: UUID) -> Agent | None:
     return session.scalar(select(Agent).where(Agent.id == agent_id))
 
 
-def get_widget_config(session: Session, agent: Agent) -> WidgetConfigResponse:
+def get_widget_config(
+    session: Session,
+    agent: Agent,
+    redis_client: Redis | None = None,
+    client_ip: str | None = None,
+) -> WidgetConfigResponse:
     summary = get_billing_actions_summary(session, agent.user_id)
+    
+    # Check user rate limits (per IP)
+    is_user_rate_limited = False
+    if (
+        agent.user_rate_limit_enabled
+        and client_ip
+        and redis_client
+        and (agent.user_rate_limit_daily or agent.user_rate_limit_monthly)
+    ):
+        try:
+            is_user_rate_limited = is_rate_limited(
+                redis_client,
+                agent.id,
+                client_ip,
+                agent.user_rate_limit_daily,
+                agent.user_rate_limit_monthly,
+            )
+        except Exception as e:
+            log_warning(
+                "WidgetService",
+                "get_widget_config",
+                f"Rate limit check failed: {e}",
+                agent_id=str(agent.id)
+            )
+            # Fail-open: allow request if rate limit check fails
+            is_user_rate_limited = False
+    elif agent.user_rate_limit_enabled:
+        log_warning(
+            "WidgetService",
+            "get_widget_config",
+            "Rate limiting enabled but missing redis_client or client_ip",
+            agent_id=str(agent.id),
+            has_redis_client=redis_client is not None,
+            has_client_ip=client_ip is not None
+        )
+    
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == agent.user_id)).all()
     header_map = {}
     for header in headers:
@@ -27,7 +70,7 @@ def get_widget_config(session: Session, agent: Agent) -> WidgetConfigResponse:
         header_map[header.header_name] = SessionHeaderConfig(**config_kwargs)
     return WidgetConfigResponse(
         headers=header_map,
-        is_widget_hidden=summary.is_widget_hidden,
+        is_widget_hidden=summary.is_widget_hidden or is_user_rate_limited,
         actions_remaining=summary.total_remaining,
         require_signed_widget_token=agent.widget_auth_enabled,
         widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path,

@@ -66,3 +66,24 @@ def get_messages(session: Session, conversation_id: UUID) -> list[Message]:
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
     ).all())
+
+
+def update_user_rate_limits(
+    session: Session,
+    user_id: str,
+    enabled: bool,
+    daily_limit: int | None,
+    monthly_limit: int | None,
+) -> Agent:
+    agent = get_agent(session, user_id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+    
+    agent.user_rate_limit_enabled = enabled
+    agent.user_rate_limit_daily = daily_limit
+    agent.user_rate_limit_monthly = monthly_limit
+    session.commit()
+    session.refresh(agent)
+    log_info("AgentService", "update_user_rate_limits", "User rate limits updated", user_id=user_id)
+    return agent
+
