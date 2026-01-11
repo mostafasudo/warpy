@@ -859,20 +859,21 @@
       .cta-security-header {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 14px 16px;
-        padding-top: calc(14px + env(safe-area-inset-top, 0px));
-        border-bottom: 1px solid var(--cta-border);
-        background: var(--cta-surface-strong);
+        gap: 10px;
+        padding: 10px 14px;
+        padding-top: calc(10px + env(safe-area-inset-top, 0px));
+        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
       }
 
       .cta-security-back {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         padding: 0;
         background: transparent;
         border: none;
-        border-radius: 12px;
+        border-radius: 10px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
@@ -891,13 +892,13 @@
       }
 
       .cta-security-back svg {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         color: inherit;
       }
 
       .cta-security-title {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         margin: 0;
       }
