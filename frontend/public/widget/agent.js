@@ -608,8 +608,7 @@
         width: min(440px, calc(100vw - 56px));
         max-width: 100vw;
         background: var(--cta-surface);
-        border-left: 1px solid var(--cta-border);
-        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        box-shadow: -4px 0 24px var(--cta-shadow-color);
         display: grid;
         grid-template-rows: auto 1fr auto;
         grid-template-areas:
