@@ -659,14 +659,14 @@
       .cta-widget-header-left {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         min-width: 0;
       }
 
       .cta-widget-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -724,17 +724,17 @@
       }
 
       .cta-widget-close {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         padding: 0;
         background: transparent;
         border: none;
         cursor: pointer;
-        border-radius: 12px;
+        border-radius: 10px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+        gap: 6px;
         color: var(--cta-fg-muted);
         transition: color 160ms ease, transform 160ms ease;
       }
@@ -757,7 +757,7 @@
       @media (hover: hover) and (pointer: fine) {
         .cta-widget-close {
           width: auto;
-          padding: 0 10px;
+          padding: 0 8px;
         }
 
         .cta-widget-close-hint {
@@ -775,17 +775,17 @@
       }
 
       .cta-widget-close svg {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         color: inherit;
       }
 
       .cta-widget-new-chat {
-        height: 36px;
-        padding: 0 10px;
+        height: 32px;
+        padding: 0 8px;
         background: transparent;
         border: none;
-        border-radius: 12px;
+        border-radius: 10px;
         cursor: pointer;
         font-size: 12px;
         color: var(--cta-fg-muted);
@@ -806,12 +806,12 @@
       }
 
       .cta-widget-security-btn {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         padding: 0;
         background: transparent;
         border: none;
-        border-radius: 12px;
+        border-radius: 10px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
@@ -966,9 +966,9 @@
         grid-row: 1 / -1;
         overflow-y: auto;
         min-height: 0;
-        padding: 16px;
-        padding-top: calc(58px + env(safe-area-inset-top, 0px));
-        padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        padding: 14px;
+        padding-top: calc(66px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -1193,7 +1193,7 @@
         grid-area: footer;
         position: relative;
         z-index: 2;
-        padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px));
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
         background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -1207,8 +1207,8 @@
 
       .cta-widget-input {
         flex: 1;
-        height: 48px;
-        padding: 0 14px;
+        height: 42px;
+        padding: 0 12px;
         border: 1px solid transparent;
         border-radius: 14px;
         background: var(--cta-surface);
@@ -1229,11 +1229,11 @@
       }
 
       .cta-widget-send {
-        width: 48px;
-        height: 48px;
+        width: 42px;
+        height: 42px;
         background: transparent;
         border: none;
-        border-radius: 14px;
+        border-radius: 12px;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -1279,10 +1279,10 @@
 
       .cta-widget-mic {
         position: relative;
-        width: 48px;
-        height: 48px;
+        width: 42px;
+        height: 42px;
         border: none;
-        border-radius: 14px;
+        border-radius: 12px;
         background: transparent;
         display: flex;
         align-items: center;
@@ -1305,10 +1305,10 @@
       }
 
       .cta-widget-mic-select {
-        width: 36px;
-        height: 48px;
+        width: 32px;
+        height: 42px;
         border: none;
-        border-radius: 0 14px 14px 0;
+        border-radius: 0 12px 12px 0;
         margin-left: -1px;
         background: transparent;
         display: flex;
