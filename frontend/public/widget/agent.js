@@ -648,9 +648,9 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        padding: 14px 16px;
-        padding-top: calc(14px + env(safe-area-inset-top, 0px));
+        gap: 10px;
+        padding: 10px 14px;
+        padding-top: calc(10px + env(safe-area-inset-top, 0px));
         background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -967,8 +967,8 @@
         overflow-y: auto;
         min-height: 0;
         padding: 16px;
-        padding-top: calc(60px + env(safe-area-inset-top, 0px));
-        padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+        padding-top: calc(52px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -1193,7 +1193,7 @@
         grid-area: footer;
         position: relative;
         z-index: 2;
-        padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+        padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px));
         background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
