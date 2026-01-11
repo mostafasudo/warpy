@@ -718,20 +718,19 @@
         height: 36px;
         padding: 0;
         background: transparent;
-        border: 1px solid var(--cta-border);
+        border: none;
         cursor: pointer;
         border-radius: 12px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        opacity: 0.9;
-        transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+        color: var(--cta-fg-muted);
+        transition: color 160ms ease, transform 160ms ease;
       }
 
       .cta-widget-close:hover {
-        opacity: 1;
-        border-color: var(--cta-accent);
+        color: var(--cta-fg);
       }
 
       .cta-widget-close-hint {
@@ -739,11 +738,10 @@
         align-items: center;
         padding: 2px 6px;
         border-radius: 8px;
-        border: 1px solid var(--cta-border);
-        color: var(--cta-fg-muted);
+        border: none;
+        color: inherit;
         font-size: 11px;
         line-height: 1;
-        opacity: 0.8;
       }
 
       @media (hover: hover) and (pointer: fine) {
@@ -769,23 +767,23 @@
       .cta-widget-close svg {
         width: 18px;
         height: 18px;
+        color: inherit;
       }
 
       .cta-widget-new-chat {
         height: 36px;
         padding: 0 10px;
         background: transparent;
-        border: 1px solid var(--cta-border);
+        border: none;
         border-radius: 12px;
         cursor: pointer;
         font-size: 12px;
-        opacity: 0.9;
-        transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+        color: var(--cta-fg-muted);
+        transition: color 160ms ease, transform 160ms ease;
       }
 
       .cta-widget-new-chat:hover {
-        opacity: 1;
-        border-color: var(--cta-accent);
+        color: var(--cta-fg);
       }
 
       .cta-widget-new-chat:active {
@@ -802,19 +800,18 @@
         height: 36px;
         padding: 0;
         background: transparent;
-        border: 1px solid var(--cta-border);
+        border: none;
         border-radius: 12px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        opacity: 0.75;
-        transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+        color: var(--cta-fg-muted);
+        transition: color 160ms ease, transform 160ms ease;
       }
 
       .cta-widget-security-btn:hover {
-        opacity: 1;
-        border-color: var(--cta-accent);
+        color: var(--cta-fg);
       }
 
       .cta-widget-security-btn:active {
@@ -829,11 +826,7 @@
       .cta-widget-security-btn svg {
         width: 16px;
         height: 16px;
-        color: var(--cta-fg-muted);
-      }
-
-      .cta-widget-security-btn:hover svg {
-        color: var(--cta-fg);
+        color: inherit;
       }
 
       .cta-security-panel {
@@ -868,17 +861,18 @@
         height: 36px;
         padding: 0;
         background: transparent;
-        border: 1px solid var(--cta-border);
+        border: none;
         border-radius: 12px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        transition: opacity 160ms ease, border-color 160ms ease;
+        color: var(--cta-fg-muted);
+        transition: color 160ms ease;
       }
 
       .cta-security-back:hover {
-        border-color: var(--cta-accent);
+        color: var(--cta-fg);
       }
 
       .cta-security-back:focus-visible {
@@ -889,6 +883,7 @@
       .cta-security-back svg {
         width: 18px;
         height: 18px;
+        color: inherit;
       }
 
       .cta-security-title {
@@ -1219,24 +1214,25 @@
       .cta-widget-send {
         width: 48px;
         height: 48px;
-        background: var(--cta-accent);
-        border: 1px solid var(--cta-accent);
+        background: transparent;
+        border: none;
         border-radius: 14px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: transform 160ms ease, opacity 160ms ease;
+        transition: transform 160ms ease, color 160ms ease;
         flex-shrink: 0;
-        color: var(--cta-accent-contrast);
+        color: var(--cta-fg-muted);
       }
 
       .cta-widget-send:hover:not(:disabled) {
         transform: translateY(-1px);
+        color: var(--cta-accent);
       }
 
       .cta-widget-send:disabled {
-        opacity: 0.6;
+        opacity: 0.5;
         cursor: not-allowed;
       }
 
@@ -1248,7 +1244,7 @@
       .cta-widget-send svg {
         width: 18px;
         height: 18px;
-        color: currentColor;
+        color: inherit;
       }
 
       .cta-voice-controls {
@@ -1268,22 +1264,22 @@
         position: relative;
         width: 48px;
         height: 48px;
-        border: 1px solid var(--cta-border);
+        border: none;
         border-radius: 14px;
         background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
+        transition: color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
         flex-shrink: 0;
+        color: var(--cta-fg-muted);
       }
 
       .cta-widget-mic svg {
         width: 18px;
         height: 18px;
-        color: var(--cta-fg);
-        opacity: 0.9;
+        color: inherit;
       }
 
       .cta-widget-mic.paired {
@@ -1294,8 +1290,7 @@
       .cta-widget-mic-select {
         width: 36px;
         height: 48px;
-        border: 1px solid var(--cta-border);
-        border-left: none;
+        border: none;
         border-radius: 0 14px 14px 0;
         margin-left: -1px;
         background: transparent;
@@ -1303,26 +1298,26 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease;
+        transition: color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
         flex-shrink: 0;
+        color: var(--cta-fg-muted);
       }
 
       .cta-widget-mic-select svg {
         width: 14px;
         height: 14px;
-        color: var(--cta-fg);
-        opacity: 0.85;
+        color: inherit;
       }
 
       .cta-widget-mic:disabled,
       .cta-widget-mic-select:disabled {
         cursor: not-allowed;
-        opacity: 0.55;
+        opacity: 0.5;
       }
 
       .cta-widget-mic:hover:not(:disabled),
       .cta-widget-mic-select:hover:not(:disabled) {
-        border-color: var(--cta-accent);
+        color: var(--cta-fg);
       }
 
       .cta-widget-mic:focus-visible,
