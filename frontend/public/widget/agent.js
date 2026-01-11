@@ -119,6 +119,7 @@
       fontSize,
       fg: rgbCss(fg),
       bg: rgbCss(bg),
+      bgRgb: `${bg.r}, ${bg.g}, ${bg.b}`,
       muted,
       surface,
       surfaceStrong,
@@ -140,6 +141,7 @@
     host.style.setProperty("--cta-font-size", theme.fontSize);
     host.style.setProperty("--cta-fg", theme.fg);
     host.style.setProperty("--cta-bg", theme.bg);
+    host.style.setProperty("--cta-bg-rgb", theme.bgRgb);
     host.style.setProperty("--cta-fg-muted", theme.muted);
     host.style.setProperty("--cta-surface", theme.surface);
     host.style.setProperty("--cta-surface-strong", theme.surfaceStrong);
@@ -608,8 +610,12 @@
         background: var(--cta-surface);
         border-left: 1px solid var(--cta-border);
         box-shadow: 0 18px 60px var(--cta-shadow-color);
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        grid-template-areas:
+          "header"
+          "messages"
+          "footer";
         overflow: hidden;
         min-height: 0;
         pointer-events: none;
@@ -636,14 +642,18 @@
       }
 
       .cta-widget-header {
+        grid-area: header;
+        position: relative;
+        z-index: 2;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
         padding: 14px 16px;
         padding-top: calc(14px + env(safe-area-inset-top, 0px));
-        border-bottom: 1px solid var(--cta-border);
-        background: var(--cta-surface-strong);
+        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
       }
 
       .cta-widget-header-left {
@@ -952,10 +962,13 @@
       }
 
       .cta-widget-messages {
-        flex: 1;
+        grid-area: messages;
+        grid-row: 1 / -1;
         overflow-y: auto;
         min-height: 0;
         padding: 16px;
+        padding-top: calc(60px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -1177,9 +1190,13 @@
       }
 
       .cta-widget-input-area {
+        grid-area: footer;
+        position: relative;
+        z-index: 2;
         padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-        border-top: 1px solid var(--cta-border);
-        background: var(--cta-surface-strong);
+        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
       }
 
       .cta-widget-input-row {
@@ -1354,15 +1371,13 @@
         bottom: 48px;
         right: 0;
         min-width: 220px;
-        background: var(--cta-surface-strong);
+        background: var(--cta-bg);
         border: 1px solid var(--cta-border);
         border-radius: 14px;
         box-shadow: 0 18px 60px var(--cta-shadow-color);
         display: none;
         overflow: hidden;
         z-index: 5;
-        backdrop-filter: blur(18px) saturate(160%);
-        -webkit-backdrop-filter: blur(18px) saturate(160%);
       }
 
       .cta-widget-mic-menu.open {
