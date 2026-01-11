@@ -684,16 +684,7 @@
         -webkit-user-drag: none;
       }
 
-      .cta-widget-avatar .cta-status {
-        position: absolute;
-        bottom: -3px;
-        left: -3px;
-        width: 10px;
-        height: 10px;
-        background: rgb(34, 197, 94);
-        border-radius: 999px;
-        box-shadow: 0 0 0 2px var(--cta-surface-strong);
-      }
+
 
       .cta-widget-title {
         font-size: 13px;
@@ -1532,9 +1523,8 @@
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
-	          <div class="cta-widget-avatar" style="position:relative">
+	          <div class="cta-widget-avatar">
 	            ${DEFAULT_WIDGET_ICON}
-	            <span class="cta-status"></span>
 	          </div>
           <div>
             <p class="cta-widget-title"></p>
@@ -1666,14 +1656,9 @@
     function syncIcons() {
       toggle.innerHTML = getIconMarkup();
       if (!avatarEl) return;
-      const statusEl = avatarEl.querySelector(".cta-status");
       const existingIcon = avatarEl.querySelector("svg, img");
       if (existingIcon) existingIcon.remove();
-      if (statusEl) {
-        statusEl.insertAdjacentHTML("beforebegin", getIconMarkup());
-      } else {
-        avatarEl.insertAdjacentHTML("afterbegin", getIconMarkup());
-      }
+      avatarEl.insertAdjacentHTML("afterbegin", getIconMarkup());
     }
 
     function syncSecurityButton() {
