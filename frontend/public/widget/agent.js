@@ -967,7 +967,7 @@
         overflow-y: auto;
         min-height: 0;
         padding: 16px;
-        padding-top: calc(52px + env(safe-area-inset-top, 0px));
+        padding-top: calc(58px + env(safe-area-inset-top, 0px));
         padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
         display: flex;
         flex-direction: column;
