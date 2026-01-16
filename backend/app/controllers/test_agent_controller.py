@@ -99,6 +99,13 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
+    # New styling fields should default to None
+    assert body["widgetPrimaryColor"] is None
+    assert body["widgetTextColor"] is None
+    assert body["widgetBackgroundColor"] is None
+    assert body["widgetBorderWidthContainer"] is None
+    assert body["widgetBorderWidthMessage"] is None
+    assert body["widgetBorderWidthButton"] is None
 
     updated = client.put(
         "/agent/widget-config",
@@ -110,16 +117,32 @@ def test_agent_widget_config_get_and_update(client: TestClient):
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
             "widgetInputPlaceholder": "Ask Acme…",
+            "widgetPrimaryColor": "#ff5500",
+            "widgetTextColor": "#112233",
+            "widgetBackgroundColor": "#eeffee",
+            "widgetBorderWidthContainer": 2,
+            "widgetBorderWidthMessage": 1,
+            "widgetBorderWidthButton": 3,
         },
     )
     assert updated.status_code == 200
     updated_body = updated.json()
     assert updated_body["widgetTitle"] == "Acme Assistant"
     assert updated_body["widgetIconUrl"] == "https://example.com/icon.png"
+    assert updated_body["widgetPrimaryColor"] == "#ff5500"
+    assert updated_body["widgetTextColor"] == "#112233"
+    assert updated_body["widgetBackgroundColor"] == "#eeffee"
+    assert updated_body["widgetBorderWidthContainer"] == 2
+    assert updated_body["widgetBorderWidthMessage"] == 1
+    assert updated_body["widgetBorderWidthButton"] == 3
 
     refetched = client.get("/agent/widget-config", headers=auth_headers())
     assert refetched.status_code == 200
-    assert refetched.json()["widgetTitle"] == "Acme Assistant"
+    refetched_body = refetched.json()
+    assert refetched_body["widgetTitle"] == "Acme Assistant"
+    assert refetched_body["widgetPrimaryColor"] == "#ff5500"
+    assert refetched_body["widgetTextColor"] == "#112233"
+    assert refetched_body["widgetBackgroundColor"] == "#eeffee"
 
 
 def test_agent_widget_config_icon_url_validation(client: TestClient):

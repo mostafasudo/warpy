@@ -138,7 +138,13 @@ const baseWidgetConfig = {
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
-  widgetSecurityDisclosureEnabled: true
+  widgetSecurityDisclosureEnabled: true,
+  widgetPrimaryColor: null,
+  widgetTextColor: null,
+  widgetBackgroundColor: null,
+  widgetBorderWidthContainer: null,
+  widgetBorderWidthMessage: null,
+  widgetBorderWidthButton: null
 }
 
 const renderPanelWithInstall = (install: { framework: string; packageManager: string }) => {
