@@ -63,6 +63,12 @@ class AgentWidgetConfigResponse(BaseModel):
     widget_empty_description: str = Field(alias="widgetEmptyDescription", min_length=1, max_length=240)
     widget_input_placeholder: str = Field(alias="widgetInputPlaceholder", min_length=1, max_length=120)
     widget_security_disclosure_enabled: bool = Field(default=True, alias="widgetSecurityDisclosureEnabled")
+    widget_primary_color: str | None = Field(default=None, alias="widgetPrimaryColor")
+    widget_text_color: str | None = Field(default=None, alias="widgetTextColor")
+    widget_background_color: str | None = Field(default=None, alias="widgetBackgroundColor")
+    widget_border_width_container: int | None = Field(default=None, alias="widgetBorderWidthContainer")
+    widget_border_width_message: int | None = Field(default=None, alias="widgetBorderWidthMessage")
+    widget_border_width_button: int | None = Field(default=None, alias="widgetBorderWidthButton")
 
 
 class AgentWidgetConfigUpdate(AgentWidgetConfigResponse):

@@ -31,6 +31,7 @@ import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
+import { WidgetPreview } from "./widget-preview"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
 
@@ -398,6 +399,12 @@ type WidgetConfigDraft = {
   widgetEmptyDescription: string
   widgetInputPlaceholder: string
   widgetSecurityDisclosureEnabled: boolean
+  widgetPrimaryColor: string | null
+  widgetTextColor: string | null
+  widgetBackgroundColor: string | null
+  widgetBorderWidthContainer: number | null
+  widgetBorderWidthMessage: number | null
+  widgetBorderWidthButton: number | null
 }
 
 const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
@@ -407,7 +414,13 @@ const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
-  widgetSecurityDisclosureEnabled: true
+  widgetSecurityDisclosureEnabled: true,
+  widgetPrimaryColor: null,
+  widgetTextColor: null,
+  widgetBackgroundColor: null,
+  widgetBorderWidthContainer: null,
+  widgetBorderWidthMessage: null,
+  widgetBorderWidthButton: null
 }
 
 const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
@@ -417,7 +430,13 @@ const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
   widgetEmptyTitle: value.widgetEmptyTitle.trim(),
   widgetEmptyDescription: value.widgetEmptyDescription.trim(),
   widgetInputPlaceholder: value.widgetInputPlaceholder.trim(),
-  widgetSecurityDisclosureEnabled: value.widgetSecurityDisclosureEnabled
+  widgetSecurityDisclosureEnabled: value.widgetSecurityDisclosureEnabled,
+  widgetPrimaryColor: value.widgetPrimaryColor?.trim() ? value.widgetPrimaryColor.trim() : null,
+  widgetTextColor: value.widgetTextColor?.trim() ? value.widgetTextColor.trim() : null,
+  widgetBackgroundColor: value.widgetBackgroundColor?.trim() ? value.widgetBackgroundColor.trim() : null,
+  widgetBorderWidthContainer: value.widgetBorderWidthContainer,
+  widgetBorderWidthMessage: value.widgetBorderWidthMessage,
+  widgetBorderWidthButton: value.widgetBorderWidthButton
 })
 
 const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
@@ -543,144 +562,306 @@ const ConfigureWidgetPanel = () => {
             </div>
 
             <CollapsibleContent>
-              <div className="space-y-6 pt-2">
-                <div className="rounded-lg border border-border bg-muted/20 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
-                      {previewIconUrl ? (
-                        <img src={previewIconUrl} alt="Widget icon" className="h-5 w-5 rounded-sm object-contain" />
-                      ) : (
-                        <Sparkles className="h-5 w-5 text-primary" />
-                      )}
+              <div className="grid gap-6 pt-2 lg:grid-cols-[1fr,320px]">
+                {/* Left column - Configuration controls */}
+                <div className="space-y-6">
+                  <div className="rounded-lg border border-border bg-muted/20 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+                        {previewIconUrl ? (
+                          <img src={previewIconUrl} alt="Widget icon" className="h-5 w-5 rounded-sm object-contain" />
+                        ) : (
+                          <Sparkles className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{draft.widgetTitle}</p>
+                        <p className="truncate text-xs text-muted-foreground">{draft.widgetSubtitle}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{draft.widgetTitle}</p>
-                      <p className="truncate text-xs text-muted-foreground">{draft.widgetSubtitle}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="widget-title">Widget title</Label>
-                    <Input
-                      id="widget-title"
-                      value={draft.widgetTitle}
-                      onChange={(event) => setDraft({ ...draft, widgetTitle: event.target.value })}
-                    />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="widget-subtitle">Widget subtitle</Label>
-                    <Input
-                      id="widget-subtitle"
-                      value={draft.widgetSubtitle}
-                      onChange={(event) => setDraft({ ...draft, widgetSubtitle: event.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>Widget icon</Label>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Select
-                        value={iconMode}
-                        onValueChange={(value) => {
-                          const next = value === "custom" ? "custom" : "default"
-                          setIconMode(next)
-                          if (next === "default") {
-                            setDraft({ ...draft, widgetIconUrl: null })
-                          } else if (draft.widgetIconUrl === null) {
-                            setDraft({ ...draft, widgetIconUrl: "" })
-                          }
-                        }}
-                      >
-                        <SelectTrigger aria-label="Widget icon mode">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="default">Default sparkles</SelectItem>
-                          <SelectItem value="custom">Custom image URL</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="widget-title">Widget title</Label>
                       <Input
-                        value={iconMode === "custom" ? draft.widgetIconUrl ?? "" : ""}
-                        onChange={(event) => setDraft({ ...draft, widgetIconUrl: event.target.value })}
-                        disabled={iconMode !== "custom"}
-                        placeholder="https://example.com/icon.png"
-                        aria-label="Widget icon URL"
+                        id="widget-title"
+                        value={draft.widgetTitle}
+                        onChange={(event) => setDraft({ ...draft, widgetTitle: event.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="widget-subtitle">Widget subtitle</Label>
+                      <Input
+                        id="widget-subtitle"
+                        value={draft.widgetSubtitle}
+                        onChange={(event) => setDraft({ ...draft, widgetSubtitle: event.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Widget icon</Label>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Select
+                          value={iconMode}
+                          onValueChange={(value) => {
+                            const next = value === "custom" ? "custom" : "default"
+                            setIconMode(next)
+                            if (next === "default") {
+                              setDraft({ ...draft, widgetIconUrl: null })
+                            } else if (draft.widgetIconUrl === null) {
+                              setDraft({ ...draft, widgetIconUrl: "" })
+                            }
+                          }}
+                        >
+                          <SelectTrigger aria-label="Widget icon mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="default">Default sparkles</SelectItem>
+                            <SelectItem value="custom">Custom image URL</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={iconMode === "custom" ? draft.widgetIconUrl ?? "" : ""}
+                          onChange={(event) => setDraft({ ...draft, widgetIconUrl: event.target.value })}
+                          disabled={iconMode !== "custom"}
+                          placeholder="https://example.com/icon.png"
+                          aria-label="Widget icon URL"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="widget-placeholder">Input placeholder</Label>
+                      <Input
+                        id="widget-placeholder"
+                        value={draft.widgetInputPlaceholder}
+                        onChange={(event) => setDraft({ ...draft, widgetInputPlaceholder: event.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="widget-empty-title">Empty state title</Label>
+                      <Input
+                        id="widget-empty-title"
+                        value={draft.widgetEmptyTitle}
+                        onChange={(event) => setDraft({ ...draft, widgetEmptyTitle: event.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="widget-empty-description">Empty state description</Label>
+                      <Textarea
+                        id="widget-empty-description"
+                        value={draft.widgetEmptyDescription}
+                        onChange={(event) => setDraft({ ...draft, widgetEmptyDescription: event.target.value })}
+                        className="min-h-20"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="widget-placeholder">Input placeholder</Label>
-                    <Input
-                      id="widget-placeholder"
-                      value={draft.widgetInputPlaceholder}
-                      onChange={(event) => setDraft({ ...draft, widgetInputPlaceholder: event.target.value })}
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="security-disclosure-toggle" className="text-sm font-semibold">
+                          Show Security & Privacy Disclosure
+                        </Label>
+                        <span className="text-xs text-muted-foreground">(Recommended)</span>
+                      </div>
+                    </div>
+                    <Switch
+                      id="security-disclosure-toggle"
+                      checked={draft.widgetSecurityDisclosureEnabled}
+                      onCheckedChange={(checked) => setDraft({ ...draft, widgetSecurityDisclosureEnabled: checked })}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="widget-empty-title">Empty state title</Label>
-                    <Input
-                      id="widget-empty-title"
-                      value={draft.widgetEmptyTitle}
-                      onChange={(event) => setDraft({ ...draft, widgetEmptyTitle: event.target.value })}
-                    />
-                  </div>
+                  {/* Styling Section */}
+                  <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold">Styling</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            widgetPrimaryColor: null,
+                            widgetTextColor: null,
+                            widgetBackgroundColor: null,
+                            widgetBorderWidthContainer: null,
+                            widgetBorderWidthMessage: null,
+                            widgetBorderWidthButton: null
+                          })
+                        }
+                        className="h-7 text-xs"
+                      >
+                        Reset styling
+                      </Button>
+                    </div>
 
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="widget-empty-description">Empty state description</Label>
-                    <Textarea
-                      id="widget-empty-description"
-                      value={draft.widgetEmptyDescription}
-                      onChange={(event) => setDraft({ ...draft, widgetEmptyDescription: event.target.value })}
-                      className="min-h-20"
-                    />
-                  </div>
-                </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="widget-primary-color">Primary color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="widget-primary-color"
+                            type="color"
+                            value={draft.widgetPrimaryColor || "#3b82f6"}
+                            onChange={(event) => setDraft({ ...draft, widgetPrimaryColor: event.target.value })}
+                            className="h-10 w-14 cursor-pointer p-1"
+                          />
+                          <Input
+                            value={draft.widgetPrimaryColor || ""}
+                            onChange={(event) => setDraft({ ...draft, widgetPrimaryColor: event.target.value })}
+                            placeholder="#3b82f6"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
 
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-4">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="security-disclosure-toggle" className="text-sm font-semibold">
-                        Show Security & Privacy Disclosure
-                      </Label>
-                      <span className="text-xs text-muted-foreground">(Recommended)</span>
+                      <div className="space-y-2">
+                        <Label htmlFor="widget-text-color">Text color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="widget-text-color"
+                            type="color"
+                            value={draft.widgetTextColor || "#000000"}
+                            onChange={(event) => setDraft({ ...draft, widgetTextColor: event.target.value })}
+                            className="h-10 w-14 cursor-pointer p-1"
+                          />
+                          <Input
+                            value={draft.widgetTextColor || ""}
+                            onChange={(event) => setDraft({ ...draft, widgetTextColor: event.target.value })}
+                            placeholder="#000000"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="widget-background-color">Background color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="widget-background-color"
+                            type="color"
+                            value={draft.widgetBackgroundColor || "#ffffff"}
+                            onChange={(event) => setDraft({ ...draft, widgetBackgroundColor: event.target.value })}
+                            className="h-10 w-14 cursor-pointer p-1"
+                          />
+                          <Input
+                            value={draft.widgetBackgroundColor || ""}
+                            onChange={(event) => setDraft({ ...draft, widgetBackgroundColor: event.target.value })}
+                            placeholder="#ffffff"
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="widget-border-container">Container border (px)</Label>
+                        <Input
+                          id="widget-border-container"
+                          type="number"
+                          min="0"
+                          max="10"
+                          value={draft.widgetBorderWidthContainer ?? ""}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              widgetBorderWidthContainer: event.target.value ? parseInt(event.target.value, 10) : null
+                            })
+                          }
+                          placeholder="1"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="widget-border-message">Message border (px)</Label>
+                        <Input
+                          id="widget-border-message"
+                          type="number"
+                          min="0"
+                          max="10"
+                          value={draft.widgetBorderWidthMessage ?? ""}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              widgetBorderWidthMessage: event.target.value ? parseInt(event.target.value, 10) : null
+                            })
+                          }
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="widget-border-button">Button border (px)</Label>
+                        <Input
+                          id="widget-border-button"
+                          type="number"
+                          min="0"
+                          max="10"
+                          value={draft.widgetBorderWidthButton ?? ""}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              widgetBorderWidthButton: event.target.value ? parseInt(event.target.value, 10) : null
+                            })
+                          }
+                          placeholder="1"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <Switch
-                    id="security-disclosure-toggle"
-                    checked={draft.widgetSecurityDisclosureEnabled}
-                    onCheckedChange={(checked) => setDraft({ ...draft, widgetSecurityDisclosureEnabled: checked })}
-                  />
+
+                  <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+                    <Button
+                      variant="ghost"
+                      onClick={handleDiscard}
+                      disabled={!isDirty || updateConfig.isPending}
+                      className="w-full justify-center sm:w-auto"
+                    >
+                      Discard changes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleRestoreDefaults}
+                      disabled={updateConfig.isPending}
+                      className="w-full justify-center sm:w-auto"
+                    >
+                      Restore defaults
+                    </Button>
+                    <Button
+                      onClick={handleSave}
+                      disabled={!isDirty || updateConfig.isPending}
+                      className="w-full justify-center sm:w-auto"
+                    >
+                      Save changes
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-                  <Button
-                    variant="ghost"
-                    onClick={handleDiscard}
-                    disabled={!isDirty || updateConfig.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Discard changes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRestoreDefaults}
-                    disabled={updateConfig.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Restore defaults
-                  </Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={!isDirty || updateConfig.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Save changes
-                  </Button>
+                {/* Right column - Live Preview */}
+                <div className="hidden lg:block">
+                  <div className="sticky top-6">
+                    <h4 className="mb-4 text-sm font-semibold text-muted-foreground">Live Preview</h4>
+                    <WidgetPreview
+                      title={draft.widgetTitle}
+                      subtitle={draft.widgetSubtitle}
+                      iconUrl={previewIconUrl}
+                      emptyTitle={draft.widgetEmptyTitle}
+                      emptyDescription={draft.widgetEmptyDescription}
+                      inputPlaceholder={draft.widgetInputPlaceholder}
+                      primaryColor={draft.widgetPrimaryColor}
+                      textColor={draft.widgetTextColor}
+                      backgroundColor={draft.widgetBackgroundColor}
+                      borderWidthContainer={draft.widgetBorderWidthContainer}
+                      borderWidthMessage={draft.widgetBorderWidthMessage}
+                      borderWidthButton={draft.widgetBorderWidthButton}
+                    />
+                  </div>
                 </div>
               </div>
             </CollapsibleContent>

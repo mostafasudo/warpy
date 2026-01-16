@@ -138,6 +138,12 @@ export type AgentWidgetConfigResponse = {
   widgetEmptyDescription: string;
   widgetInputPlaceholder: string;
   widgetSecurityDisclosureEnabled: boolean;
+  widgetPrimaryColor: string | null;
+  widgetTextColor: string | null;
+  widgetBackgroundColor: string | null;
+  widgetBorderWidthContainer: number | null;
+  widgetBorderWidthMessage: number | null;
+  widgetBorderWidthButton: number | null;
 };
 
 export type AgentWidgetConfigUpdate = AgentWidgetConfigResponse;

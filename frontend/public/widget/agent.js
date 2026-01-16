@@ -470,6 +470,9 @@
         --cta-bubble-user: rgba(17, 24, 39, 0.08);
         --cta-code-bg: rgba(17, 24, 39, 0.1);
         --cta-focus: rgba(37, 99, 235, 0.32);
+        --cta-border-container: 1px;
+        --cta-border-message: 0px;
+        --cta-border-button: 1px;
       }
 
       *,
@@ -1504,6 +1507,12 @@
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
     let widgetInputPlaceholder = "Ask Warpy…";
     let securityDisclosureEnabled = true;
+    let widgetPrimaryColor = null;
+    let widgetTextColor = null;
+    let widgetBackgroundColor = null;
+    let widgetBorderWidthContainer = null;
+    let widgetBorderWidthMessage = null;
+    let widgetBorderWidthButton = null;
     let isSecurityPanelOpen = false;
 
     const root = document.createElement("div");
@@ -1674,6 +1683,47 @@
     function syncSecurityButton() {
       if (securityBtnEl) {
         securityBtnEl.style.display = securityDisclosureEnabled ? "inline-flex" : "none";
+      }
+    }
+
+    function applyCustomStyling() {
+      if (widgetPrimaryColor) {
+        const parsedColor = parseColor(widgetPrimaryColor);
+        if (parsedColor) {
+          const accentContrast = relativeLuminance(parsedColor) > 0.6 ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)";
+          root.style.setProperty("--cta-accent", widgetPrimaryColor);
+          root.style.setProperty("--cta-accent-contrast", accentContrast);
+          root.style.setProperty("--cta-focus", rgbaCss(parsedColor, 0.32));
+        }
+      }
+      if (widgetTextColor) {
+        const parsedColor = parseColor(widgetTextColor);
+        if (parsedColor) {
+          root.style.setProperty("--cta-fg", widgetTextColor);
+          root.style.setProperty("--cta-fg-muted", rgbaCss(parsedColor, 0.7));
+          root.style.setProperty("--cta-code-bg", rgbaCss(parsedColor, 0.1));
+          root.style.setProperty("--cta-bubble-assistant", rgbaCss(parsedColor, 0.06));
+          root.style.setProperty("--cta-bubble-user", rgbaCss(parsedColor, 0.08));
+          root.style.setProperty("--cta-border", rgbaCss(parsedColor, 0.12));
+        }
+      }
+      if (widgetBackgroundColor) {
+        const parsedColor = parseColor(widgetBackgroundColor);
+        if (parsedColor) {
+          root.style.setProperty("--cta-bg", widgetBackgroundColor);
+          root.style.setProperty("--cta-bg-rgb", `${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}`);
+          root.style.setProperty("--cta-surface", rgbaCss(parsedColor, 0.72));
+          root.style.setProperty("--cta-surface-strong", rgbaCss(parsedColor, 0.92));
+        }
+      }
+      if (widgetBorderWidthContainer !== null) {
+        root.style.setProperty("--cta-border-container", widgetBorderWidthContainer + "px");
+      }
+      if (widgetBorderWidthMessage !== null) {
+        root.style.setProperty("--cta-border-message", widgetBorderWidthMessage + "px");
+      }
+      if (widgetBorderWidthButton !== null) {
+        root.style.setProperty("--cta-border-button", widgetBorderWidthButton + "px");
       }
     }
 
@@ -2104,6 +2154,25 @@
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;
       }
+      if (typeof data.widgetPrimaryColor === "string" && data.widgetPrimaryColor.trim()) {
+        widgetPrimaryColor = data.widgetPrimaryColor.trim();
+      }
+      if (typeof data.widgetTextColor === "string" && data.widgetTextColor.trim()) {
+        widgetTextColor = data.widgetTextColor.trim();
+      }
+      if (typeof data.widgetBackgroundColor === "string" && data.widgetBackgroundColor.trim()) {
+        widgetBackgroundColor = data.widgetBackgroundColor.trim();
+      }
+      if (typeof data.widgetBorderWidthContainer === "number") {
+        widgetBorderWidthContainer = data.widgetBorderWidthContainer;
+      }
+      if (typeof data.widgetBorderWidthMessage === "number") {
+        widgetBorderWidthMessage = data.widgetBorderWidthMessage;
+      }
+      if (typeof data.widgetBorderWidthButton === "number") {
+        widgetBorderWidthButton = data.widgetBorderWidthButton;
+      }
+      applyCustomStyling();
       applyWidgetUiConfig();
     }
 

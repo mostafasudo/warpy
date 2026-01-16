@@ -278,7 +278,13 @@ describe("apiClient", () => {
         widgetEmptyTitle: "What would you like to do?",
         widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
         widgetInputPlaceholder: "Ask Warpy…",
-        widgetSecurityDisclosureEnabled: true
+        widgetSecurityDisclosureEnabled: true,
+        widgetPrimaryColor: null,
+        widgetTextColor: null,
+        widgetBackgroundColor: null,
+        widgetBorderWidthContainer: null,
+        widgetBorderWidthMessage: null,
+        widgetBorderWidthButton: null
       }),
       jsonResponse({
         widgetTitle: "Acme Assistant",
@@ -287,7 +293,13 @@ describe("apiClient", () => {
         widgetEmptyTitle: "How can we help?",
         widgetEmptyDescription: "Ask a question or request help.",
         widgetInputPlaceholder: "Ask Acme…",
-        widgetSecurityDisclosureEnabled: true
+        widgetSecurityDisclosureEnabled: true,
+        widgetPrimaryColor: null,
+        widgetTextColor: null,
+        widgetBackgroundColor: null,
+        widgetBorderWidthContainer: null,
+        widgetBorderWidthMessage: null,
+        widgetBorderWidthButton: null
       })
     ]
 
@@ -305,7 +317,13 @@ describe("apiClient", () => {
       widgetEmptyTitle: "How can we help?",
       widgetEmptyDescription: "Ask a question or request help.",
       widgetInputPlaceholder: "Ask Acme…",
-      widgetSecurityDisclosureEnabled: true
+      widgetSecurityDisclosureEnabled: true,
+      widgetPrimaryColor: null,
+      widgetTextColor: null,
+      widgetBackgroundColor: null,
+      widgetBorderWidthContainer: null,
+      widgetBorderWidthMessage: null,
+      widgetBorderWidthButton: null
     })
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/agent/widget-config", "http://api.test"),

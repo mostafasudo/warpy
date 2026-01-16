@@ -32,6 +32,12 @@ class WidgetConfigResponse(BaseModel):
     )
     widget_input_placeholder: str = Field(default="Ask Warpy…", alias="widgetInputPlaceholder")
     security_disclosure_enabled: bool = Field(default=True, alias="securityDisclosureEnabled")
+    widget_primary_color: str | None = Field(default=None, alias="widgetPrimaryColor")
+    widget_text_color: str | None = Field(default=None, alias="widgetTextColor")
+    widget_background_color: str | None = Field(default=None, alias="widgetBackgroundColor")
+    widget_border_width_container: int | None = Field(default=None, alias="widgetBorderWidthContainer")
+    widget_border_width_message: int | None = Field(default=None, alias="widgetBorderWidthMessage")
+    widget_border_width_button: int | None = Field(default=None, alias="widgetBorderWidthButton")
 
 
 class ToolCallPayload(BaseModel):
