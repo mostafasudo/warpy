@@ -1,3 +1,5 @@
+import type { WidgetStyles } from "@/types/widget-styles";
+
 export type StorageSource = "localStorage" | "sessionStorage" | "cookies";
 
 export type AuthorizationType = "bearer" | "basic" | "none";
@@ -138,12 +140,7 @@ export type AgentWidgetConfigResponse = {
   widgetEmptyDescription: string;
   widgetInputPlaceholder: string;
   widgetSecurityDisclosureEnabled: boolean;
-  widgetPrimaryColor: string | null;
-  widgetTextColor: string | null;
-  widgetBackgroundColor: string | null;
-  widgetBorderWidthContainer: number | null;
-  widgetBorderWidthMessage: number | null;
-  widgetBorderWidthButton: number | null;
+  widgetStyles: WidgetStyles | null;
 };
 
 export type AgentWidgetConfigUpdate = AgentWidgetConfigResponse;

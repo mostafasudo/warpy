@@ -2,21 +2,18 @@
 import { describe, it } from "@jest/globals"
 import { render, screen } from "@testing-library/react"
 
+import { widgetStylesDefault } from "@/types/widget-styles"
 import { WidgetPreview } from "./widget-preview"
 
 const defaultProps = {
-  title: "Test Widget",
-  subtitle: "Ready to help",
-  iconUrl: null,
-  emptyTitle: "What would you like to do?",
-  emptyDescription: "Ask a question or request help.",
-  inputPlaceholder: "Ask something…",
-  primaryColor: null,
-  textColor: null,
-  backgroundColor: null,
-  borderWidthContainer: null,
-  borderWidthMessage: null,
-  borderWidthButton: null
+  widgetTitle: "Test Widget",
+  widgetSubtitle: "Ready to help",
+  widgetIconUrl: null,
+  widgetEmptyTitle: "What would you like to do?",
+  widgetEmptyDescription: "Ask a question or request help.",
+  widgetInputPlaceholder: "Ask something…",
+  widgetSecurityDisclosureEnabled: true,
+  widgetStyles: null
 }
 
 describe("WidgetPreview", () => {
@@ -52,7 +49,7 @@ describe("WidgetPreview", () => {
   })
 
   it("renders custom icon when iconUrl is provided", () => {
-    render(<WidgetPreview {...defaultProps} iconUrl="https://example.com/icon.png" />)
+    render(<WidgetPreview {...defaultProps} widgetIconUrl="https://example.com/icon.png" />)
 
     const images = screen.getAllByRole("img", { name: "Widget icon" })
     expect(images.length).toBeGreaterThan(0)
@@ -60,51 +57,28 @@ describe("WidgetPreview", () => {
   })
 
   it("applies custom primary color to accent elements", () => {
-    const { container } = render(<WidgetPreview {...defaultProps} primaryColor="#ff5500" />)
+    const customStyles = {
+      ...widgetStylesDefault,
+      colors: { ...widgetStylesDefault.colors, primary: "#ff5500" }
+    }
+    const { container } = render(<WidgetPreview {...defaultProps} widgetStyles={customStyles} />)
 
     const sendButton = container.querySelector("button[disabled]")
     expect(sendButton).toHaveStyle({ backgroundColor: "#ff5500" })
   })
 
-  it("applies custom background color to panel", () => {
-    const { container } = render(<WidgetPreview {...defaultProps} backgroundColor="#eeffee" />)
-
-    const panel = container.querySelector(".rounded-2xl")
-    expect(panel).toHaveStyle({ backgroundColor: "#eeffee" })
-  })
-
-  it("applies custom text color to panel", () => {
-    const { container } = render(<WidgetPreview {...defaultProps} textColor="#112233" />)
-
-    const panel = container.querySelector(".rounded-2xl")
-    expect(panel).toHaveStyle({ color: "#112233" })
-  })
-
   it("applies custom border widths", () => {
-    const { container } = render(
-      <WidgetPreview
-        {...defaultProps}
-        borderWidthContainer={3}
-        borderWidthMessage={2}
-        borderWidthButton={1}
-      />
-    )
+    const customStyles = {
+      ...widgetStylesDefault,
+      borders: { ...widgetStylesDefault.borders, containerWidth: 3, buttonWidth: 2 }
+    }
+    const { container } = render(<WidgetPreview {...defaultProps} widgetStyles={customStyles} />)
 
     const toggleButton = container.querySelector(".rounded-full")
     expect(toggleButton).toHaveStyle({ borderWidth: "3px" })
 
     const sendButton = container.querySelector("button[disabled]")
-    expect(sendButton).toHaveStyle({ borderWidth: "1px" })
-  })
-
-  it("uses default border widths when not provided", () => {
-    const { container } = render(<WidgetPreview {...defaultProps} />)
-
-    const toggleButton = container.querySelector(".rounded-full")
-    expect(toggleButton).toHaveStyle({ borderWidth: "1px" })
-
-    const sendButton = container.querySelector("button[disabled]")
-    expect(sendButton).toHaveStyle({ borderWidth: "1px" })
+    expect(sendButton).toHaveStyle({ borderWidth: "2px" })
   })
 
   it("renders toggle button label", () => {

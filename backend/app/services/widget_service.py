@@ -81,12 +81,7 @@ def get_widget_config(
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
         security_disclosure_enabled=agent.widget_security_disclosure_enabled,
-        widget_primary_color=agent.widget_primary_color,
-        widget_text_color=agent.widget_text_color,
-        widget_background_color=agent.widget_background_color,
-        widget_border_width_container=agent.widget_border_width_container,
-        widget_border_width_message=agent.widget_border_width_message,
-        widget_border_width_button=agent.widget_border_width_button,
+        widget_styles=agent.widget_styles,
     )
 
 

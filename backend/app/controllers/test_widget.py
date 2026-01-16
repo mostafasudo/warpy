@@ -91,6 +91,7 @@ def test_widget_config_returns_headers(client: TestClient):
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
+    assert body["widgetStyles"] is None
 
 
 def test_widget_hides_when_actions_exhausted(client: TestClient):

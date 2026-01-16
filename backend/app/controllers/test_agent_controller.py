@@ -99,13 +99,51 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
-    # New styling fields should default to None
-    assert body["widgetPrimaryColor"] is None
-    assert body["widgetTextColor"] is None
-    assert body["widgetBackgroundColor"] is None
-    assert body["widgetBorderWidthContainer"] is None
-    assert body["widgetBorderWidthMessage"] is None
-    assert body["widgetBorderWidthButton"] is None
+    assert body["widgetStyles"] is None
+
+    widget_styles = {
+        "version": "1.0",
+        "colors": {
+            "primary": "#0066FF",
+            "background": "#FFFFFF",
+            "surface": "#F5F5F5",
+            "text": "#111827",
+            "textMuted": "#6B7280",
+            "border": "#E5E7EB",
+        },
+        "spacing": {
+            "containerPadding": 16,
+            "messagePadding": 12,
+            "inputPadding": 12,
+            "messageGap": 8,
+            "sectionGap": 16,
+        },
+        "borders": {
+            "containerWidth": 1,
+            "containerRadius": 16,
+            "messageWidth": 1,
+            "messageRadius": 12,
+            "buttonWidth": 1,
+            "buttonRadius": 8,
+            "inputWidth": 1,
+            "inputRadius": 8,
+        },
+        "typography": {
+            "fontFamily": "Inter, system-ui, sans-serif",
+            "fontSizeBase": 14,
+            "fontSizeSmall": 12,
+            "fontSizeLarge": 16,
+            "fontWeightNormal": 400,
+            "fontWeightMedium": 500,
+            "fontWeightBold": 600,
+            "lineHeight": 1.5,
+        },
+        "shadows": {
+            "widget": "0 4px 12px rgba(0,0,0,0.1)",
+            "message": "none",
+            "button": "0 1px 2px rgba(0,0,0,0.05)",
+        },
+    }
 
     updated = client.put(
         "/agent/widget-config",
@@ -117,32 +155,22 @@ def test_agent_widget_config_get_and_update(client: TestClient):
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
             "widgetInputPlaceholder": "Ask Acme…",
-            "widgetPrimaryColor": "#ff5500",
-            "widgetTextColor": "#112233",
-            "widgetBackgroundColor": "#eeffee",
-            "widgetBorderWidthContainer": 2,
-            "widgetBorderWidthMessage": 1,
-            "widgetBorderWidthButton": 3,
+            "widgetStyles": widget_styles,
         },
     )
     assert updated.status_code == 200
     updated_body = updated.json()
     assert updated_body["widgetTitle"] == "Acme Assistant"
     assert updated_body["widgetIconUrl"] == "https://example.com/icon.png"
-    assert updated_body["widgetPrimaryColor"] == "#ff5500"
-    assert updated_body["widgetTextColor"] == "#112233"
-    assert updated_body["widgetBackgroundColor"] == "#eeffee"
-    assert updated_body["widgetBorderWidthContainer"] == 2
-    assert updated_body["widgetBorderWidthMessage"] == 1
-    assert updated_body["widgetBorderWidthButton"] == 3
+    assert updated_body["widgetStyles"]["colors"]["primary"] == "#0066FF"
+    assert updated_body["widgetStyles"]["borders"]["containerRadius"] == 16
+    assert updated_body["widgetStyles"]["typography"]["fontFamily"] == "Inter, system-ui, sans-serif"
 
     refetched = client.get("/agent/widget-config", headers=auth_headers())
     assert refetched.status_code == 200
     refetched_body = refetched.json()
     assert refetched_body["widgetTitle"] == "Acme Assistant"
-    assert refetched_body["widgetPrimaryColor"] == "#ff5500"
-    assert refetched_body["widgetTextColor"] == "#112233"
-    assert refetched_body["widgetBackgroundColor"] == "#eeffee"
+    assert refetched_body["widgetStyles"]["colors"]["primary"] == "#0066FF"
 
 
 def test_agent_widget_config_icon_url_validation(client: TestClient):
@@ -181,6 +209,52 @@ def test_agent_widget_config_rejects_blank_title(client: TestClient):
         },
     )
     assert invalid.status_code == 400
+
+
+def test_agent_widget_config_rejects_invalid_widget_styles(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    invalid = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetSubtitle": "Here to help",
+            "widgetIconUrl": None,
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+            "widgetStyles": {
+                "version": "1.0",
+                "colors": {
+                    "primary": "not-a-color",
+                },
+            },
+        },
+    )
+    assert invalid.status_code == 422
+
+
+def test_agent_widget_config_allows_clearing_widget_styles(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    updated = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetSubtitle": "Here to help",
+            "widgetIconUrl": None,
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+            "widgetStyles": None,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["widgetStyles"] is None
 
 
 def test_agent_widget_install_preferences_get_and_update(client: TestClient):

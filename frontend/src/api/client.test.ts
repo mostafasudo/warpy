@@ -279,12 +279,7 @@ describe("apiClient", () => {
         widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
         widgetInputPlaceholder: "Ask Warpy…",
         widgetSecurityDisclosureEnabled: true,
-        widgetPrimaryColor: null,
-        widgetTextColor: null,
-        widgetBackgroundColor: null,
-        widgetBorderWidthContainer: null,
-        widgetBorderWidthMessage: null,
-        widgetBorderWidthButton: null
+        widgetStyles: null
       }),
       jsonResponse({
         widgetTitle: "Acme Assistant",
@@ -294,12 +289,7 @@ describe("apiClient", () => {
         widgetEmptyDescription: "Ask a question or request help.",
         widgetInputPlaceholder: "Ask Acme…",
         widgetSecurityDisclosureEnabled: true,
-        widgetPrimaryColor: null,
-        widgetTextColor: null,
-        widgetBackgroundColor: null,
-        widgetBorderWidthContainer: null,
-        widgetBorderWidthMessage: null,
-        widgetBorderWidthButton: null
+        widgetStyles: null
       })
     ]
 
@@ -318,12 +308,7 @@ describe("apiClient", () => {
       widgetEmptyDescription: "Ask a question or request help.",
       widgetInputPlaceholder: "Ask Acme…",
       widgetSecurityDisclosureEnabled: true,
-      widgetPrimaryColor: null,
-      widgetTextColor: null,
-      widgetBackgroundColor: null,
-      widgetBorderWidthContainer: null,
-      widgetBorderWidthMessage: null,
-      widgetBorderWidthButton: null
+      widgetStyles: null
     })
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/agent/widget-config", "http://api.test"),

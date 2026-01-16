@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, Copy, Info, Network, Sparkles, Terminal, RotateCw } from "lucide-react"
+import { Check, ChevronDown, Copy, Info, Network, Terminal, RotateCw } from "lucide-react"
 import clsx from "clsx"
 
 import { PanelShell } from "@/components/panel-shell"
@@ -13,7 +13,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { getApiUrl } from "@/api/client"
-import { useAgentQuery } from "@/queries/use-agent"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
@@ -31,7 +30,16 @@ import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
+import { mergeWidgetStyles, widgetStylesDefault, type WidgetStyles } from "@/types/widget-styles"
 import { WidgetPreview } from "./widget-preview"
+import {
+  BordersEditor,
+  ColorsEditor,
+  ShadowsEditor,
+  SpacingEditor,
+  TypographyEditor
+} from "./widget-style-editors"
+import { useAgentQuery } from "@/queries/use-agent"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
 
@@ -399,12 +407,7 @@ type WidgetConfigDraft = {
   widgetEmptyDescription: string
   widgetInputPlaceholder: string
   widgetSecurityDisclosureEnabled: boolean
-  widgetPrimaryColor: string | null
-  widgetTextColor: string | null
-  widgetBackgroundColor: string | null
-  widgetBorderWidthContainer: number | null
-  widgetBorderWidthMessage: number | null
-  widgetBorderWidthButton: number | null
+  widgetStyles: WidgetStyles | null
 }
 
 const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
@@ -415,12 +418,7 @@ const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
   widgetSecurityDisclosureEnabled: true,
-  widgetPrimaryColor: null,
-  widgetTextColor: null,
-  widgetBackgroundColor: null,
-  widgetBorderWidthContainer: null,
-  widgetBorderWidthMessage: null,
-  widgetBorderWidthButton: null
+  widgetStyles: null
 }
 
 const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
@@ -431,12 +429,7 @@ const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
   widgetEmptyDescription: value.widgetEmptyDescription.trim(),
   widgetInputPlaceholder: value.widgetInputPlaceholder.trim(),
   widgetSecurityDisclosureEnabled: value.widgetSecurityDisclosureEnabled,
-  widgetPrimaryColor: value.widgetPrimaryColor?.trim() ? value.widgetPrimaryColor.trim() : null,
-  widgetTextColor: value.widgetTextColor?.trim() ? value.widgetTextColor.trim() : null,
-  widgetBackgroundColor: value.widgetBackgroundColor?.trim() ? value.widgetBackgroundColor.trim() : null,
-  widgetBorderWidthContainer: value.widgetBorderWidthContainer,
-  widgetBorderWidthMessage: value.widgetBorderWidthMessage,
-  widgetBorderWidthButton: value.widgetBorderWidthButton
+  widgetStyles: value.widgetStyles
 })
 
 const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
@@ -479,6 +472,23 @@ const ConfigureWidgetPanel = () => {
     if (!draft) return null
     return iconMode === "custom" ? (draft.widgetIconUrl?.trim() ? draft.widgetIconUrl.trim() : null) : null
   }, [draft, iconMode])
+
+
+  const effectiveStyles = useMemo(() => {
+    if (!draft) return widgetStylesDefault
+    return mergeWidgetStyles(draft.widgetStyles)
+  }, [draft])
+
+  const handleStylesChange = (next: WidgetStyles) => {
+    if (!draft) return
+    setDraft({ ...draft, widgetStyles: next })
+  }
+
+  const handleResetStyles = () => {
+    if (!draft) return
+    setDraft({ ...draft, widgetStyles: null })
+  }
+
 
   const handleSave = async () => {
     if (!payload) return
@@ -562,16 +572,27 @@ const ConfigureWidgetPanel = () => {
             </div>
 
             <CollapsibleContent>
-              <div className="grid gap-6 pt-2 lg:grid-cols-[1fr,320px]">
+              <div className="grid gap-6 pt-2 lg:grid-cols-[minmax(0,1fr)_420px]">
                 {/* Left column - Configuration controls */}
                 <div className="space-y-6">
                   <div className="rounded-lg border border-border bg-muted/20 p-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-border bg-muted/40">
                         {previewIconUrl ? (
-                          <img src={previewIconUrl} alt="Widget icon" className="h-5 w-5 rounded-sm object-contain" />
+                          <img src={previewIconUrl} alt="Widget icon" className="h-4 w-4 rounded object-contain" />
                         ) : (
-                          <Sparkles className="h-5 w-5 text-primary" />
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="h-4 w-4 text-primary"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z" />
+                            <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" />
+                            <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z" />
+                          </svg>
                         )}
                       </div>
                       <div className="min-w-0">
@@ -678,141 +699,21 @@ const ConfigureWidgetPanel = () => {
                     />
                   </div>
 
-                  {/* Styling Section */}
                   <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-semibold">Styling</h4>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setDraft({
-                            ...draft,
-                            widgetPrimaryColor: null,
-                            widgetTextColor: null,
-                            widgetBackgroundColor: null,
-                            widgetBorderWidthContainer: null,
-                            widgetBorderWidthMessage: null,
-                            widgetBorderWidthButton: null
-                          })
-                        }
-                        className="h-7 text-xs"
-                      >
-                        Reset styling
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold">Styles</h4>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="ghost" size="sm" onClick={handleResetStyles} className="h-7 text-xs">
+                        Reset all
                       </Button>
                     </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="widget-primary-color">Primary color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="widget-primary-color"
-                            type="color"
-                            value={draft.widgetPrimaryColor || "#3b82f6"}
-                            onChange={(event) => setDraft({ ...draft, widgetPrimaryColor: event.target.value })}
-                            className="h-10 w-14 cursor-pointer p-1"
-                          />
-                          <Input
-                            value={draft.widgetPrimaryColor || ""}
-                            onChange={(event) => setDraft({ ...draft, widgetPrimaryColor: event.target.value })}
-                            placeholder="#3b82f6"
-                            className="flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="widget-text-color">Text color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="widget-text-color"
-                            type="color"
-                            value={draft.widgetTextColor || "#000000"}
-                            onChange={(event) => setDraft({ ...draft, widgetTextColor: event.target.value })}
-                            className="h-10 w-14 cursor-pointer p-1"
-                          />
-                          <Input
-                            value={draft.widgetTextColor || ""}
-                            onChange={(event) => setDraft({ ...draft, widgetTextColor: event.target.value })}
-                            placeholder="#000000"
-                            className="flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="widget-background-color">Background color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="widget-background-color"
-                            type="color"
-                            value={draft.widgetBackgroundColor || "#ffffff"}
-                            onChange={(event) => setDraft({ ...draft, widgetBackgroundColor: event.target.value })}
-                            className="h-10 w-14 cursor-pointer p-1"
-                          />
-                          <Input
-                            value={draft.widgetBackgroundColor || ""}
-                            onChange={(event) => setDraft({ ...draft, widgetBackgroundColor: event.target.value })}
-                            placeholder="#ffffff"
-                            className="flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="widget-border-container">Container border (px)</Label>
-                        <Input
-                          id="widget-border-container"
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={draft.widgetBorderWidthContainer ?? ""}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              widgetBorderWidthContainer: event.target.value ? parseInt(event.target.value, 10) : null
-                            })
-                          }
-                          placeholder="1"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="widget-border-message">Message border (px)</Label>
-                        <Input
-                          id="widget-border-message"
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={draft.widgetBorderWidthMessage ?? ""}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              widgetBorderWidthMessage: event.target.value ? parseInt(event.target.value, 10) : null
-                            })
-                          }
-                          placeholder="0"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="widget-border-button">Button border (px)</Label>
-                        <Input
-                          id="widget-border-button"
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={draft.widgetBorderWidthButton ?? ""}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              widgetBorderWidthButton: event.target.value ? parseInt(event.target.value, 10) : null
-                            })
-                          }
-                          placeholder="1"
-                        />
-                      </div>
+                    </div>
+                    <div className="space-y-6">
+                      <ColorsEditor styles={effectiveStyles} onChange={handleStylesChange} />
+                      <SpacingEditor styles={effectiveStyles} onChange={handleStylesChange} />
+                      <BordersEditor styles={effectiveStyles} onChange={handleStylesChange} />
+                      <TypographyEditor styles={effectiveStyles} onChange={handleStylesChange} />
+                      <ShadowsEditor styles={effectiveStyles} onChange={handleStylesChange} />
                     </div>
                   </div>
 
@@ -845,21 +746,17 @@ const ConfigureWidgetPanel = () => {
 
                 {/* Right column - Live Preview */}
                 <div className="hidden lg:block">
-                  <div className="sticky top-6">
-                    <h4 className="mb-4 text-sm font-semibold text-muted-foreground">Live Preview</h4>
+                  <div className="sticky top-6 space-y-3">
+                    <h4 className="text-sm font-semibold text-muted-foreground">Live Preview</h4>
                     <WidgetPreview
-                      title={draft.widgetTitle}
-                      subtitle={draft.widgetSubtitle}
-                      iconUrl={previewIconUrl}
-                      emptyTitle={draft.widgetEmptyTitle}
-                      emptyDescription={draft.widgetEmptyDescription}
-                      inputPlaceholder={draft.widgetInputPlaceholder}
-                      primaryColor={draft.widgetPrimaryColor}
-                      textColor={draft.widgetTextColor}
-                      backgroundColor={draft.widgetBackgroundColor}
-                      borderWidthContainer={draft.widgetBorderWidthContainer}
-                      borderWidthMessage={draft.widgetBorderWidthMessage}
-                      borderWidthButton={draft.widgetBorderWidthButton}
+                      widgetTitle={draft.widgetTitle}
+                      widgetSubtitle={draft.widgetSubtitle}
+                      widgetIconUrl={previewIconUrl}
+                      widgetEmptyTitle={draft.widgetEmptyTitle}
+                      widgetEmptyDescription={draft.widgetEmptyDescription}
+                      widgetInputPlaceholder={draft.widgetInputPlaceholder}
+                      widgetSecurityDisclosureEnabled={draft.widgetSecurityDisclosureEnabled}
+                      widgetStyles={draft.widgetStyles}
                     />
                   </div>
                 </div>

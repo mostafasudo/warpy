@@ -19,12 +19,7 @@ def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfig
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
         widget_security_disclosure_enabled=agent.widget_security_disclosure_enabled,
-        widget_primary_color=agent.widget_primary_color,
-        widget_text_color=agent.widget_text_color,
-        widget_background_color=agent.widget_background_color,
-        widget_border_width_container=agent.widget_border_width_container,
-        widget_border_width_message=agent.widget_border_width_message,
-        widget_border_width_button=agent.widget_border_width_button,
+        widget_styles=agent.widget_styles,
     )
 
 
@@ -44,12 +39,7 @@ def update_agent_widget_config(
     agent.widget_empty_description = _strip_required(payload.widget_empty_description, "Empty state description")
     agent.widget_input_placeholder = _strip_required(payload.widget_input_placeholder, "Input placeholder")
     agent.widget_security_disclosure_enabled = payload.widget_security_disclosure_enabled
-    agent.widget_primary_color = payload.widget_primary_color
-    agent.widget_text_color = payload.widget_text_color
-    agent.widget_background_color = payload.widget_background_color
-    agent.widget_border_width_container = payload.widget_border_width_container
-    agent.widget_border_width_message = payload.widget_border_width_message
-    agent.widget_border_width_button = payload.widget_border_width_button
+    agent.widget_styles = payload.widget_styles.model_dump(by_alias=True) if payload.widget_styles else None
 
     session.flush()
     log_info("AgentWidgetConfigService", "update", "Widget config updated", user_id=user_id)
@@ -61,12 +51,7 @@ def update_agent_widget_config(
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
         widget_security_disclosure_enabled=agent.widget_security_disclosure_enabled,
-        widget_primary_color=agent.widget_primary_color,
-        widget_text_color=agent.widget_text_color,
-        widget_background_color=agent.widget_background_color,
-        widget_border_width_container=agent.widget_border_width_container,
-        widget_border_width_message=agent.widget_border_width_message,
-        widget_border_width_button=agent.widget_border_width_button,
+        widget_styles=agent.widget_styles,
     )
 
 

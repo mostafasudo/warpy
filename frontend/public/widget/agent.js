@@ -11,6 +11,49 @@
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
   const WIDGET_CONTAINER_ID = "cta-widget-container";
+  const DEFAULT_WIDGET_STYLES = {
+    version: "1.0",
+    colors: {
+      primary: "#0066FF",
+      background: "#FFFFFF",
+      surface: "#F5F5F5",
+      text: "#111827",
+      textMuted: "#6B7280",
+      border: "#E5E7EB"
+    },
+    spacing: {
+      containerPadding: 16,
+      messagePadding: 12,
+      inputPadding: 12,
+      messageGap: 8,
+      sectionGap: 16
+    },
+    borders: {
+      containerWidth: 1,
+      containerRadius: 16,
+      messageWidth: 1,
+      messageRadius: 12,
+      buttonWidth: 1,
+      buttonRadius: 8,
+      inputWidth: 1,
+      inputRadius: 8
+    },
+    typography: {
+      fontFamily: "Inter, system-ui, sans-serif",
+      fontSizeBase: 14,
+      fontSizeSmall: 12,
+      fontSizeLarge: 16,
+      fontWeightNormal: 400,
+      fontWeightMedium: 500,
+      fontWeightBold: 600,
+      lineHeight: 1.5
+    },
+    shadows: {
+      widget: "0 4px 12px rgba(0,0,0,0.1)",
+      message: "none",
+      button: "0 1px 2px rgba(0,0,0,0.05)"
+    }
+  };
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -136,6 +179,12 @@
   }
 
   function applyThemeVariables(host) {
+    if (host && host.dataset && host.dataset.ctaThemeMode === "custom") {
+      return;
+    }
+    if (host && host.dataset) {
+      host.dataset.ctaThemeMode = "auto";
+    }
     const theme = inferThemeFromPage();
     host.style.setProperty("--cta-font-family", theme.fontFamily);
     host.style.setProperty("--cta-font-size", theme.fontSize);
@@ -146,7 +195,6 @@
     host.style.setProperty("--cta-surface", theme.surface);
     host.style.setProperty("--cta-surface-strong", theme.surfaceStrong);
     host.style.setProperty("--cta-border", theme.border);
-    host.style.setProperty("--cta-shadow-color", theme.shadowColor);
     host.style.setProperty("--cta-scrim", theme.scrim);
     host.style.setProperty("--cta-accent", theme.accent);
     host.style.setProperty("--cta-accent-contrast", theme.accentContrast);
@@ -182,6 +230,90 @@
         mq.addListener(requestSync);
       }
     }
+  }
+
+  function mergeWithDefaults(customStyles) {
+    if (!customStyles || typeof customStyles !== "object") {
+      return DEFAULT_WIDGET_STYLES;
+    }
+    return {
+      version: typeof customStyles.version === "string" && customStyles.version.trim()
+        ? customStyles.version.trim()
+        : DEFAULT_WIDGET_STYLES.version,
+      colors: { ...DEFAULT_WIDGET_STYLES.colors, ...(customStyles.colors || {}) },
+      spacing: { ...DEFAULT_WIDGET_STYLES.spacing, ...(customStyles.spacing || {}) },
+      borders: { ...DEFAULT_WIDGET_STYLES.borders, ...(customStyles.borders || {}) },
+      typography: { ...DEFAULT_WIDGET_STYLES.typography, ...(customStyles.typography || {}) },
+      shadows: { ...DEFAULT_WIDGET_STYLES.shadows, ...(customStyles.shadows || {}) },
+      animations: DEFAULT_WIDGET_STYLES.animations,
+    };
+  }
+
+  function applyCustomStyles(host, styles) {
+    if (!host || !styles) return;
+    if (host.dataset) {
+      host.dataset.ctaThemeMode = "custom";
+    }
+    const { colors, spacing, borders, typography, shadows } = styles;
+
+    host.style.setProperty("--cta-accent", colors.primary);
+    host.style.setProperty("--cta-bg", colors.background);
+    host.style.setProperty("--cta-surface", colors.surface);
+    host.style.setProperty("--cta-surface-strong", colors.surface);
+    host.style.setProperty("--cta-fg", colors.text);
+    host.style.setProperty("--cta-fg-muted", colors.textMuted);
+    host.style.setProperty("--cta-border", colors.border);
+
+    const accentParsed = parseColor(colors.primary);
+    if (accentParsed) {
+      const accentContrast = relativeLuminance(accentParsed) > 0.6 ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)";
+      host.style.setProperty("--cta-accent-contrast", accentContrast);
+      host.style.setProperty("--cta-focus", rgbaCss(accentParsed, 0.32));
+    }
+
+    const bgParsed = parseColor(colors.background);
+    if (bgParsed) {
+      host.style.setProperty("--cta-bg-rgb", `${bgParsed.r}, ${bgParsed.g}, ${bgParsed.b}`);
+    }
+
+    const textParsed = parseColor(colors.text);
+    if (textParsed) {
+      host.style.setProperty("--cta-code-bg", rgbaCss(textParsed, 0.1));
+      host.style.setProperty("--cta-bubble-assistant", rgbaCss(textParsed, 0.06));
+      host.style.setProperty("--cta-bubble-user", rgbaCss(textParsed, 0.08));
+    }
+
+    host.style.setProperty("--cta-container-padding", spacing.containerPadding + "px");
+    host.style.setProperty("--cta-message-padding", spacing.messagePadding + "px");
+    host.style.setProperty("--cta-input-padding", spacing.inputPadding + "px");
+    host.style.setProperty("--cta-message-gap", spacing.messageGap + "px");
+    host.style.setProperty("--cta-section-gap", spacing.sectionGap + "px");
+
+    host.style.setProperty("--cta-border-container", borders.containerWidth + "px");
+    host.style.setProperty("--cta-border-message", borders.messageWidth + "px");
+    host.style.setProperty("--cta-border-button", borders.buttonWidth + "px");
+    host.style.setProperty("--cta-input-border-width", borders.inputWidth + "px");
+    host.style.setProperty("--cta-container-radius", borders.containerRadius + "px");
+    host.style.setProperty("--cta-message-radius", borders.messageRadius + "px");
+    host.style.setProperty("--cta-button-radius", borders.buttonRadius + "px");
+    host.style.setProperty("--cta-input-radius", borders.inputRadius + "px");
+
+    host.style.setProperty("--cta-font-family", typography.fontFamily);
+    host.style.setProperty("--cta-font-size-base", typography.fontSizeBase + "px");
+    host.style.setProperty("--cta-font-size-small", typography.fontSizeSmall + "px");
+    host.style.setProperty("--cta-font-size-large", typography.fontSizeLarge + "px");
+    host.style.setProperty("--cta-font-weight-normal", typography.fontWeightNormal);
+    host.style.setProperty("--cta-font-weight-medium", typography.fontWeightMedium);
+    host.style.setProperty("--cta-font-weight-bold", typography.fontWeightBold);
+    host.style.setProperty("--cta-line-height", typography.lineHeight);
+
+    host.style.setProperty("--cta-shadow-widget", shadows.widget);
+    host.style.setProperty("--cta-shadow-panel", shadows.widget);
+    host.style.setProperty("--cta-shadow-message", shadows.message);
+    host.style.setProperty("--cta-shadow-button", shadows.button);
+
+    host.style.setProperty("--cta-animation-duration", "200ms");
+    host.style.setProperty("--cta-animation-easing", "ease-in-out");
   }
 
   function escapeHtml(text) {
@@ -455,14 +587,13 @@
         height: 0;
         z-index: 2147483000;
         font-family: var(--cta-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
-        font-size: var(--cta-font-size, 14px);
+        font-size: var(--cta-font-size-base, 13px);
         color: var(--cta-fg, #111827);
         --cta-bg: #ffffff;
         --cta-fg-muted: rgba(17, 24, 39, 0.7);
         --cta-surface: rgba(255, 255, 255, 0.72);
         --cta-surface-strong: rgba(255, 255, 255, 0.92);
         --cta-border: rgba(17, 24, 39, 0.12);
-        --cta-shadow-color: rgba(0, 0, 0, 0.2);
         --cta-scrim: rgba(0, 0, 0, 0.22);
         --cta-accent: rgb(37, 99, 235);
         --cta-accent-contrast: rgb(255, 255, 255);
@@ -470,9 +601,30 @@
         --cta-bubble-user: rgba(17, 24, 39, 0.08);
         --cta-code-bg: rgba(17, 24, 39, 0.1);
         --cta-focus: rgba(37, 99, 235, 0.32);
+        --cta-container-padding: 14px;
+        --cta-message-padding: 10px;
+        --cta-input-padding: 12px;
+        --cta-message-gap: 10px;
+        --cta-section-gap: 24px;
         --cta-border-container: 1px;
-        --cta-border-message: 0px;
+        --cta-border-message: 1px;
         --cta-border-button: 1px;
+        --cta-input-border-width: 1px;
+        --cta-container-radius: 18px;
+        --cta-message-radius: 16px;
+        --cta-button-radius: 12px;
+        --cta-input-radius: 14px;
+        --cta-font-size-base: 13px;
+        --cta-font-size-small: 12px;
+        --cta-font-size-large: 14px;
+        --cta-font-weight-normal: 400;
+        --cta-font-weight-medium: 600;
+        --cta-font-weight-bold: 650;
+        --cta-line-height: 1.55;
+        --cta-shadow-widget: 0 18px 60px rgba(0, 0, 0, 0.2);
+        --cta-shadow-panel: -4px 0 24px rgba(0, 0, 0, 0.2);
+        --cta-shadow-message: none;
+        --cta-shadow-button: 0 1px 2px rgba(0, 0, 0, 0.05);
       }
 
       *,
@@ -496,7 +648,7 @@
         height: 44px;
         border-radius: 999px;
         background: var(--cta-surface);
-        border: 1px solid var(--cta-border);
+        border: var(--cta-border-container, 1px) solid var(--cta-border);
         color: var(--cta-accent);
         cursor: grab;
         display: flex;
@@ -506,8 +658,8 @@
         opacity: 0.82;
         z-index: 2;
         touch-action: none;
-        transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
-        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        transition: transform var(--cta-animation-duration, 160ms) ease, opacity var(--cta-animation-duration, 160ms) ease, box-shadow var(--cta-animation-duration, 160ms) ease;
+        box-shadow: var(--cta-shadow-widget, 0 18px 60px rgba(0, 0, 0, 0.2));
         backdrop-filter: blur(18px) saturate(160%);
         -webkit-backdrop-filter: blur(18px) saturate(160%);
       }
@@ -531,7 +683,7 @@
 
       .cta-widget-toggle:focus-visible {
         outline: none;
-        box-shadow: 0 18px 60px var(--cta-shadow-color), 0 0 0 4px var(--cta-focus);
+        box-shadow: var(--cta-shadow-widget, 0 18px 60px rgba(0, 0, 0, 0.2)), 0 0 0 4px var(--cta-focus);
       }
 
       .cta-widget-toggle svg,
@@ -611,7 +763,7 @@
         width: min(440px, calc(100vw - 56px));
         max-width: 100vw;
         background: var(--cta-surface);
-        box-shadow: -4px 0 24px var(--cta-shadow-color);
+        box-shadow: var(--cta-shadow-panel, -4px 0 24px rgba(0, 0, 0, 0.2));
         display: grid;
         grid-template-rows: auto 1fr auto;
         grid-template-areas:
@@ -623,8 +775,8 @@
         pointer-events: none;
         opacity: 0;
         transform: translateX(calc(100% + 16px));
-        transition: transform 240ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 200ms ease;
-        border-radius: 18px 0 0 18px;
+        transition: transform var(--cta-animation-duration, 240ms) ease, opacity var(--cta-animation-duration, 200ms) ease;
+        border-radius: var(--cta-container-radius, 18px) 0 0 var(--cta-container-radius, 18px);
         z-index: 3;
         backdrop-filter: blur(22px) saturate(160%);
         -webkit-backdrop-filter: blur(22px) saturate(160%);
@@ -651,7 +803,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        padding: 10px 14px;
+        padding: 10px var(--cta-container-padding, 14px);
         padding-top: calc(10px + env(safe-area-inset-top, 0px));
         background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
         backdrop-filter: blur(20px) saturate(180%);
@@ -699,8 +851,8 @@
 
 
       .cta-widget-title {
-        font-size: 13px;
-        font-weight: 650;
+        font-size: var(--cta-font-size-large, 13px);
+        font-weight: var(--cta-font-weight-bold, 650);
         letter-spacing: -0.01em;
         margin: 0;
         color: var(--cta-fg);
@@ -710,7 +862,7 @@
       }
 
       .cta-widget-subtitle {
-        font-size: 12px;
+        font-size: var(--cta-font-size-small, 12px);
         margin: 0;
         color: var(--cta-fg-muted);
         white-space: nowrap;
@@ -912,7 +1064,7 @@
       }
 
       .cta-security-section {
-        margin-bottom: 24px;
+        margin-bottom: var(--cta-section-gap, 24px);
       }
 
       .cta-security-section:last-child {
@@ -969,12 +1121,12 @@
         grid-row: 1 / -1;
         overflow-y: auto;
         min-height: 0;
-        padding: 14px;
+        padding: var(--cta-container-padding, 14px);
         padding-top: calc(66px + env(safe-area-inset-top, 0px));
         padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: var(--cta-message-gap, 10px);
         scrollbar-width: thin;
         scrollbar-color: var(--cta-border) transparent;
         -webkit-overflow-scrolling: touch;
@@ -1034,27 +1186,28 @@
       }
 
       .cta-widget-empty h3 {
-        font-size: 14px;
-        font-weight: 650;
+        font-size: var(--cta-font-size-large, 14px);
+        font-weight: var(--cta-font-weight-bold, 650);
         margin: 0 0 8px;
         color: var(--cta-fg);
         letter-spacing: -0.01em;
       }
 
       .cta-widget-empty p {
-        font-size: 13px;
+        font-size: var(--cta-font-size-base, 13px);
         margin: 0;
         max-width: 320px;
       }
 
       .cta-widget-message {
         max-width: 92%;
-        padding: 10px 12px;
-        border-radius: 16px;
-        font-size: 13px;
-        line-height: 1.55;
+        padding: var(--cta-message-padding, 10px) calc(var(--cta-message-padding, 10px) + 2px);
+        border-radius: var(--cta-message-radius, 16px);
+        font-size: var(--cta-font-size-base, 13px);
+        line-height: var(--cta-line-height, 1.55);
         word-wrap: break-word;
-        border: 1px solid var(--cta-border);
+        border: var(--cta-border-message, 1px) solid var(--cta-border);
+        box-shadow: var(--cta-shadow-message, none);
       }
 
       .cta-widget-message.user {
@@ -1196,7 +1349,7 @@
         grid-area: footer;
         position: relative;
         z-index: 2;
-        padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+        padding: 10px var(--cta-container-padding, 14px) calc(10px + env(safe-area-inset-bottom, 0px));
         background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -1211,16 +1364,16 @@
       .cta-widget-input {
         flex: 1;
         height: 42px;
-        padding: 0 12px;
-        border: 1px solid transparent;
-        border-radius: 14px;
+        padding: 0 var(--cta-input-padding, 12px);
+        border: var(--cta-input-border-width, 1px) solid transparent;
+        border-radius: var(--cta-input-radius, 14px);
         background: var(--cta-surface);
         color: var(--cta-fg);
         outline: none;
         min-width: 0;
-        font-size: 13px;
-        box-shadow: inset 0 0 0 1px var(--cta-border);
-        transition: box-shadow 90ms ease, background-color 90ms ease;
+        font-size: var(--cta-font-size-base, 13px);
+        box-shadow: inset 0 0 0 var(--cta-input-border-width, 1px) var(--cta-border);
+        transition: box-shadow var(--cta-animation-duration, 90ms) ease, background-color var(--cta-animation-duration, 90ms) ease;
       }
 
       .cta-widget-input::placeholder {
@@ -1236,14 +1389,15 @@
         height: 42px;
         background: transparent;
         border: none;
-        border-radius: 12px;
+        border-radius: var(--cta-button-radius, 12px);
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: transform 160ms ease, color 160ms ease;
+        transition: transform var(--cta-animation-duration, 160ms) ease, color var(--cta-animation-duration, 160ms) ease;
         flex-shrink: 0;
         color: var(--cta-fg-muted);
+        box-shadow: var(--cta-shadow-button, none);
       }
 
       .cta-widget-send:hover:not(:disabled) {
@@ -1285,13 +1439,13 @@
         width: 42px;
         height: 42px;
         border: none;
-        border-radius: 12px;
+        border-radius: var(--cta-button-radius, 12px);
         background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+        transition: color var(--cta-animation-duration, 160ms) ease, box-shadow var(--cta-animation-duration, 160ms) ease, transform var(--cta-animation-duration, 160ms) ease;
         flex-shrink: 0;
         color: var(--cta-fg-muted);
       }
@@ -1311,14 +1465,14 @@
         width: 32px;
         height: 42px;
         border: none;
-        border-radius: 0 12px 12px 0;
+        border-radius: 0 var(--cta-button-radius, 12px) var(--cta-button-radius, 12px) 0;
         margin-left: -1px;
         background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+        transition: color var(--cta-animation-duration, 160ms) ease, box-shadow var(--cta-animation-duration, 160ms) ease, transform var(--cta-animation-duration, 160ms) ease;
         flex-shrink: 0;
         color: var(--cta-fg-muted);
       }
@@ -1376,8 +1530,8 @@
         min-width: 220px;
         background: var(--cta-bg);
         border: 1px solid var(--cta-border);
-        border-radius: 14px;
-        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        border-radius: var(--cta-button-radius, 12px);
+        box-shadow: var(--cta-shadow-widget, 0 18px 60px rgba(0, 0, 0, 0.2));
         display: none;
         overflow: hidden;
         z-index: 5;
@@ -1458,7 +1612,7 @@
     return style;
   }
 
-  function createWidget(config, initialConfigData) {
+  function createWidget(config, initialConfigData, host) {
     const apiUrl = resolveApiUrl();
     const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
     if (!state.voice) state.voice = {};
@@ -1507,12 +1661,7 @@
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
     let widgetInputPlaceholder = "Ask Warpy…";
     let securityDisclosureEnabled = true;
-    let widgetPrimaryColor = null;
-    let widgetTextColor = null;
-    let widgetBackgroundColor = null;
-    let widgetBorderWidthContainer = null;
-    let widgetBorderWidthMessage = null;
-    let widgetBorderWidthButton = null;
+    let widgetStyles = null;
     let isSecurityPanelOpen = false;
 
     const root = document.createElement("div");
@@ -1686,46 +1835,6 @@
       }
     }
 
-    function applyCustomStyling() {
-      if (widgetPrimaryColor) {
-        const parsedColor = parseColor(widgetPrimaryColor);
-        if (parsedColor) {
-          const accentContrast = relativeLuminance(parsedColor) > 0.6 ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)";
-          root.style.setProperty("--cta-accent", widgetPrimaryColor);
-          root.style.setProperty("--cta-accent-contrast", accentContrast);
-          root.style.setProperty("--cta-focus", rgbaCss(parsedColor, 0.32));
-        }
-      }
-      if (widgetTextColor) {
-        const parsedColor = parseColor(widgetTextColor);
-        if (parsedColor) {
-          root.style.setProperty("--cta-fg", widgetTextColor);
-          root.style.setProperty("--cta-fg-muted", rgbaCss(parsedColor, 0.7));
-          root.style.setProperty("--cta-code-bg", rgbaCss(parsedColor, 0.1));
-          root.style.setProperty("--cta-bubble-assistant", rgbaCss(parsedColor, 0.06));
-          root.style.setProperty("--cta-bubble-user", rgbaCss(parsedColor, 0.08));
-          root.style.setProperty("--cta-border", rgbaCss(parsedColor, 0.12));
-        }
-      }
-      if (widgetBackgroundColor) {
-        const parsedColor = parseColor(widgetBackgroundColor);
-        if (parsedColor) {
-          root.style.setProperty("--cta-bg", widgetBackgroundColor);
-          root.style.setProperty("--cta-bg-rgb", `${parsedColor.r}, ${parsedColor.g}, ${parsedColor.b}`);
-          root.style.setProperty("--cta-surface", rgbaCss(parsedColor, 0.72));
-          root.style.setProperty("--cta-surface-strong", rgbaCss(parsedColor, 0.92));
-        }
-      }
-      if (widgetBorderWidthContainer !== null) {
-        root.style.setProperty("--cta-border-container", widgetBorderWidthContainer + "px");
-      }
-      if (widgetBorderWidthMessage !== null) {
-        root.style.setProperty("--cta-border-message", widgetBorderWidthMessage + "px");
-      }
-      if (widgetBorderWidthButton !== null) {
-        root.style.setProperty("--cta-border-button", widgetBorderWidthButton + "px");
-      }
-    }
 
     function applyWidgetUiConfig() {
       syncHeader();
@@ -1869,7 +1978,9 @@
       state.voice = {
         deviceId: selectedMicId
       };
-      saveState(state);
+      if (!isPreview) {
+        saveState(state, storageKey);
+      }
     }
 
     function setVoiceHint(message) {
@@ -2154,25 +2265,13 @@
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;
       }
-      if (typeof data.widgetPrimaryColor === "string" && data.widgetPrimaryColor.trim()) {
-        widgetPrimaryColor = data.widgetPrimaryColor.trim();
+      if (data.widgetStyles && typeof data.widgetStyles === "object") {
+        widgetStyles = mergeWithDefaults(data.widgetStyles);
+        applyCustomStyles(host, widgetStyles);
+      } else {
+        widgetStyles = null;
+        applyThemeVariables(host);
       }
-      if (typeof data.widgetTextColor === "string" && data.widgetTextColor.trim()) {
-        widgetTextColor = data.widgetTextColor.trim();
-      }
-      if (typeof data.widgetBackgroundColor === "string" && data.widgetBackgroundColor.trim()) {
-        widgetBackgroundColor = data.widgetBackgroundColor.trim();
-      }
-      if (typeof data.widgetBorderWidthContainer === "number") {
-        widgetBorderWidthContainer = data.widgetBorderWidthContainer;
-      }
-      if (typeof data.widgetBorderWidthMessage === "number") {
-        widgetBorderWidthMessage = data.widgetBorderWidthMessage;
-      }
-      if (typeof data.widgetBorderWidthButton === "number") {
-        widgetBorderWidthButton = data.widgetBorderWidthButton;
-      }
-      applyCustomStyling();
       applyWidgetUiConfig();
     }
 
@@ -2207,7 +2306,9 @@
       }
       widgetAuthToken = token;
       state.auth.token = token;
-      saveState(state);
+      if (!isPreview) {
+        saveState(state, storageKey);
+      }
     }
 
     async function postWidgetChat(body) {
@@ -2250,7 +2351,9 @@
       if (!text.trim() || isLoading || widgetHidden) return;
 
       state.messages.push({ role: "user", content: text.trim() });
-      saveState(state);
+      if (!isPreview) {
+        saveState(state, storageKey);
+      }
       renderMessages();
       setLoading(true);
 
@@ -2271,7 +2374,9 @@
 
         let data = await response.json();
         state.conversationId = data.conversationId;
-        saveState(state);
+        if (!isPreview) {
+          saveState(state, storageKey);
+        }
 
         shouldHide = shouldHideWidget(data);
         if (!shouldHide) {
@@ -2315,7 +2420,9 @@
         }
 
         if (!shouldHide) {
-          saveState(state);
+          if (!isPreview) {
+            saveState(state, storageKey);
+          }
         }
       } catch (error) {
         if (!shouldHide) {
@@ -2324,7 +2431,9 @@
             content: "Sorry, something went wrong. Please try again.",
           });
           didReceiveAssistant = true;
-          saveState(state);
+          if (!isPreview) {
+            saveState(state, storageKey);
+          }
         }
       } finally {
         setLoading(false);
@@ -2341,7 +2450,7 @@
       }
     }
 
-    function openPanel() {
+    function openPanel({ focusInput = true } = {}) {
       if (isOpen) return;
       isOpen = true;
       setUnread(false);
@@ -2349,7 +2458,9 @@
       scrim.classList.add("open");
       toggle.classList.add("open");
       toggle.setAttribute("aria-expanded", "true");
-      inputEl.focus();
+      if (focusInput) {
+        inputEl.focus();
+      }
       renderMessages();
     }
 
@@ -2382,7 +2493,9 @@
     function startNewChat() {
       state.messages = [];
       state.conversationId = null;
-      saveState(state);
+      if (!isPreview) {
+        saveState(state, storageKey);
+      }
       setUnread(false);
       renderMessages();
     }
@@ -2510,8 +2623,10 @@
       host.id = WIDGET_CONTAINER_ID;
       const shadowRoot = host.attachShadow({ mode: "open" });
       shadowRoot.appendChild(createStyles());
-      shadowRoot.appendChild(createWidget(config, initialConfigData));
-      observeTheme(host);
+      shadowRoot.appendChild(createWidget(config, initialConfigData, host));
+      if (!initialConfigData || !initialConfigData.widgetStyles) {
+        observeTheme(host);
+      }
       document.body.appendChild(host);
     } catch { }
   }
