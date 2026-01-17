@@ -38,7 +38,7 @@ def get_activity_summary_route(
 ) -> ActivitySummaryResponse:
     try:
         start, end = resolve_activity_range(start_date, end_date)
-        conversation_count, action_count, top_actions = get_activity_summary(
+        conversation_count, action_count, top_actions, has_any_conversation = get_activity_summary(
             session,
             clerk_session.user_id,
             start=start,
@@ -48,6 +48,7 @@ def get_activity_summary_route(
         return ActivitySummaryResponse(
             conversationCount=conversation_count,
             actionCount=action_count,
+            hasAnyConversation=has_any_conversation,
             topActions=[
                 ActivityTopAction(feature=feature, action=action, count=count)
                 for feature, action, count in top_actions

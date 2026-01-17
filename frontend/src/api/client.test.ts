@@ -383,6 +383,7 @@ describe("apiClient", () => {
       jsonResponse({
         conversationCount: 3,
         actionCount: 10,
+        hasAnyConversation: true,
         topActions: [{ feature: "Catalog", action: "Fetch products", count: 4 }]
       }),
       jsonResponse({

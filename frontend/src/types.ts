@@ -185,6 +185,7 @@ export type ActivityTopAction = {
 export type ActivitySummaryResponse = {
   conversationCount: number;
   actionCount: number;
+  hasAnyConversation: boolean;
   topActions: ActivityTopAction[];
 };
 
@@ -242,4 +243,3 @@ export type UserRateLimitsResponse = {
 };
 
 export type UserRateLimitsUpdate = UserRateLimitsResponse;
-

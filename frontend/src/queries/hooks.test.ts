@@ -228,10 +228,15 @@ describe("react-query hooks", () => {
   it("fetches activity summary", () => {
     queryMock.useQuery.mockImplementation((options: any) => {
       options.queryFn()
-      return { data: { conversationCount: 0, actionCount: 0, topActions: [] } }
+      return { data: { conversationCount: 0, actionCount: 0, hasAnyConversation: false, topActions: [] } }
     })
     const { useActivitySummaryQuery } = require("./use-activity-summary")
-    ;(apiClient.getActivitySummary as any).mockResolvedValue({ conversationCount: 0, actionCount: 0, topActions: [] })
+    ;(apiClient.getActivitySummary as any).mockResolvedValue({
+      conversationCount: 0,
+      actionCount: 0,
+      hasAnyConversation: false,
+      topActions: []
+    })
 
     useActivitySummaryQuery("2026-01-01", "2026-01-31")
 

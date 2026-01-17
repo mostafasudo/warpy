@@ -53,7 +53,7 @@ def auth_headers():
 def test_activity_summary_returns_empty_when_no_agent(client: TestClient):
     response = client.get("/activity/summary", headers=auth_headers())
     assert response.status_code == 200
-    assert response.json() == {"conversationCount": 0, "actionCount": 0, "topActions": []}
+    assert response.json() == {"conversationCount": 0, "actionCount": 0, "hasAnyConversation": False, "topActions": []}
 
 
 def test_activity_summary_counts_conversations_and_top_actions(client: TestClient):
@@ -111,7 +111,28 @@ def test_activity_summary_counts_conversations_and_top_actions(client: TestClien
     body = response.json()
     assert body["conversationCount"] == 1
     assert body["actionCount"] == 2
+    assert body["hasAnyConversation"] is True
     assert body["topActions"] == [{"feature": "Catalog", "action": "List products", "count": 2}]
+
+
+def test_activity_summary_includes_any_conversation_outside_range(client: TestClient):
+    agent_response = client.post("/agent", headers=auth_headers())
+    assert agent_response.status_code == 201
+    agent_id = UUID(agent_response.json()["id"])
+
+    with session_scope() as session:
+        agent = session.get(Agent, agent_id)
+        assert agent
+        conversation = Conversation(agent_id=agent.id, participant="widget")
+        session.add(conversation)
+        session.flush()
+        conversation.updated_at = datetime(2025, 10, 1, tzinfo=UTC)
+
+    response = client.get("/activity/summary?start_date=2026-01-01&end_date=2026-01-31", headers=auth_headers())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["conversationCount"] == 0
+    assert body["hasAnyConversation"] is True
 
 
 def test_activity_summary_rejects_invalid_date_range(client: TestClient):

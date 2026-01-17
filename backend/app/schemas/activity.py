@@ -20,6 +20,7 @@ class ActivitySummaryResponse(BaseModel):
 
     conversation_count: int = Field(alias="conversationCount")
     action_count: int = Field(alias="actionCount")
+    has_any_conversation: bool = Field(alias="hasAnyConversation")
     top_actions: list[ActivityTopAction] = Field(default_factory=list, alias="topActions")
 
 

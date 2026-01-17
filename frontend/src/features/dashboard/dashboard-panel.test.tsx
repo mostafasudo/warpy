@@ -40,7 +40,7 @@ describe("DashboardPanel", () => {
       isPending: false
     })
     mockedUseActivitySummaryQuery.mockReturnValue({
-      data: { conversationCount: 2, actionCount: 5, topActions: [] },
+      data: { conversationCount: 2, actionCount: 5, hasAnyConversation: true, topActions: [] },
       isPending: false
     })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
@@ -74,7 +74,7 @@ describe("DashboardPanel", () => {
       isPending: false
     })
     mockedUseActivitySummaryQuery.mockReturnValue({
-      data: { conversationCount: 0, actionCount: 0, topActions: [] },
+      data: { conversationCount: 0, actionCount: 0, hasAnyConversation: false, topActions: [] },
       isPending: false
     })
 

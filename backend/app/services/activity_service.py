@@ -100,10 +100,10 @@ def get_activity_summary(
     start: datetime,
     end: datetime,
     top_actions_limit: int = 10,
-) -> tuple[int, int, list[tuple[str, str, int]]]:
+) -> tuple[int, int, list[tuple[str, str, int]], bool]:
     agent = _get_agent(session, user_id)
     if not agent:
-        return 0, 0, []
+        return 0, 0, [], False
 
     conversation_count = int(session.scalar(
         select(func.count())
@@ -114,6 +114,12 @@ def get_activity_summary(
             Conversation.updated_at < end,
         )
     ) or 0)
+
+    has_any_conversation = conversation_count > 0 or session.scalar(
+        select(Conversation.id)
+        .where(Conversation.agent_id == agent.id)
+        .limit(1)
+    ) is not None
 
     action_count = int(session.scalar(
         select(func.count())
@@ -153,7 +159,7 @@ def get_activity_summary(
         feature_name = getattr(endpoint.feature, "name", "") or ""
         top_actions.append((feature_name, action_label(endpoint), int(row.count)))
 
-    return conversation_count, action_count, top_actions
+    return conversation_count, action_count, top_actions, has_any_conversation
 
 
 def list_activity_conversations(

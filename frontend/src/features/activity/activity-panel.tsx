@@ -528,7 +528,8 @@ export const ActivityPanel = () => {
     conversationsQuery.fetchNextPage,
   ])
 
-  const isEmpty = !summaryQuery.isPending && !summaryQuery.data?.conversationCount && !summaryQuery.data?.actionCount
+  const hasAnyConversation = summaryQuery.data?.hasAnyConversation ?? false
+  const isEmpty = !summaryQuery.isPending && !hasAnyConversation
 
   return (
     <PanelShell

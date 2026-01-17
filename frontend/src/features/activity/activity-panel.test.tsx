@@ -33,6 +33,7 @@ describe("ActivityPanel", () => {
       data: {
         conversationCount: 3,
         actionCount: 10,
+        hasAnyConversation: true,
         topActions: [{ feature: "Catalog", action: "Fetch products", count: 4 }]
       },
       isPending: false
@@ -119,7 +120,7 @@ describe("ActivityPanel", () => {
 
   it("shows global empty state when no activity", () => {
     mockedSummary.mockReturnValue({
-      data: { conversationCount: 0, actionCount: 0, topActions: [] },
+      data: { conversationCount: 0, actionCount: 0, hasAnyConversation: false, topActions: [] },
       isPending: false
     })
     mockedConversations.mockReturnValue({
@@ -149,9 +150,36 @@ describe("ActivityPanel", () => {
     expect(screen.queryByRole("combobox")).toBeNull()
   })
 
+  it("does not show global empty state when activity exists outside range", () => {
+    mockedSummary.mockReturnValue({
+      data: { conversationCount: 0, actionCount: 0, hasAnyConversation: true, topActions: [] },
+      isPending: false
+    })
+    mockedConversations.mockReturnValue({
+      data: { pages: [{ items: [], nextCursor: null }] },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+    mockedDetail.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+
+    render(<ActivityPanel />)
+
+    expect(screen.queryByRole("heading", { name: "No activity yet" })).toBeNull()
+    expect(screen.getByRole("combobox")).not.toBeNull()
+  })
+
   it("shows specific empty states when partial activity", () => {
     mockedSummary.mockReturnValue({
-      data: { conversationCount: 5, actionCount: 0, topActions: [] },
+      data: { conversationCount: 5, actionCount: 0, hasAnyConversation: true, topActions: [] },
       isPending: false
     })
     mockedConversations.mockReturnValue({
@@ -184,7 +212,7 @@ describe("ActivityPanel", () => {
 
   it("renders custom date pickers and infinite scroll sentinel", async () => {
     mockedSummary.mockReturnValue({
-      data: { conversationCount: 10, actionCount: 20, topActions: [] },
+      data: { conversationCount: 10, actionCount: 20, hasAnyConversation: true, topActions: [] },
       isPending: false
     })
 
