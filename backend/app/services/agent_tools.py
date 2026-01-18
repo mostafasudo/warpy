@@ -90,9 +90,9 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
         func=find_actions,
         name="find_actions",
         description=(
-            "Discover which actions/endpoints are available for a request. "
-            "Use this anytime you need more tools, can't find an endpoint to call, or aren't sure what to do next. "
-            "Returns a list of matching actions that you can execute."
+            "Task: Find relevant backend actions for the user's request. "
+            "Use when you need available endpoints or are unsure what to call. "
+            "Output: JSON list of actions with id, method, path, name, description, feature."
         ),
         args_schema=FindActionsInput
     )
@@ -106,10 +106,9 @@ def create_frontend_context_tool() -> StructuredTool:
         func=frontend_context,
         name="frontend_context",
         description=(
-            "Request a focused snapshot of the current web page UI. "
-            "Use when the task requires interacting with the frontend. "
-            "Provide the goal and optional scope/selector hints; you will receive a small list of relevant elements "
-            "and optionally a screenshot."
+            "Task: Request a focused UI snapshot of the current page. "
+            "Provide goal and optional scope/selector hints. "
+            "Output: Structured context with relevant elements and optional screenshot."
         ),
         args_schema=FrontendContextInput
     )
@@ -123,9 +122,9 @@ def create_frontend_actions_tool() -> StructuredTool:
         func=frontend,
         name="frontend",
         description=(
-            "Execute frontend UI actions. Provide an ordered list of actions (click, type, select, scroll, wait, etc.) "
-            "using selectors from the latest frontend_context response. "
-            "Include waits when the UI needs time to update."
+            "Task: Execute frontend UI actions in order. "
+            "Use selectors from frontend_context and include waits for dynamic UI. "
+            "Output: Per-action results with status."
         ),
         args_schema=FrontendActionsInput
     )

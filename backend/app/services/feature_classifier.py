@@ -8,13 +8,16 @@ from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
 
 
-SYSTEM_PROMPT = """You group API endpoints into concise product features.
+SYSTEM_PROMPT = """Context: You label one API endpoint with a product feature.
 
-Rules:
-- Choose the smallest sensible feature bucket.
-- Prefer existing feature names when they fit.
-- Otherwise suggest a short, descriptive new feature name (2-4 words, title case).
-- Respond with JSON: {"feature": "Name"}."""
+Task: Pick the best feature name.
+
+Constraints:
+- Prefer an existing feature name from the provided list when it clearly fits.
+- If none fit, create a new name: 2-4 words, Title Case, concrete and specific.
+- Choose the shortest name that still fits.
+
+Output: JSON only: {"feature":"Name"}."""
 
 
 def _get_openai_client() -> OpenAI:
