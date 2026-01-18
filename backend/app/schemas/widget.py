@@ -39,12 +39,8 @@ class FrontendContextRequest(BaseModel):
 
     goal: str
     scope: str | None = None
-    include_dom: bool = Field(default=True, alias="includeDom")
-    include_screenshot: bool = Field(default=False, alias="includeScreenshot")
-    screenshot_scale: float | None = Field(default=None, alias="screenshotScale")
-    max_elements: int = Field(default=60, alias="maxElements")
-    viewport_only: bool = Field(default=True, alias="viewportOnly")
     include_offscreen: bool = Field(default=False, alias="includeOffscreen")
+    max_elements: int = Field(default=60, alias="maxElements")
     selector_hints: list[str] = Field(default_factory=list, alias="selectorHints")
 
 

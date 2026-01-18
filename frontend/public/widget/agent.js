@@ -10,8 +10,6 @@
   const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
-  const HTML2CANVAS_SRC = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
-  const HTML2CANVAS_INTEGRITY = "sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H";
   const WIDGET_CONTAINER_ID = "cta-widget-container";
 
   function clamp(value, min, max) {
@@ -689,7 +687,7 @@
     const goal = typeof request.goal === "string" ? request.goal : "";
     const scope = typeof request.scope === "string" ? request.scope : null;
     const includeDom = request.includeDom !== false;
-    const includeOffscreen = request.includeOffscreen === true || request.viewportOnly === false;
+    const includeOffscreen = request.includeOffscreen === true;
     const maxElements = clampInt(request.maxElements || 60, 20, 160);
     const selectorHints = Array.isArray(request.selectorHints) ? request.selectorHints : [];
     const root = resolveScopeRoot(scope);
@@ -713,45 +711,6 @@
       headings,
       activeElement: active,
     };
-  }
-
-  async function ensureHtml2Canvas() {
-    if (typeof window.html2canvas === "function") {
-      return window.html2canvas;
-    }
-    await loadExternalScript(HTML2CANVAS_SRC, HTML2CANVAS_INTEGRITY);
-    return typeof window.html2canvas === "function" ? window.html2canvas : null;
-  }
-
-  async function captureScreenshot(request) {
-    try {
-      const html2canvas = await ensureHtml2Canvas();
-      if (!html2canvas) return null;
-      const scale = typeof request.screenshotScale === "number"
-        ? clamp(request.screenshotScale, 0.3, 1)
-        : Math.min(1, 1 / (window.devicePixelRatio || 1));
-      const canvas = await html2canvas(document.body, {
-        backgroundColor: null,
-        scale,
-        width: window.innerWidth,
-        height: window.innerHeight,
-        x: window.scrollX,
-        y: window.scrollY,
-        scrollX: 0,
-        scrollY: 0,
-        useCORS: true,
-        ignoreElements: (el) => {
-          if (!el) return false;
-          if (el.id === WIDGET_CONTAINER_ID) return true;
-          if (el.getAttribute && el.getAttribute("data-warpy-ui") === "true") return true;
-          return false;
-        },
-      });
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-      return { dataUrl, width: canvas.width, height: canvas.height };
-    } catch {
-      return null;
-    }
   }
 
   let highlightEl = null;
@@ -985,11 +944,99 @@
     return { ...action, action: String(name).trim().toLowerCase() };
   }
 
+  function getActionLabel(name) {
+    const normalized = String(name || "").trim().toLowerCase();
+    const labels = {
+      click: "Click",
+      tap: "Tap",
+      double_click: "Double click",
+      dblclick: "Double click",
+      doubleclick: "Double click",
+      right_click: "Right click",
+      contextmenu: "Right click",
+      hover: "Hover",
+      focus: "Focus",
+      blur: "Remove focus",
+      type: "Type",
+      input: "Type",
+      set_value: "Type",
+      clear: "Clear",
+      press: "Press",
+      select: "Select",
+      check: "Check",
+      uncheck: "Uncheck",
+      scroll: "Scroll",
+      scroll_into_view: "Scroll to",
+      scrollintoview: "Scroll to",
+      wait: "Wait",
+      wait_for: "Wait for",
+      waitfor: "Wait for",
+      wait_for_text: "Wait for",
+      waitfortext: "Wait for",
+      navigate: "Open page",
+      drag: "Drag",
+      drag_and_drop: "Drag",
+      dispatch: "Trigger",
+    };
+    if (labels[normalized]) return labels[normalized];
+    if (!normalized) return "Action";
+    const spaced = normalized.replace(/_/g, " ");
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  }
+
+  function extractSelectorLabel(selector) {
+    if (!selector) return "";
+    const trimmed = String(selector).trim();
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith("text=")) return trimmed.slice(5).trim();
+    if (lower.startsWith("label=")) return trimmed.slice(6).trim();
+    if (lower.startsWith("role=")) return trimmed.slice(5).trim();
+    return "";
+  }
+
+  function isTechnicalLabel(value) {
+    const lower = value.toLowerCase();
+    if (lower.startsWith("#") || lower.startsWith(".") || lower.startsWith("http")) return true;
+    if (lower.includes("[") || lower.includes("]") || lower.includes("::") || lower.includes("data-") || lower.includes("aria-")) return true;
+    if (lower.includes(">") || lower.includes(":nth") || lower.includes("role=")) return true;
+    return false;
+  }
+
+  function formatActionTarget(action) {
+    const selectorLabel = extractSelectorLabel(action.selector || action.target);
+    const candidates = [selectorLabel, action.text, action.value]
+      .filter((value) => value !== null && value !== undefined)
+      .map((value) => String(value).replace(/\s+/g, " ").trim())
+      .filter((value) => value);
+    for (const candidate of candidates) {
+      if (!isTechnicalLabel(candidate)) {
+        return truncateText(candidate, 44);
+      }
+    }
+    return "";
+  }
+
+  function formatKeyLabel(action) {
+    const keys = Array.isArray(action.keys) ? action.keys : action.key ? [action.key] : [];
+    const cleaned = keys.map((key) => String(key).trim()).filter(Boolean);
+    return cleaned.length ? truncateText(cleaned.join(" + "), 32) : "";
+  }
+
   function describeAction(action) {
-    const name = action.action || "action";
-    const target = action.selector || action.text || action.value || action.role || "";
-    if (target) return `${name} ${truncateText(target, 44)}`;
-    return name;
+    const name = action.action || "";
+    const label = getActionLabel(name);
+    if (name === "press") {
+      const keys = formatKeyLabel(action);
+      return keys ? `${label} ${keys}` : label;
+    }
+    if (name === "wait") {
+      return label;
+    }
+    if (name === "navigate") {
+      return label;
+    }
+    const target = formatActionTarget(action);
+    return target ? `${label} ${target}` : label;
   }
 
   async function runFrontendAction(action) {
@@ -1234,10 +1281,6 @@
     }
     try {
       const context = collectFrontendContext(request);
-      const screenshot = request.includeScreenshot ? await captureScreenshot(request) : null;
-      if (screenshot) {
-        context.screenshot = screenshot;
-      }
       if (ui && typeof ui.setActivity === "function") {
         ui.setActivity({ title, status: "done", steps: [] });
         if (typeof ui.scheduleClear === "function") {

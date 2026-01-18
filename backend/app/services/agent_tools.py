@@ -14,46 +14,123 @@ from .agent_schema import SchemaFactory, serialize_args
 
 
 class FindActionsInput(BaseModel):
-    query: str = Field(description="What the user wants to accomplish")
+    query: str = Field(
+        description="Concise task description in the user's words; include key nouns and verbs only."
+    )
 
 
 class FrontendContextInput(BaseModel):
-    goal: str = Field(description="What needs to be done on the current page")
-    scope: str | None = Field(default=None, description="Optional CSS selector or UI region hint")
-    include_screenshot: bool = Field(default=False, alias="includeScreenshot")
-    screenshot_scale: float | None = Field(default=None, alias="screenshotScale")
-    include_dom: bool = Field(default=True, alias="includeDom")
-    max_elements: int = Field(default=60, alias="maxElements")
-    viewport_only: bool = Field(default=True, alias="viewportOnly")
-    include_offscreen: bool = Field(default=False, alias="includeOffscreen")
-    selector_hints: list[str] = Field(default_factory=list, alias="selectorHints")
+    goal: str = Field(
+        description="Concrete UI outcome to capture context for (e.g., 'open date range picker')."
+    )
+    scope: str | None = Field(
+        default=None,
+        description="Optional CSS selector to limit the scan to a known container; use only when confident (e.g., '#filters', '.modal')."
+    )
+    include_offscreen: bool = Field(
+        default=False,
+        alias="includeOffscreen",
+        description="Include offscreen elements in the context when the target is not visible in the viewport."
+    )
+    max_elements: int = Field(
+        default=60,
+        alias="maxElements",
+        description="Raise only when the UI is dense and key controls are missing (e.g., large tables/filters); keep 60 by default and never exceed 160."
+    )
+    selector_hints: list[str] = Field(
+        default_factory=list,
+        alias="selectorHints",
+        description="Optional short list of selector hints to bias matching (1-5 items); use `text=`, `label=`, or `role=` shortcuts when possible."
+    )
 
 
 class FrontendActionInput(BaseModel):
-    action: str = Field(description="Action type: click, type, select, scroll, wait, hover, focus, blur, press, etc.")
-    selector: str | None = Field(default=None, description="CSS selector or text=/label=/role= query")
-    target: str | None = Field(default=None, description="Alias for selector")
-    role: str | None = Field(default=None, description="Role shortcut for selectors")
-    text: str | None = Field(default=None, description="Text to type or match")
-    value: Any | None = Field(default=None, description="Value to set/select")
-    key: str | None = Field(default=None, description="Single key to press")
-    keys: list[str] | None = Field(default=None, description="Key sequence to press")
-    index: int | None = Field(default=None, description="Index for select options")
-    x: float | None = Field(default=None, description="X coordinate (px or 0-1)")
-    y: float | None = Field(default=None, description="Y coordinate (px or 0-1)")
-    mode: str | None = Field(default=None, description="Input mode: replace or append")
-    behavior: str | None = Field(default=None, description="Scroll behavior: auto or smooth")
-    from_: str | None = Field(default=None, alias="from", description="Drag source selector")
-    to: str | None = Field(default=None, description="Drag target selector")
-    events: list[str] | None = Field(default=None, description="Events for dispatch")
-    delay_ms: int | None = Field(default=None, alias="delayMs")
-    timeout_ms: int | None = Field(default=None, alias="timeoutMs")
-    continue_on_error: bool = Field(default=False, alias="continueOnError")
+    action: str = Field(
+        description="Required action verb; determines which fields to include (e.g., click, type, select, scroll, wait, hover, press, drag)."
+    )
+    selector: str | None = Field(
+        default=None,
+        description="Primary target selector (CSS or `text=`, `label=`, `role=` shortcut); include when the action targets a specific element, omit for wait/navigate or when using the focused element."
+    )
+    role: str | None = Field(
+        default=None,
+        description="Role name to target when no selector or text-based selector is available (e.g., 'button', 'checkbox')."
+    )
+    text: str | None = Field(
+        default=None,
+        description="Text to type (type/input/set_value) or text to match for text-based selectors and wait_for_text."
+    )
+    value: Any | None = Field(
+        default=None,
+        description="Value to set/select; for select use option value/label, for navigate pass the URL here."
+    )
+    key: str | None = Field(
+        default=None,
+        description="Single key to press for press actions (e.g., 'Enter', 'Escape')."
+    )
+    keys: list[str] | None = Field(
+        default=None,
+        description="Ordered list of keys for multi-key press actions (e.g., ['Control', 'K'])."
+    )
+    index: int | None = Field(
+        default=None,
+        description="Zero-based index for select options when value/label is unreliable."
+    )
+    x: float | None = Field(
+        default=None,
+        description="Optional X coordinate (px or 0-1 relative) for pointer/drag/scroll precision."
+    )
+    y: float | None = Field(
+        default=None,
+        description="Optional Y coordinate (px or 0-1 relative) for pointer/drag/scroll precision."
+    )
+    mode: str | None = Field(
+        default=None,
+        description="Typing mode for type/input/set_value: 'replace' (default) or 'append'."
+    )
+    behavior: str | None = Field(
+        default=None,
+        description="Scroll behavior for scroll actions: 'auto' (default) or 'smooth'."
+    )
+    from_: str | None = Field(
+        default=None,
+        alias="from",
+        description="Drag source selector for drag/drag_and_drop when different from the target."
+    )
+    to: str | None = Field(
+        default=None,
+        description="Drag target selector for drag_and_drop actions."
+    )
+    events: list[str] | None = Field(
+        default=None,
+        description="DOM event names to dispatch for dispatch actions (e.g., ['keydown'])."
+    )
+    delay_ms: int | None = Field(
+        default=None,
+        alias="delayMs",
+        description="Milliseconds to wait after this action (0-10000) to let the UI settle."
+    )
+    timeout_ms: int | None = Field(
+        default=None,
+        alias="timeoutMs",
+        description="Max time in milliseconds to wait for elements/text during this action."
+    )
+    continue_on_error: bool = Field(
+        default=False,
+        alias="continueOnError",
+        description="If true, keep executing later actions after a failure; otherwise stop at first error."
+    )
 
 
 class FrontendActionsInput(BaseModel):
-    goal: str | None = Field(default=None, description="Short goal for the UI changes")
-    actions: list[FrontendActionInput] = Field(default_factory=list)
+    goal: str | None = Field(
+        default=None,
+        description="Optional short outcome label for the action sequence (e.g., 'Apply date filter')."
+    )
+    actions: list[FrontendActionInput] = Field(
+        default_factory=list,
+        description="Ordered list of UI actions to execute; each entry is a FrontendActionInput."
+    )
 
 
 def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
@@ -109,7 +186,7 @@ def create_frontend_context_tool() -> StructuredTool:
         description=(
             "Task: Request a focused UI snapshot of the current page. "
             "Provide goal and optional scope/selector hints. "
-            "Output: Structured context with relevant elements and optional screenshot."
+            "Output: Structured context with relevant elements."
         ),
         args_schema=FrontendContextInput
     )

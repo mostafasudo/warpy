@@ -303,8 +303,6 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
         if tool_results:
             for result in tool_results:
                 body = result.body
-                if isinstance(body, dict) and "screenshot" in body:
-                    body = {key: value for key, value in body.items() if key != "screenshot"}
                 if result.error:
                     content = json.dumps({"error": result.error})
                 else:
@@ -312,15 +310,6 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                 tool_message = ToolMessage(content=content, tool_call_id=result.id)
                 messages.append(tool_message)
                 runtime_messages.append(tool_message)
-                if isinstance(result.body, dict):
-                    screenshot = result.body.get("screenshot")
-                    if isinstance(screenshot, dict):
-                        data_url = screenshot.get("dataUrl")
-                        if isinstance(data_url, str) and data_url.startswith("data:image/") and len(data_url) < 1_500_000:
-                            runtime_messages.append(HumanMessage(content=[
-                                {"type": "text", "text": f"Screenshot for tool call {result.id}."},
-                                {"type": "image_url", "image_url": {"url": data_url}}
-                            ]))
 
         max_iterations = llm_config.max_iterations
         iteration = 0
