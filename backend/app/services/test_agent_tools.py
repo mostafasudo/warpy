@@ -114,8 +114,8 @@ def test_create_find_actions_tool_handles_empty(monkeypatch: pytest.MonkeyPatch)
     session = DummySession([])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [])
     tool = create_find_actions_tool(session, "user_1")
-    response = tool.invoke("none")
-    assert "No matching actions" in response
+    response = json.loads(tool.invoke("none"))
+    assert response == []
 
 
 def test_create_find_actions_tool_returns_empty_when_all_disabled(monkeypatch: pytest.MonkeyPatch):
@@ -129,8 +129,8 @@ def test_create_find_actions_tool_returns_empty_when_all_disabled(monkeypatch: p
     session = DummySession([disabled])
     monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [disabled.id])
     tool = create_find_actions_tool(session, "user_1")
-    response = tool.invoke("anything")
-    assert "No matching actions" in response
+    response = json.loads(tool.invoke("anything"))
+    assert response == []
 
 
 def test_create_find_actions_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch):

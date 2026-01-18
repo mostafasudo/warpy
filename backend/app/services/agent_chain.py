@@ -30,6 +30,7 @@ Task: Help the user achieve their dashboard goal.
 
 Constraints:
 - Discover backend actions with find_actions first.
+- If find_actions returns no suitable actions (empty list) or the returned actions don't match the user's goal, request frontend_context next.
 - If the task is a UI change or find_actions is not relevant, request frontend_context.
 - Ask for any required values; do not guess.
 - Execute frontend actions in small, ordered steps; include waits for dynamic UI.

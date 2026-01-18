@@ -60,7 +60,7 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
     def find_actions(query: str) -> str:
         endpoint_ids = search_similar_endpoints(session, user_id, query)
         if not endpoint_ids:
-            return "No matching actions found. Try describing the task differently."
+            return json.dumps([], indent=2)
         endpoints = session.scalars(
             select(Endpoint).where(
                 Endpoint.id.in_(endpoint_ids),
@@ -69,7 +69,7 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
             ).options(selectinload(Endpoint.feature))
         ).all()
         if not endpoints:
-            return "No matching actions found. Try describing the task differently."
+            return json.dumps([], indent=2)
         result = []
         for endpoint in endpoints:
             tool = endpoint.tool or {}
@@ -92,7 +92,8 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
         description=(
             "Task: Find relevant backend actions for the user's request. "
             "Use when you need available endpoints or are unsure what to call. "
-            "Output: JSON list of actions with id, method, path, name, description, feature."
+            "Output: JSON list of actions with id, method, path, name, description, feature. "
+            "If the list is empty, no backend action fits—switch to frontend_context."
         ),
         args_schema=FindActionsInput
     )
