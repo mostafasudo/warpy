@@ -130,7 +130,7 @@ def test_checker_receives_available_tools(monkeypatch):
     result = asyncio.run(executor.run_step("hello", [], active_endpoint_ids=[endpoint_id]))
     assert result.response == "ok"
     tools = checker.calls[0][3]
-    assert {t["name"] for t in tools} == {"find_actions", "do_thing"}
+    assert {t["name"] for t in tools} == {"find_actions", "frontend_context", "frontend", "do_thing"}
     assert checker.calls[0][4] == []
 
 
@@ -153,6 +153,23 @@ def test_checker_receives_tool_trace_from_executed_tools(monkeypatch):
     assert tool_trace[0]["args"] == {"query": "test"}
     assert tool_trace[0]["result_is_json"] is True
     assert tool_trace[0]["result_summary"].startswith("list len=")
+
+
+def test_run_step_handles_frontend_context_tool(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "frontend_context", "args": {"goal": "Update filters"}}]),
+    ]
+    llm = DummyLLM(responses)
+    checker = MockChecker([])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    result = asyncio.run(executor.run_step("Update filters", []))
+    assert result.done is False
+    assert len(result.tool_calls) == 1
+    call = result.tool_calls[0]
+    assert call.tool_type == "frontend_context"
+    assert call.context.goal == "Update filters"
 
 
 def test_checker_blocks_out_of_scope_response(monkeypatch):

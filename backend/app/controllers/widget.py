@@ -197,11 +197,12 @@ async def widget_chat(
             conversation = create_widget_conversation(session, payload.agent_id)
 
         if payload.tool_results:
+            billable_tool_results = [result for result in payload.tool_results if result.consume_action]
             consume_result = consume_actions_for_tool_results(
                 session,
                 agent.user_id,
                 conversation.id,
-                [result.id for result in payload.tool_results],
+                [result.id for result in billable_tool_results],
             )
             actions_remaining = consume_result.remaining
             if consume_result.consumed > 0 and redis_client and agent.user_rate_limit_enabled:
@@ -319,7 +320,7 @@ async def widget_chat(
                         body=call.body or {},
                     )
                     for call in result.tool_calls
-                    if call.id
+                    if call.id and call.tool_type == "endpoint" and call.endpoint_id
                 ],
             )
             save_widget_message(session, conversation.id, "pending_state", state)

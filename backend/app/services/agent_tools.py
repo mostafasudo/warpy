@@ -17,6 +17,45 @@ class FindActionsInput(BaseModel):
     query: str = Field(description="What the user wants to accomplish")
 
 
+class FrontendContextInput(BaseModel):
+    goal: str = Field(description="What needs to be done on the current page")
+    scope: str | None = Field(default=None, description="Optional CSS selector or UI region hint")
+    include_screenshot: bool = Field(default=False, alias="includeScreenshot")
+    screenshot_scale: float | None = Field(default=None, alias="screenshotScale")
+    include_dom: bool = Field(default=True, alias="includeDom")
+    max_elements: int = Field(default=60, alias="maxElements")
+    viewport_only: bool = Field(default=True, alias="viewportOnly")
+    include_offscreen: bool = Field(default=False, alias="includeOffscreen")
+    selector_hints: list[str] = Field(default_factory=list, alias="selectorHints")
+
+
+class FrontendActionInput(BaseModel):
+    action: str = Field(description="Action type: click, type, select, scroll, wait, hover, focus, blur, press, etc.")
+    selector: str | None = Field(default=None, description="CSS selector or text=/label=/role= query")
+    target: str | None = Field(default=None, description="Alias for selector")
+    role: str | None = Field(default=None, description="Role shortcut for selectors")
+    text: str | None = Field(default=None, description="Text to type or match")
+    value: Any | None = Field(default=None, description="Value to set/select")
+    key: str | None = Field(default=None, description="Single key to press")
+    keys: list[str] | None = Field(default=None, description="Key sequence to press")
+    index: int | None = Field(default=None, description="Index for select options")
+    x: float | None = Field(default=None, description="X coordinate (px or 0-1)")
+    y: float | None = Field(default=None, description="Y coordinate (px or 0-1)")
+    mode: str | None = Field(default=None, description="Input mode: replace or append")
+    behavior: str | None = Field(default=None, description="Scroll behavior: auto or smooth")
+    from_: str | None = Field(default=None, alias="from", description="Drag source selector")
+    to: str | None = Field(default=None, description="Drag target selector")
+    events: list[str] | None = Field(default=None, description="Events for dispatch")
+    delay_ms: int | None = Field(default=None, alias="delayMs")
+    timeout_ms: int | None = Field(default=None, alias="timeoutMs")
+    continue_on_error: bool = Field(default=False, alias="continueOnError")
+
+
+class FrontendActionsInput(BaseModel):
+    goal: str | None = Field(default=None, description="Short goal for the UI changes")
+    actions: list[FrontendActionInput] = Field(default_factory=list)
+
+
 def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
     def find_actions(query: str) -> str:
         endpoint_ids = search_similar_endpoints(session, user_id, query)
@@ -56,6 +95,39 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
             "Returns a list of matching actions that you can execute."
         ),
         args_schema=FindActionsInput
+    )
+
+
+def create_frontend_context_tool() -> StructuredTool:
+    def frontend_context(**_kwargs: Any) -> str:
+        return json.dumps({"status": "queued"})
+
+    return StructuredTool.from_function(
+        func=frontend_context,
+        name="frontend_context",
+        description=(
+            "Request a focused snapshot of the current web page UI. "
+            "Use when the task requires interacting with the frontend. "
+            "Provide the goal and optional scope/selector hints; you will receive a small list of relevant elements "
+            "and optionally a screenshot."
+        ),
+        args_schema=FrontendContextInput
+    )
+
+
+def create_frontend_actions_tool() -> StructuredTool:
+    def frontend(**_kwargs: Any) -> str:
+        return json.dumps({"status": "queued"})
+
+    return StructuredTool.from_function(
+        func=frontend,
+        name="frontend",
+        description=(
+            "Execute frontend UI actions. Provide an ordered list of actions (click, type, select, scroll, wait, etc.) "
+            "using selectors from the latest frontend_context response. "
+            "Include waits when the UI needs time to update."
+        ),
+        args_schema=FrontendActionsInput
     )
 
 

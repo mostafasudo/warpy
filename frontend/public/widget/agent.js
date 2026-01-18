@@ -10,10 +10,32 @@
   const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
+  const HTML2CANVAS_SRC = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+  const HTML2CANVAS_INTEGRITY = "sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H";
   const WIDGET_CONTAINER_ID = "cta-widget-container";
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function clampInt(value, min, max) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return min;
+    return Math.max(min, Math.min(max, Math.round(num)));
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function normalizeText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function truncateText(value, limit) {
+    const text = String(value || "");
+    if (!limit || text.length <= limit) return text;
+    return text.slice(0, limit) + "...";
   }
 
   function parseColor(input) {
@@ -332,7 +354,838 @@
     return result;
   }
 
-  async function executeToolCall(toolCall, baseUrl, headerConfig) {
+  function resolveToolType(toolCall) {
+    if (!toolCall) return "endpoint";
+    const raw = toolCall.type || toolCall.toolType;
+    const normalized = raw ? String(raw) : "endpoint";
+    return normalized === "frontend_actions" ? "frontend" : normalized;
+  }
+
+  function cssEscape(value) {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(String(value));
+    }
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function safeQuerySelector(root, selector) {
+    if (!root || !selector) return null;
+    try {
+      return root.querySelector(selector);
+    } catch {
+      return null;
+    }
+  }
+
+  const INTERACTIVE_SELECTOR = "button, a[href], input, select, textarea, [role=\"button\"], [role=\"link\"], [role=\"checkbox\"], [role=\"menuitem\"], [role=\"tab\"], [role=\"option\"], [role=\"switch\"], [contenteditable=\"true\"], [tabindex]:not([tabindex=\"-1\"]), [onclick]";
+
+  function isRectInViewport(rect, margin) {
+    const m = typeof margin === "number" ? margin : 0;
+    return rect.bottom >= -m && rect.top <= window.innerHeight + m && rect.right >= -m && rect.left <= window.innerWidth + m;
+  }
+
+  function isElementVisible(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.getAttribute && el.getAttribute("data-warpy-ui") === "true") return false;
+    if (el.closest && el.closest(`#${WIDGET_CONTAINER_ID}`)) return false;
+    const style = getComputedStyle(el);
+    if (!style || style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) return false;
+    if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true") return false;
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    return true;
+  }
+
+  function getAriaLabel(el) {
+    if (!el || !el.getAttribute) return "";
+    const ariaLabel = el.getAttribute("aria-label");
+    if (ariaLabel) return ariaLabel.trim();
+    const labelledBy = el.getAttribute("aria-labelledby");
+    if (labelledBy) {
+      const ids = labelledBy.split(/\s+/).filter(Boolean);
+      const parts = ids
+        .map((id) => {
+          const target = document.getElementById(id);
+          return target ? target.innerText || target.textContent || "" : "";
+        })
+        .filter(Boolean);
+      if (parts.length) return parts.join(" ").trim();
+    }
+    return "";
+  }
+
+  function getAssociatedLabelText(el) {
+    if (!el) return "";
+    const aria = getAriaLabel(el);
+    if (aria) return aria;
+    if (el.id) {
+      const label = document.querySelector(`label[for="${cssEscape(el.id)}"]`);
+      if (label) return (label.innerText || label.textContent || "").trim();
+    }
+    const wrapping = el.closest && el.closest("label");
+    if (wrapping) return (wrapping.innerText || wrapping.textContent || "").trim();
+    return "";
+  }
+
+  function getElementText(el) {
+    if (!el) return "";
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "select" || tag === "textarea") return "";
+    return (el.innerText || el.textContent || "").trim();
+  }
+
+  function getSelectOptions(el) {
+    if (!el || !el.tagName || el.tagName.toLowerCase() !== "select") return [];
+    const options = Array.from(el.options || []);
+    if (options.length > 30) return [];
+    return options.map((option) => ({
+      value: String(option.value),
+      text: truncateText(option.textContent || "", 80),
+      selected: option.selected,
+    }));
+  }
+
+  function buildPathSelector(el) {
+    const parts = [];
+    let current = el;
+    while (current && current.nodeType === 1 && parts.length < 4) {
+      const tag = current.tagName.toLowerCase();
+      const parent = current.parentElement;
+      if (!parent) {
+        parts.unshift(tag);
+        break;
+      }
+      const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1;
+        parts.unshift(`${tag}:nth-of-type(${index})`);
+      } else {
+        parts.unshift(tag);
+      }
+      current = parent;
+      if (current === document.body || current === document.documentElement) {
+        break;
+      }
+    }
+    return parts.join(" > ");
+  }
+
+  function getSelectorCandidates(el) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const candidates = [];
+    const push = (value) => {
+      if (value && !candidates.includes(value)) {
+        candidates.push(value);
+      }
+    };
+    const attrs = ["data-testid", "data-test", "data-qa", "data-cy", "data-test-id"];
+    for (const attr of attrs) {
+      const value = el.getAttribute && el.getAttribute(attr);
+      if (value) {
+        push(`[${attr}="${cssEscape(value)}"]`);
+      }
+    }
+    if (el.id) push(`#${cssEscape(el.id)}`);
+    if (el.name) push(`${tag}[name="${cssEscape(el.name)}"]`);
+    const ariaLabel = el.getAttribute && el.getAttribute("aria-label");
+    if (ariaLabel) push(`${tag}[aria-label="${cssEscape(ariaLabel)}"]`);
+    const placeholder = el.getAttribute && el.getAttribute("placeholder");
+    if (placeholder) push(`${tag}[placeholder="${cssEscape(placeholder)}"]`);
+    const role = el.getAttribute && el.getAttribute("role");
+    if (role) push(`${tag}[role="${cssEscape(role)}"]`);
+    const path = buildPathSelector(el);
+    if (path) push(path);
+    return candidates;
+  }
+
+  function getElementDescriptor(el, includeRect) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const rect = el.getBoundingClientRect();
+    const type = tag === "input" ? (el.getAttribute("type") || el.type || "") : "";
+    const role = el.getAttribute ? el.getAttribute("role") || "" : "";
+    const label = truncateText(getAssociatedLabelText(el), 120);
+    const text = truncateText(getElementText(el), 160);
+    const ariaLabel = truncateText(getAriaLabel(el), 120);
+    const placeholder = truncateText(el.getAttribute ? el.getAttribute("placeholder") || "" : "", 120);
+    const name = el.getAttribute ? el.getAttribute("name") || "" : "";
+    const id = el.id || "";
+    const disabled = Boolean(el.disabled) || (el.getAttribute && el.getAttribute("aria-disabled") === "true");
+    const required = Boolean(el.required);
+    let checked = null;
+    if (typeof el.checked === "boolean") {
+      checked = el.checked;
+    } else if (el.getAttribute && el.getAttribute("aria-checked") === "true") {
+      checked = true;
+    } else if (el.getAttribute && el.getAttribute("aria-checked") === "false") {
+      checked = false;
+    }
+    const selectors = getSelectorCandidates(el);
+    const descriptor = {
+      selector: selectors[0] || "",
+      selectors,
+      tag,
+      role,
+      type,
+      text,
+      label,
+      ariaLabel,
+      placeholder,
+      name,
+      id,
+      disabled,
+      required,
+      checked,
+    };
+    if (tag === "select") {
+      descriptor.value = el.value;
+      const options = getSelectOptions(el);
+      if (options.length) {
+        descriptor.options = options;
+      }
+    }
+    if (includeRect) {
+      descriptor.rect = {
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+      descriptor.inViewport = isRectInViewport(rect, 80);
+    }
+    return descriptor;
+  }
+
+  function tokenizeGoal(goal, selectorHints) {
+    const raw = [goal, ...(Array.isArray(selectorHints) ? selectorHints : [])].filter(Boolean).join(" ");
+    const tokens = normalizeText(raw).split(" ").filter((token) => token.length > 1);
+    return Array.from(new Set(tokens)).slice(0, 12);
+  }
+
+  function scoreText(haystack, tokens) {
+    if (!tokens.length) return 0;
+    let score = 0;
+    for (const token of tokens) {
+      if (haystack.includes(token)) score += 1;
+    }
+    return score;
+  }
+
+  function resolveScopeRoot(scope) {
+    if (!scope) return document;
+    const trimmed = String(scope).trim();
+    if (!trimmed) return document;
+    const lower = trimmed.toLowerCase();
+    const doc = document;
+    if (lower === "modal" || lower === "dialog") {
+      const modal = doc.querySelector('[role="dialog"], [aria-modal="true"], .modal, .dialog');
+      if (modal) return modal;
+    }
+    if (lower === "header") {
+      const header = doc.querySelector("header");
+      if (header) return header;
+    }
+    if (lower === "footer") {
+      const footer = doc.querySelector("footer");
+      if (footer) return footer;
+    }
+    if (lower === "nav" || lower === "navigation") {
+      const nav = doc.querySelector("nav");
+      if (nav) return nav;
+    }
+    if (lower === "main") {
+      const main = doc.querySelector("main");
+      if (main) return main;
+    }
+    const direct = safeQuerySelector(doc, trimmed);
+    return direct || document;
+  }
+
+  function collectHeadings(root) {
+    return Array.from(root.querySelectorAll("h1, h2, h3, h4"))
+      .filter(isElementVisible)
+      .slice(0, 12)
+      .map((el) => ({
+        level: el.tagName.toLowerCase(),
+        text: truncateText(el.innerText || el.textContent || "", 120),
+      }))
+      .filter((item) => item.text);
+  }
+
+  function resolveSelectorTarget(selector, root) {
+    if (!selector) return null;
+    const trimmed = String(selector).trim();
+    if (!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    const base = root || document;
+    if (lower.startsWith("text=")) {
+      return findElementByText(trimmed.slice(5), base);
+    }
+    if (lower.startsWith("label=")) {
+      return findElementByLabel(trimmed.slice(6), base);
+    }
+    if (lower.startsWith("role=")) {
+      return findElementByRole(trimmed.slice(5), base);
+    }
+    return safeQuerySelector(base, trimmed);
+  }
+
+  function collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) {
+    const elements = Array.from(root.querySelectorAll(INTERACTIVE_SELECTOR));
+    const descriptors = [];
+    for (const el of elements) {
+      if (!isElementVisible(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (!includeOffscreen && !isRectInViewport(rect, 120)) continue;
+      const descriptor = getElementDescriptor(el, true);
+      const haystack = normalizeText(
+        [
+          descriptor.text,
+          descriptor.label,
+          descriptor.ariaLabel,
+          descriptor.placeholder,
+          descriptor.name,
+          descriptor.id,
+          descriptor.role,
+          descriptor.tag,
+        ].join(" ")
+      );
+      descriptor._score = scoreText(haystack, tokens);
+      descriptor._rank = isRectInViewport(rect, 0) ? 1 : 0;
+      descriptors.push(descriptor);
+    }
+    const hints = Array.isArray(selectorHints) ? selectorHints : [];
+    for (const hint of hints) {
+      const target = resolveSelectorTarget(String(hint), root);
+      if (target && isElementVisible(target)) {
+        const descriptor = getElementDescriptor(target, true);
+        descriptor._score = Math.max(descriptor._score || 0, tokens.length ? tokens.length + 1 : 1);
+        descriptor._rank = 2;
+        descriptors.push(descriptor);
+      }
+    }
+    const unique = new Map();
+    for (const item of descriptors) {
+      const key = item.selector || `${item.tag}-${item.id}-${item.name}-${item.text}`;
+      if (!unique.has(key)) {
+        unique.set(key, item);
+      }
+    }
+    const list = Array.from(unique.values());
+    list.sort((a, b) => (b._score || 0) - (a._score || 0) || (b._rank || 0) - (a._rank || 0));
+    const preferred = tokens.length ? list.filter((item) => (item._score || 0) > 0) : list;
+    const selected = preferred.slice(0, maxElements);
+    if (selected.length < maxElements) {
+      for (const item of list) {
+        if (selected.length >= maxElements) break;
+        if (!selected.includes(item)) {
+          selected.push(item);
+        }
+      }
+    }
+    return selected.map(({ _score, _rank, ...rest }) => rest);
+  }
+
+  function collectFrontendContext(request) {
+    const goal = typeof request.goal === "string" ? request.goal : "";
+    const scope = typeof request.scope === "string" ? request.scope : null;
+    const includeDom = request.includeDom !== false;
+    const includeOffscreen = request.includeOffscreen === true || request.viewportOnly === false;
+    const maxElements = clampInt(request.maxElements || 60, 20, 160);
+    const selectorHints = Array.isArray(request.selectorHints) ? request.selectorHints : [];
+    const root = resolveScopeRoot(scope);
+    const tokens = tokenizeGoal(goal, selectorHints);
+    const elements = includeDom ? collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) : [];
+    const headings = includeDom ? collectHeadings(root) : [];
+    const active = document.activeElement && document.activeElement !== document.body ? getElementDescriptor(document.activeElement, false) : null;
+    return {
+      kind: "frontend_context",
+      goal,
+      scope,
+      url: window.location.href,
+      title: document.title,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+      },
+      elements,
+      headings,
+      activeElement: active,
+    };
+  }
+
+  async function ensureHtml2Canvas() {
+    if (typeof window.html2canvas === "function") {
+      return window.html2canvas;
+    }
+    await loadExternalScript(HTML2CANVAS_SRC, HTML2CANVAS_INTEGRITY);
+    return typeof window.html2canvas === "function" ? window.html2canvas : null;
+  }
+
+  async function captureScreenshot(request) {
+    try {
+      const html2canvas = await ensureHtml2Canvas();
+      if (!html2canvas) return null;
+      const scale = typeof request.screenshotScale === "number"
+        ? clamp(request.screenshotScale, 0.3, 1)
+        : Math.min(1, 1 / (window.devicePixelRatio || 1));
+      const canvas = await html2canvas(document.body, {
+        backgroundColor: null,
+        scale,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        x: window.scrollX,
+        y: window.scrollY,
+        scrollX: 0,
+        scrollY: 0,
+        useCORS: true,
+        ignoreElements: (el) => {
+          if (!el) return false;
+          if (el.id === WIDGET_CONTAINER_ID) return true;
+          if (el.getAttribute && el.getAttribute("data-warpy-ui") === "true") return true;
+          return false;
+        },
+      });
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+      return { dataUrl, width: canvas.width, height: canvas.height };
+    } catch {
+      return null;
+    }
+  }
+
+  let highlightEl = null;
+  let highlightTimer = null;
+
+  function clearHighlight() {
+    if (!highlightEl) return;
+    highlightEl.style.opacity = "0";
+  }
+
+  function highlightElement(el) {
+    if (!el || !document.body) return;
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    if (!highlightEl) {
+      highlightEl = document.createElement("div");
+      highlightEl.setAttribute("data-warpy-ui", "true");
+      highlightEl.style.position = "fixed";
+      highlightEl.style.pointerEvents = "none";
+      highlightEl.style.zIndex = "2147482999";
+      highlightEl.style.borderRadius = "10px";
+      highlightEl.style.transition = "opacity 160ms ease, transform 160ms ease";
+      highlightEl.style.opacity = "0";
+      document.body.appendChild(highlightEl);
+    }
+    const themeAccent = parseColor(getComputedStyle(document.getElementById(WIDGET_CONTAINER_ID) || document.body).getPropertyValue("--cta-accent")) || parseColor(inferThemeFromPage().accent);
+    const accent = themeAccent || { r: 37, g: 99, b: 235, a: 1 };
+    highlightEl.style.border = `2px solid ${rgbCss(accent)}`;
+    highlightEl.style.background = rgbaCss(accent, 0.08);
+    highlightEl.style.boxShadow = `0 0 0 4px ${rgbaCss(accent, 0.2)}`;
+    highlightEl.style.left = `${Math.max(0, Math.round(rect.left - 6))}px`;
+    highlightEl.style.top = `${Math.max(0, Math.round(rect.top - 6))}px`;
+    highlightEl.style.width = `${Math.round(rect.width + 12)}px`;
+    highlightEl.style.height = `${Math.round(rect.height + 12)}px`;
+    highlightEl.style.opacity = "1";
+    highlightEl.style.transform = "scale(1)";
+    if (highlightTimer) {
+      clearTimeout(highlightTimer);
+    }
+    highlightTimer = setTimeout(() => {
+      clearHighlight();
+    }, 900);
+  }
+
+  function findElementByText(text, root) {
+    const target = normalizeText(text);
+    if (!target) return null;
+    const base = root || document;
+    const elements = Array.from(base.querySelectorAll(INTERACTIVE_SELECTOR));
+    let best = null;
+    let bestScore = Infinity;
+    for (const el of elements) {
+      if (!isElementVisible(el)) continue;
+      const label = normalizeText(getAssociatedLabelText(el));
+      const content = normalizeText(getElementText(el));
+      const aria = normalizeText(getAriaLabel(el));
+      const haystack = [label, content, aria].filter(Boolean).join(" ");
+      if (!haystack) continue;
+      if (haystack === target) return el;
+      if (haystack.includes(target)) {
+        const score = Math.abs(haystack.length - target.length);
+        if (score < bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      }
+    }
+    return best;
+  }
+
+  function findElementByLabel(text, root) {
+    const target = normalizeText(text);
+    if (!target) return null;
+    const base = root || document;
+    const labels = Array.from(base.querySelectorAll("label"));
+    for (const label of labels) {
+      if (!isElementVisible(label)) continue;
+      const labelText = normalizeText(label.innerText || label.textContent || "");
+      if (!labelText) continue;
+      if (labelText === target || labelText.includes(target)) {
+        const forId = label.getAttribute("for");
+        if (forId) {
+          const input = document.getElementById(forId);
+          if (input) return input;
+        }
+        const input = label.querySelector("input, select, textarea, button");
+        if (input) return input;
+      }
+    }
+    return null;
+  }
+
+  function findElementByRole(role, root) {
+    const target = normalizeText(role);
+    if (!target) return null;
+    const base = root || document;
+    return safeQuerySelector(base, `[role="${cssEscape(target)}"]`);
+  }
+
+  async function waitForElement(selector, options) {
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
+    const requireVisible = options && options.visible !== false;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const el = resolveSelectorTarget(selector, document);
+      if (el && (!requireVisible || isElementVisible(el))) {
+        return el;
+      }
+      await sleep(200);
+    }
+    return null;
+  }
+
+  async function waitForText(text, options) {
+    const target = normalizeText(text);
+    if (!target) return false;
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const bodyText = normalizeText(document.body ? document.body.innerText || document.body.textContent || "" : "");
+      if (bodyText.includes(target)) return true;
+      await sleep(200);
+    }
+    return false;
+  }
+
+  function getActionPoint(el, action) {
+    const rect = el.getBoundingClientRect();
+    let x = rect.width / 2;
+    let y = rect.height / 2;
+    if (typeof action.x === "number") {
+      x = action.x >= 0 && action.x <= 1 ? rect.width * action.x : action.x;
+    }
+    if (typeof action.y === "number") {
+      y = action.y >= 0 && action.y <= 1 ? rect.height * action.y : action.y;
+    }
+    return {
+      x: Math.round(rect.left + clamp(x, 0, rect.width)),
+      y: Math.round(rect.top + clamp(y, 0, rect.height)),
+    };
+  }
+
+  function dispatchPointerEvent(el, type, point) {
+    if (typeof PointerEvent !== "function") {
+      dispatchMouseEvent(el, type.replace("pointer", "mouse"), point);
+      return;
+    }
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: point.x,
+      clientY: point.y,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    el.dispatchEvent(event);
+  }
+
+  function dispatchMouseEvent(el, type, point) {
+    const event = new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: point.x,
+      clientY: point.y,
+    });
+    el.dispatchEvent(event);
+  }
+
+  function dispatchKeyboardEvent(el, type, key) {
+    const event = new KeyboardEvent(type, {
+      key,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(event);
+  }
+
+  function setInputValue(el, value) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea") {
+      const descriptor = Object.getOwnPropertyDescriptor(el.__proto__, "value");
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(el, value);
+      } else {
+        el.value = value;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (el.isContentEditable) {
+      el.textContent = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  function setChecked(el, checked) {
+    if (typeof el.checked === "boolean") {
+      const descriptor = Object.getOwnPropertyDescriptor(el.__proto__, "checked");
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(el, checked);
+      } else {
+        el.checked = checked;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (el.getAttribute) {
+      el.setAttribute("aria-checked", checked ? "true" : "false");
+    }
+  }
+
+  function focusElement(el) {
+    if (!el || !el.focus) return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch {
+      el.focus();
+    }
+  }
+
+  function normalizeAction(action) {
+    if (!action || typeof action !== "object") {
+      return { action: "" };
+    }
+    const name = action.action || action.type || "";
+    return { ...action, action: String(name).trim().toLowerCase() };
+  }
+
+  function describeAction(action) {
+    const name = action.action || "action";
+    const target = action.selector || action.text || action.value || action.role || "";
+    if (target) return `${name} ${truncateText(target, 44)}`;
+    return name;
+  }
+
+  async function runFrontendAction(action) {
+    const name = action.action;
+    if (!name) {
+      throw new Error("Missing action");
+    }
+    if (name === "wait") {
+      const delay = clampInt(action.delayMs || action.ms || 500, 0, 10000);
+      await sleep(delay);
+      return;
+    }
+    if (name === "waitfor" || name === "wait_for") {
+      const selector = action.selector || (action.text ? `text=${action.text}` : action.value ? String(action.value) : "");
+      const el = selector ? await waitForElement(selector, { timeoutMs: action.timeoutMs }) : null;
+      if (!el) throw new Error("Element not found");
+      return;
+    }
+    if (name === "waitfortext" || name === "wait_for_text") {
+      const ok = await waitForText(action.text || action.value || "", { timeoutMs: action.timeoutMs });
+      if (!ok) throw new Error("Text not found");
+      return;
+    }
+    if (name === "navigate") {
+      const url = action.url || action.value;
+      if (!url) throw new Error("Missing url");
+      window.location.assign(String(url));
+      return;
+    }
+    if (name === "scroll") {
+      const selector = action.selector || action.target || "";
+      const behavior = action.behavior || "auto";
+      const x = Number(action.x || 0);
+      const y = Number(action.y || action.deltaY || 0);
+      if (selector) {
+        const target = resolveSelectorTarget(selector, document);
+        if (!target) throw new Error("Element not found");
+        target.scrollBy({ left: x, top: y, behavior });
+      } else {
+        window.scrollBy({ left: x, top: y, behavior });
+      }
+      return;
+    }
+    if (name === "scroll_into_view" || name === "scrollintoview") {
+      const selector = action.selector || action.target || "";
+      const target = resolveSelectorTarget(selector, document);
+      if (!target) throw new Error("Element not found");
+      target.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      return;
+    }
+
+    const selector = action.selector || action.target || (action.text ? `text=${action.text}` : action.role ? `role=${action.role}` : "");
+    const timeoutMs = action.timeoutMs;
+    let el = selector ? resolveSelectorTarget(selector, document) : null;
+    if (!el && selector && timeoutMs) {
+      el = await waitForElement(selector, { timeoutMs });
+    }
+    if (!el && !selector && (name === "press" || name === "type" || name === "input" || name === "clear")) {
+      el = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    }
+    if (!el) {
+      throw new Error("Element not found");
+    }
+    if (action.scroll !== false) {
+      try {
+        el.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      } catch {
+        el.scrollIntoView();
+      }
+    }
+    highlightElement(el);
+    const point = getActionPoint(el, action);
+
+    if (name === "hover") {
+      dispatchPointerEvent(el, "pointerover", point);
+      dispatchMouseEvent(el, "mouseover", point);
+      return;
+    }
+    if (name === "focus") {
+      focusElement(el);
+      return;
+    }
+    if (name === "blur") {
+      if (el.blur) el.blur();
+      return;
+    }
+    if (name === "click" || name === "tap") {
+      dispatchPointerEvent(el, "pointerdown", point);
+      dispatchMouseEvent(el, "mousedown", point);
+      focusElement(el);
+      dispatchPointerEvent(el, "pointerup", point);
+      dispatchMouseEvent(el, "mouseup", point);
+      dispatchMouseEvent(el, "click", point);
+      return;
+    }
+    if (name === "double_click" || name === "dblclick" || name === "doubleclick") {
+      for (let i = 0; i < 2; i += 1) {
+        dispatchPointerEvent(el, "pointerdown", point);
+        dispatchMouseEvent(el, "mousedown", point);
+        dispatchPointerEvent(el, "pointerup", point);
+        dispatchMouseEvent(el, "mouseup", point);
+        dispatchMouseEvent(el, "click", point);
+      }
+      dispatchMouseEvent(el, "dblclick", point);
+      return;
+    }
+    if (name === "right_click" || name === "contextmenu") {
+      dispatchMouseEvent(el, "contextmenu", point);
+      return;
+    }
+    if (name === "type" || name === "input" || name === "set_value") {
+      const text = action.text != null ? String(action.text) : action.value != null ? String(action.value) : "";
+      const mode = action.mode || "replace";
+      focusElement(el);
+      if (mode === "append") {
+        const current = el.value != null ? String(el.value) : "";
+        setInputValue(el, current + text);
+      } else {
+        setInputValue(el, text);
+      }
+      return;
+    }
+    if (name === "clear") {
+      focusElement(el);
+      setInputValue(el, "");
+      return;
+    }
+    if (name === "press") {
+      const keys = action.keys || (action.key ? [action.key] : []);
+      const target = el || document.activeElement || document.body;
+      for (const key of keys) {
+        dispatchKeyboardEvent(target, "keydown", key);
+        dispatchKeyboardEvent(target, "keypress", key);
+        dispatchKeyboardEvent(target, "keyup", key);
+      }
+      return;
+    }
+    if (name === "select") {
+      const tag = el.tagName ? el.tagName.toLowerCase() : "";
+      if (tag !== "select") {
+        throw new Error("Element is not a select");
+      }
+      const value = action.value != null ? String(action.value) : action.text != null ? String(action.text) : "";
+      const options = Array.from(el.options || []);
+      let matched = null;
+      if (value) {
+        matched = options.find((option) => option.value === value) || options.find((option) => normalizeText(option.textContent || "") === normalizeText(value));
+      }
+      if (!matched && typeof action.index === "number") {
+        matched = options[action.index] || null;
+      }
+      if (!matched && options.length) {
+        matched = options[0];
+      }
+      if (!matched) throw new Error("Option not found");
+      el.value = matched.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (name === "check") {
+      setChecked(el, true);
+      return;
+    }
+    if (name === "uncheck") {
+      setChecked(el, false);
+      return;
+    }
+    if (name === "drag_and_drop" || name === "drag") {
+      const fromSelector = action.from || action.selector;
+      const toSelector = action.to || action.target;
+      const source = fromSelector ? resolveSelectorTarget(fromSelector, document) : el;
+      const target = toSelector ? resolveSelectorTarget(toSelector, document) : null;
+      if (!source || !target) throw new Error("Drag target not found");
+      const start = getActionPoint(source, action);
+      const end = getActionPoint(target, action);
+      dispatchMouseEvent(source, "mousedown", start);
+      dispatchMouseEvent(source, "dragstart", start);
+      dispatchMouseEvent(target, "dragover", end);
+      dispatchMouseEvent(target, "drop", end);
+      dispatchMouseEvent(target, "mouseup", end);
+      return;
+    }
+    if (name === "dispatch") {
+      const events = Array.isArray(action.events) ? action.events : [];
+      for (const evt of events) {
+        if (!evt) continue;
+        el.dispatchEvent(new Event(String(evt), { bubbles: true, cancelable: true }));
+      }
+      return;
+    }
+
+    throw new Error("Unknown action");
+  }
+
+  async function executeEndpointToolCall(toolCall, baseUrl, headerConfig) {
     const sessionHeaders = buildHeaders(headerConfig);
     const path = substitutePath(toolCall.path, toolCall.params || {});
     const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
@@ -367,10 +1220,150 @@
       } else {
         body = await response.text();
       }
-      return { id: toolCall.id, statusCode: response.status, body };
+      return { id: toolCall.id, statusCode: response.status, consumeAction: true, body };
     } catch (error) {
-      return { id: toolCall.id, statusCode: 0, body: null, error: error.message || "Request failed" };
+      return { id: toolCall.id, statusCode: 0, consumeAction: true, body: null, error: error.message || "Request failed" };
     }
+  }
+
+  async function executeFrontendContext(toolCall, ui) {
+    const request = toolCall && toolCall.context && typeof toolCall.context === "object" ? toolCall.context : toolCall || {};
+    const title = toolCall.goal || request.goal || "Reviewing the page";
+    if (ui && typeof ui.setActivity === "function") {
+      ui.setActivity({ title, status: "running", steps: [] });
+    }
+    try {
+      const context = collectFrontendContext(request);
+      const screenshot = request.includeScreenshot ? await captureScreenshot(request) : null;
+      if (screenshot) {
+        context.screenshot = screenshot;
+      }
+      if (ui && typeof ui.setActivity === "function") {
+        ui.setActivity({ title, status: "done", steps: [] });
+        if (typeof ui.scheduleClear === "function") {
+          ui.scheduleClear(900);
+        }
+      }
+      return { id: toolCall.id, statusCode: 200, consumeAction: false, body: context };
+    } catch (error) {
+      if (ui && typeof ui.setActivity === "function") {
+        ui.setActivity({ title, status: "error", steps: [] });
+        if (typeof ui.scheduleClear === "function") {
+          ui.scheduleClear(1400);
+        }
+      }
+      return { id: toolCall.id, statusCode: 500, consumeAction: false, body: null, error: error.message || "Frontend context failed" };
+    }
+  }
+
+  async function executeFrontendActions(toolCall, ui) {
+    const actions = Array.isArray(toolCall.actions) ? toolCall.actions : [];
+    const goal = toolCall.goal || "Applying changes";
+    if (!actions.length) {
+      return {
+        id: toolCall.id,
+        statusCode: 400,
+        consumeAction: false,
+        body: { kind: "frontend_actions", goal, results: [], error: "No actions provided" },
+      };
+    }
+    const results = [];
+    let statusCode = 200;
+    let executedAny = false;
+    let activity = null;
+    if (actions.length && ui && typeof ui.setActivity === "function") {
+      activity = {
+        title: goal,
+        status: "running",
+        steps: actions.map((action, index) => ({
+          index,
+          label: describeAction(normalizeAction(action)),
+          status: "pending",
+        })),
+      };
+      ui.setActivity({ ...activity });
+    }
+
+    for (let i = 0; i < actions.length; i += 1) {
+      const normalized = normalizeAction(actions[i]);
+      const step = activity && activity.steps ? activity.steps[i] : null;
+      if (step) {
+        step.status = "running";
+        ui.setActivity({ ...activity });
+      }
+      const startedAt = Date.now();
+      try {
+        await runFrontendAction(normalized);
+        executedAny = true;
+        results.push({
+          index: i,
+          action: normalized.action,
+          selector: normalized.selector || normalized.target || null,
+          status: "ok",
+          durationMs: Date.now() - startedAt,
+        });
+        if (step) {
+          step.status = "done";
+          ui.setActivity({ ...activity });
+        }
+      } catch (error) {
+        results.push({
+          index: i,
+          action: normalized.action,
+          selector: normalized.selector || normalized.target || null,
+          status: "error",
+          error: error.message || "Action failed",
+          durationMs: Date.now() - startedAt,
+        });
+        statusCode = 207;
+        if (step) {
+          step.status = "error";
+          ui.setActivity({ ...activity });
+        }
+        if (!normalized.continueOnError) {
+          break;
+        }
+      }
+      const delay = clampInt(normalized.delayMs || 0, 0, 10000);
+      if (delay) {
+        await sleep(delay);
+      }
+    }
+
+    if (activity && ui && typeof ui.setActivity === "function") {
+      activity.status = statusCode === 200 ? "done" : "error";
+      ui.setActivity({ ...activity });
+      if (typeof ui.scheduleClear === "function") {
+        ui.scheduleClear(1400);
+      }
+    }
+    clearHighlight();
+    return {
+      id: toolCall.id,
+      statusCode,
+      consumeAction: executedAny,
+      body: {
+        kind: "frontend_actions",
+        goal,
+        url: window.location.href,
+        title: document.title,
+        results,
+      },
+    };
+  }
+
+  async function executeToolCall(toolCall, baseUrl, headerConfig, ui) {
+    const type = resolveToolType(toolCall);
+    if (type === "endpoint") {
+      return executeEndpointToolCall(toolCall, baseUrl, headerConfig);
+    }
+    if (type === "frontend_context") {
+      return executeFrontendContext(toolCall, ui);
+    }
+    if (type === "frontend") {
+      return executeFrontendActions(toolCall, ui);
+    }
+    return { id: toolCall.id, statusCode: 400, consumeAction: false, body: null, error: "Unknown tool type" };
   }
 
   function loadExternalScript(src, integrity) {
@@ -1044,6 +2037,81 @@
         max-width: 320px;
       }
 
+      .cta-widget-activity {
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+        border-radius: 16px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .cta-widget-activity-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-activity-status {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-activity-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .cta-widget-activity-step {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-activity-step::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--cta-border);
+        flex-shrink: 0;
+      }
+
+      .cta-widget-activity-step[data-status="running"] {
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-activity-step[data-status="running"]::before {
+        background: var(--cta-accent);
+        animation: cta-widget-activity-pulse 1s ease-in-out infinite;
+      }
+
+      .cta-widget-activity-step[data-status="done"] {
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-activity-step[data-status="done"]::before {
+        background: var(--cta-fg-muted);
+      }
+
+      .cta-widget-activity-step[data-status="error"] {
+        color: var(--cta-accent);
+      }
+
+      .cta-widget-activity-step[data-status="error"]::before {
+        background: var(--cta-accent);
+      }
+
       .cta-widget-message {
         max-width: 92%;
         padding: 10px 12px;
@@ -1430,6 +2498,12 @@
         100% { transform: scale(1); }
       }
 
+      @keyframes cta-widget-activity-pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.35); }
+        100% { transform: scale(1); }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .cta-widget-toggle,
         .cta-widget-panel,
@@ -1448,6 +2522,10 @@
         }
 
         .cta-widget-toggle.unread-pulse::after {
+          animation: none !important;
+        }
+
+        .cta-widget-activity-step[data-status="running"]::before {
           animation: none !important;
         }
       }
@@ -1505,6 +2583,8 @@
     let widgetInputPlaceholder = "Ask Warpy…";
     let securityDisclosureEnabled = true;
     let isSecurityPanelOpen = false;
+    let frontendActivity = null;
+    let frontendActivityTimer = null;
 
     const root = document.createElement("div");
     let widgetHidden = false;
@@ -1513,6 +2593,7 @@
       if (widgetHidden) return;
       widgetHidden = true;
       closePanel({ restoreLauncherFocus: false });
+      clearHighlight();
       root.style.display = "none";
       root.setAttribute("aria-hidden", "true");
     }
@@ -1685,6 +2766,35 @@
       renderMessages();
     }
 
+    function setFrontendActivity(activity) {
+      frontendActivity = activity;
+      if (!activity && frontendActivityTimer) {
+        clearTimeout(frontendActivityTimer);
+        frontendActivityTimer = null;
+      }
+      renderMessages();
+    }
+
+    function scheduleFrontendActivityClear(delayMs) {
+      if (frontendActivityTimer) {
+        clearTimeout(frontendActivityTimer);
+      }
+      frontendActivityTimer = setTimeout(() => {
+        frontendActivity = null;
+        frontendActivityTimer = null;
+        renderMessages();
+      }, delayMs || 1200);
+    }
+
+    function clearFrontendActivity() {
+      if (frontendActivityTimer) {
+        clearTimeout(frontendActivityTimer);
+        frontendActivityTimer = null;
+      }
+      frontendActivity = null;
+      renderMessages();
+    }
+
     function getViewportHeight() {
       if (window.visualViewport && typeof window.visualViewport.height === "number") {
         return window.visualViewport.height;
@@ -1772,7 +2882,7 @@
     });
 
     function renderMessages() {
-      if (state.messages.length === 0) {
+      if (state.messages.length === 0 && !frontendActivity) {
         messagesEl.innerHTML = `
           <div class="cta-widget-empty">
 	            <div class="cta-widget-empty-icon">
@@ -1786,6 +2896,35 @@
       }
 
       messagesEl.innerHTML = "";
+
+      if (frontendActivity) {
+        const activity = document.createElement("div");
+        activity.className = "cta-widget-activity";
+        const header = document.createElement("div");
+        header.className = "cta-widget-activity-header";
+        const title = document.createElement("span");
+        title.textContent = frontendActivity.title || "Applying changes";
+        const status = document.createElement("span");
+        status.className = "cta-widget-activity-status";
+        status.textContent =
+          frontendActivity.status === "done" ? "Done" : frontendActivity.status === "error" ? "Needs attention" : "Working";
+        header.appendChild(title);
+        header.appendChild(status);
+        activity.appendChild(header);
+        if (frontendActivity.steps && frontendActivity.steps.length > 0) {
+          const list = document.createElement("div");
+          list.className = "cta-widget-activity-list";
+          frontendActivity.steps.forEach((step) => {
+            const row = document.createElement("div");
+            row.className = "cta-widget-activity-step";
+            row.dataset.status = step.status || "pending";
+            row.textContent = step.label || `Step ${step.index + 1}`;
+            list.appendChild(row);
+          });
+          activity.appendChild(list);
+        }
+        messagesEl.appendChild(activity);
+      }
 
       state.messages.forEach((msg) => {
         const bubble = document.createElement("div");
@@ -1807,6 +2946,11 @@
 
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
+
+    const frontendUi = {
+      setActivity: setFrontendActivity,
+      scheduleClear: scheduleFrontendActivityClear,
+    };
 
     function setLoading(loading) {
       isLoading = loading;
@@ -2177,6 +3321,18 @@
       toggle.classList.add("unread-pulse");
     }
 
+    async function runToolCalls(toolCalls) {
+      const hasFrontend = toolCalls.some((call) => resolveToolType(call) !== "endpoint");
+      if (!hasFrontend) {
+        return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig, frontendUi)));
+      }
+      const results = [];
+      for (const call of toolCalls) {
+        results.push(await executeToolCall(call, config.baseUrl, headerConfig, frontendUi));
+      }
+      return results;
+    }
+
     async function sendMessage(text) {
       if (!text.trim() || isLoading || widgetHidden) return;
 
@@ -2214,9 +3370,7 @@
             }
 
             if (data.toolCalls && data.toolCalls.length > 0) {
-              const toolResults = await Promise.all(
-                data.toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig))
-              );
+              const toolResults = await runToolCalls(data.toolCalls);
 
               response = await postWidgetChat({
                 agentId: config.agentId,
@@ -2295,6 +3449,7 @@
       toggle.setAttribute("aria-expanded", "false");
       closeMicMenu();
       stopRecording();
+      clearHighlight();
       if (restoreLauncherFocus) {
         toggle.focus();
       } else {
@@ -2315,6 +3470,7 @@
       state.conversationId = null;
       saveState(state);
       setUnread(false);
+      clearFrontendActivity();
       renderMessages();
     }
 
