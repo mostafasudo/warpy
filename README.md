@@ -16,6 +16,9 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
+## Skills
+LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+
 ## Deployment
 
 Production infrastructure reference: [INFRA_GUIDE.md](INFRA_GUIDE.md).

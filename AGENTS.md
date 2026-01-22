@@ -5,6 +5,9 @@
 
 Infra reference: `INFRA_GUIDE.md`.
 
+## Skills
+LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
