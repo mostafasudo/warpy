@@ -1,1 +1,0 @@
-../../.codex/skills/prompt-engineering/SKILL.md
