@@ -1,6 +1,10 @@
 (function () {
   "use strict";
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Constants
+  // ═══════════════════════════════════════════════════════════════════════════
+
   const STORAGE_KEY = "cta_widget_state";
   const UI_STORAGE_KEY = "cta_widget_ui_state";
   const API_TIMEOUT = 30000;
@@ -11,6 +15,10 @@
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
   const WIDGET_CONTAINER_ID = "cta-widget-container";
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Utilities
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -35,6 +43,10 @@
     if (!limit || text.length <= limit) return text;
     return text.slice(0, limit) + "...";
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Color Parsing & Manipulation
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function parseColor(input) {
     if (!input || typeof input !== "string") return null;
@@ -97,6 +109,10 @@
     const B = normalize(b);
     return 0.2126 * R + 0.7152 * G + 0.0722 * B;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Theme Detection & Application
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function inferThemeFromPage() {
     const body = document.body || document.documentElement;
@@ -204,6 +220,10 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // API & State Management
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
@@ -270,12 +290,6 @@
     } catch { }
   }
 
-  function clearState() {
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-    } catch { }
-  }
-
   async function fetchWithTimeout(url, options = {}, timeout = API_TIMEOUT) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -319,27 +333,26 @@
     return null;
   }
 
+  function formatAuthHeaderValue(value, authType) {
+    const type = authType || "bearer";
+    const trimmed = value.trim();
+    const lower = trimmed.toLowerCase();
+    if (type === "basic") {
+      return lower.startsWith("basic ") ? trimmed : "Basic " + trimmed;
+    }
+    if (type === "none") {
+      return trimmed;
+    }
+    return lower.startsWith("bearer ") ? trimmed : "Bearer " + trimmed;
+  }
+
   function buildHeaders(headerConfig) {
     const headers = {};
     for (const [headerName, config] of Object.entries(headerConfig)) {
       const value = extractHeaderValue(config.source, config.key);
-      if (value) {
-        const isAuth = headerName.toLowerCase() === "authorization";
-        if (isAuth) {
-          const type = config.authType || "bearer";
-          const trimmed = value.trim();
-          const lower = trimmed.toLowerCase();
-          if (type === "basic") {
-            headers[headerName] = lower.startsWith("basic ") ? trimmed : "Basic " + trimmed;
-          } else if (type === "none") {
-            headers[headerName] = trimmed;
-          } else {
-            headers[headerName] = lower.startsWith("bearer ") ? trimmed : "Bearer " + trimmed;
-          }
-        } else {
-          headers[headerName] = value;
-        }
-      }
+      if (!value) continue;
+      const isAuth = headerName.toLowerCase() === "authorization";
+      headers[headerName] = isAuth ? formatAuthHeaderValue(value, config.authType) : value;
     }
     return headers;
   }
@@ -359,6 +372,10 @@
     return normalized === "frontend_actions" ? "frontend" : normalized;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOM Inspection & Element Discovery
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function cssEscape(value) {
     if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
       return CSS.escape(String(value));
@@ -375,7 +392,23 @@
     }
   }
 
-  const INTERACTIVE_SELECTOR = "button, a[href], input, select, textarea, [role=\"button\"], [role=\"link\"], [role=\"checkbox\"], [role=\"menuitem\"], [role=\"tab\"], [role=\"option\"], [role=\"switch\"], [contenteditable=\"true\"], [tabindex]:not([tabindex=\"-1\"]), [onclick]";
+  const INTERACTIVE_SELECTOR = [
+    "button",
+    "a[href]",
+    "input",
+    "select",
+    "textarea",
+    '[role="button"]',
+    '[role="link"]',
+    '[role="checkbox"]',
+    '[role="menuitem"]',
+    '[role="tab"]',
+    '[role="option"]',
+    '[role="switch"]',
+    '[contenteditable="true"]',
+    '[tabindex]:not([tabindex="-1"])',
+    "[onclick]",
+  ].join(", ");
 
   function isRectInViewport(rect, margin) {
     const m = typeof margin === "number" ? margin : 0;
@@ -496,6 +529,15 @@
     return candidates;
   }
 
+  function getCheckedState(el) {
+    if (typeof el.checked === "boolean") return el.checked;
+    if (!el.getAttribute) return null;
+    const ariaChecked = el.getAttribute("aria-checked");
+    if (ariaChecked === "true") return true;
+    if (ariaChecked === "false") return false;
+    return null;
+  }
+
   function getElementDescriptor(el, includeRect) {
     const tag = el.tagName ? el.tagName.toLowerCase() : "";
     const rect = el.getBoundingClientRect();
@@ -509,14 +551,7 @@
     const id = el.id || "";
     const disabled = Boolean(el.disabled) || (el.getAttribute && el.getAttribute("aria-disabled") === "true");
     const required = Boolean(el.required);
-    let checked = null;
-    if (typeof el.checked === "boolean") {
-      checked = el.checked;
-    } else if (el.getAttribute && el.getAttribute("aria-checked") === "true") {
-      checked = true;
-    } else if (el.getAttribute && el.getAttribute("aria-checked") === "false") {
-      checked = false;
-    }
+    const checked = getCheckedState(el);
     const selectors = getSelectorCandidates(el);
     const descriptor = {
       selector: selectors[0] || "",
@@ -568,34 +603,27 @@
     return score;
   }
 
+  const SCOPE_SELECTORS = {
+    modal: '[role="dialog"], [aria-modal="true"], .modal, .dialog',
+    dialog: '[role="dialog"], [aria-modal="true"], .modal, .dialog',
+    header: "header",
+    footer: "footer",
+    nav: "nav",
+    navigation: "nav",
+    main: "main",
+  };
+
   function resolveScopeRoot(scope) {
     if (!scope) return document;
     const trimmed = String(scope).trim();
     if (!trimmed) return document;
     const lower = trimmed.toLowerCase();
-    const doc = document;
-    if (lower === "modal" || lower === "dialog") {
-      const modal = doc.querySelector('[role="dialog"], [aria-modal="true"], .modal, .dialog');
-      if (modal) return modal;
+    const scopeSelector = SCOPE_SELECTORS[lower];
+    if (scopeSelector) {
+      const el = document.querySelector(scopeSelector);
+      if (el) return el;
     }
-    if (lower === "header") {
-      const header = doc.querySelector("header");
-      if (header) return header;
-    }
-    if (lower === "footer") {
-      const footer = doc.querySelector("footer");
-      if (footer) return footer;
-    }
-    if (lower === "nav" || lower === "navigation") {
-      const nav = doc.querySelector("nav");
-      if (nav) return nav;
-    }
-    if (lower === "main") {
-      const main = doc.querySelector("main");
-      if (main) return main;
-    }
-    const direct = safeQuerySelector(doc, trimmed);
-    return direct || document;
+    return safeQuerySelector(document, trimmed) || document;
   }
 
   function collectHeadings(root) {
@@ -683,6 +711,10 @@
     return selected.map(({ _score, _rank, ...rest }) => rest);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Frontend Context Collection
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function collectFrontendContext(request) {
     const goal = typeof request.goal === "string" ? request.goal : "";
     const scope = typeof request.scope === "string" ? request.scope : null;
@@ -712,6 +744,10 @@
       activeElement: active,
     };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Element Highlight Overlay
+  // ═══════════════════════════════════════════════════════════════════════════
 
   let highlightEl = null;
   let highlightTimer = null;
@@ -837,6 +873,10 @@
     return false;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Synthetic Event Dispatch & Input Manipulation
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function getActionPoint(el, action) {
     const rect = el.getBoundingClientRect();
     let x = rect.width / 2;
@@ -936,6 +976,43 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Action Description & Labeling
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const ACTION_LABELS = {
+    click: "Click",
+    tap: "Tap",
+    double_click: "Double click",
+    dblclick: "Double click",
+    doubleclick: "Double click",
+    right_click: "Right click",
+    contextmenu: "Right click",
+    hover: "Hover",
+    focus: "Focus",
+    blur: "Remove focus",
+    type: "Type",
+    input: "Type",
+    set_value: "Type",
+    clear: "Clear",
+    press: "Press",
+    select: "Select",
+    check: "Check",
+    uncheck: "Uncheck",
+    scroll: "Scroll",
+    scroll_into_view: "Scroll to",
+    scrollintoview: "Scroll to",
+    wait: "Wait",
+    wait_for: "Wait for",
+    waitfor: "Wait for",
+    wait_for_text: "Wait for",
+    waitfortext: "Wait for",
+    navigate: "Open page",
+    drag: "Drag",
+    drag_and_drop: "Drag",
+    dispatch: "Trigger",
+  };
+
   function normalizeAction(action) {
     if (!action || typeof action !== "object") {
       return { action: "" };
@@ -946,39 +1023,7 @@
 
   function getActionLabel(name) {
     const normalized = String(name || "").trim().toLowerCase();
-    const labels = {
-      click: "Click",
-      tap: "Tap",
-      double_click: "Double click",
-      dblclick: "Double click",
-      doubleclick: "Double click",
-      right_click: "Right click",
-      contextmenu: "Right click",
-      hover: "Hover",
-      focus: "Focus",
-      blur: "Remove focus",
-      type: "Type",
-      input: "Type",
-      set_value: "Type",
-      clear: "Clear",
-      press: "Press",
-      select: "Select",
-      check: "Check",
-      uncheck: "Uncheck",
-      scroll: "Scroll",
-      scroll_into_view: "Scroll to",
-      scrollintoview: "Scroll to",
-      wait: "Wait",
-      wait_for: "Wait for",
-      waitfor: "Wait for",
-      wait_for_text: "Wait for",
-      waitfortext: "Wait for",
-      navigate: "Open page",
-      drag: "Drag",
-      drag_and_drop: "Drag",
-      dispatch: "Trigger",
-    };
-    if (labels[normalized]) return labels[normalized];
+    if (ACTION_LABELS[normalized]) return ACTION_LABELS[normalized];
     if (!normalized) return "Action";
     const spaced = normalized.replace(/_/g, " ");
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
@@ -1038,6 +1083,10 @@
     const target = formatActionTarget(action);
     return target ? `${label} ${target}` : label;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Frontend Action Execution
+  // ═══════════════════════════════════════════════════════════════════════════
 
   async function runFrontendAction(action) {
     const name = action.action;
@@ -1232,6 +1281,10 @@
     throw new Error("Unknown action");
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Tool Call Execution (Endpoint, Frontend Context, Frontend Actions)
+  // ═══════════════════════════════════════════════════════════════════════════
+
   async function executeEndpointToolCall(toolCall, baseUrl, headerConfig) {
     const sessionHeaders = buildHeaders(headerConfig);
     const path = substitutePath(toolCall.path, toolCall.params || {});
@@ -1409,6 +1462,10 @@
     return { id: toolCall.id, statusCode: 400, consumeAction: false, body: null, error: "Unknown tool type" };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // External Script Loading & Markdown Rendering
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function loadExternalScript(src, integrity) {
     return new Promise((resolve, reject) => {
       const existing = document.querySelector(`script[data-cta-src="${src}"]`) || document.querySelector(`script[src="${src}"]`);
@@ -1479,6 +1536,10 @@
       return safe.replace(/\n/g, "<br>");
     };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Widget Styles (Shadow DOM)
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function createStyles() {
     const style = document.createElement("style");
@@ -2576,8 +2637,15 @@
     return style;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Widget Creation & Lifecycle
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function createWidget(config, initialConfigData) {
     const apiUrl = resolveApiUrl();
+
+    // ─── State ───────────────────────────────────────────────────────────────
+
     const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
     if (!state.voice) state.voice = {};
     if (!state.auth) state.auth = {};
@@ -2629,6 +2697,8 @@
     let frontendActivity = null;
     let frontendActivityTimer = null;
 
+    // ─── DOM Construction ──────────────────────────────────────────────────
+
     const root = document.createElement("div");
     let widgetHidden = false;
 
@@ -2657,9 +2727,9 @@
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
-	          <div class="cta-widget-avatar">
-	            ${DEFAULT_WIDGET_ICON}
-	          </div>
+          <div class="cta-widget-avatar">
+            ${DEFAULT_WIDGET_ICON}
+          </div>
           <div>
             <p class="cta-widget-title"></p>
             <p class="cta-widget-subtitle"></p>
@@ -2695,11 +2765,11 @@
                 </svg>
                 <span class="cta-mic-dot"></span>
               </button>
-      <button class="cta-widget-mic-select" aria-label="Select microphone" title="Select microphone">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 15l6-6 6 6"/>
-        </svg>
-      </button>
+              <button class="cta-widget-mic-select" aria-label="Select microphone" title="Select microphone">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 15l6-6 6 6"/>
+                </svg>
+              </button>
             </div>
             <div class="cta-widget-mic-menu"></div>
           </div>
@@ -2767,6 +2837,8 @@
     const securityBackEl = panel.querySelector(".cta-security-back");
     const renderMarkdown = createMarkdownRenderer(() => renderMessages());
 
+    // ─── UI Sync Helpers ────────────────────────────────────────────────────
+
     function getToggleAriaLabel() {
       return hasUnread ? `Open ${widgetTitle} (new message)` : `Open ${widgetTitle}`;
     }
@@ -2809,6 +2881,8 @@
       renderMessages();
     }
 
+    // ─── Frontend Activity Tracking ──────────────────────────────────────────
+
     function setFrontendActivity(activity) {
       frontendActivity = activity;
       if (!activity && frontendActivityTimer) {
@@ -2837,6 +2911,8 @@
       frontendActivity = null;
       renderMessages();
     }
+
+    // ─── Launcher Positioning & Drag ─────────────────────────────────────────
 
     function getViewportHeight() {
       if (window.visualViewport && typeof window.visualViewport.height === "number") {
@@ -2924,13 +3000,15 @@
       if (isOpen) togglePanel();
     });
 
+    // ─── Message Rendering ──────────────────────────────────────────────────
+
     function renderMessages() {
       if (state.messages.length === 0 && !frontendActivity) {
         messagesEl.innerHTML = `
           <div class="cta-widget-empty">
-	            <div class="cta-widget-empty-icon">
-	              ${getIconMarkup()}
-	            </div>
+            <div class="cta-widget-empty-icon">
+              ${getIconMarkup()}
+            </div>
             <h3>${escapeHtml(widgetEmptyTitle)}</h3>
             <p>${escapeHtml(widgetEmptyDescription)}</p>
           </div>
@@ -3001,6 +3079,8 @@
       updateMicState();
       renderMessages();
     }
+
+    // ─── Voice Input & Recording ─────────────────────────────────────────────
 
     function persistVoiceState() {
       state.voice = {
@@ -3263,6 +3343,12 @@
       inputEl.selectionEnd = inputEl.value.length;
     }
 
+    // ─── Configuration & Authentication ──────────────────────────────────────
+
+    function getConfigString(data, key) {
+      return typeof data[key] === "string" && data[key].trim() ? data[key].trim() : null;
+    }
+
     function applyRemoteConfig(data) {
       if (widgetHidden) return;
       if (!data || typeof data !== "object") return;
@@ -3272,22 +3358,12 @@
       }
       headerConfig = data.headers || {};
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
-      if (typeof data.widgetTitle === "string" && data.widgetTitle.trim()) {
-        widgetTitle = data.widgetTitle.trim();
-      }
-      if (typeof data.widgetSubtitle === "string" && data.widgetSubtitle.trim()) {
-        widgetSubtitle = data.widgetSubtitle.trim();
-      }
-      widgetIconUrl = typeof data.widgetIconUrl === "string" && data.widgetIconUrl.trim() ? data.widgetIconUrl.trim() : null;
-      if (typeof data.widgetEmptyTitle === "string" && data.widgetEmptyTitle.trim()) {
-        widgetEmptyTitle = data.widgetEmptyTitle.trim();
-      }
-      if (typeof data.widgetEmptyDescription === "string" && data.widgetEmptyDescription.trim()) {
-        widgetEmptyDescription = data.widgetEmptyDescription.trim();
-      }
-      if (typeof data.widgetInputPlaceholder === "string" && data.widgetInputPlaceholder.trim()) {
-        widgetInputPlaceholder = data.widgetInputPlaceholder.trim();
-      }
+      widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
+      widgetSubtitle = getConfigString(data, "widgetSubtitle") || widgetSubtitle;
+      widgetIconUrl = getConfigString(data, "widgetIconUrl");
+      widgetEmptyTitle = getConfigString(data, "widgetEmptyTitle") || widgetEmptyTitle;
+      widgetEmptyDescription = getConfigString(data, "widgetEmptyDescription") || widgetEmptyDescription;
+      widgetInputPlaceholder = getConfigString(data, "widgetInputPlaceholder") || widgetInputPlaceholder;
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;
       }
@@ -3351,6 +3427,8 @@
       }
       return response;
     }
+
+    // ─── Chat & Messaging ───────────────────────────────────────────────────
 
     function setUnread(nextHasUnread) {
       hasUnread = Boolean(nextHasUnread);
@@ -3469,6 +3547,8 @@
       }
     }
 
+    // ─── Panel Management ──────────────────────────────────────────────────
+
     function openPanel() {
       if (isOpen) return;
       isOpen = true;
@@ -3517,6 +3597,8 @@
       renderMessages();
     }
 
+    // ─── Event Binding ──────────────────────────────────────────────────────
+
     toggle.addEventListener("click", async () => {
       if (ignoreToggleClick || widgetHidden) return;
       if (!isOpen) {
@@ -3555,7 +3637,7 @@
       }
       closePanel({ restoreLauncherFocus: false });
     });
-    micEl.addEventListener("click", (event) => {
+    micEl.addEventListener("click", () => {
       if (isRecording) {
         stopRecording();
       } else {
@@ -3612,6 +3694,10 @@
 
     return root;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Initialization
+  // ═══════════════════════════════════════════════════════════════════════════
 
   async function init() {
     try {
