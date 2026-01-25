@@ -19,8 +19,8 @@ const highlights = [
   },
   {
     icon: Sparkles,
-    title: "Bend the interface",
-    description: "Turn intent into authenticated API actions."
+    title: "Jarvis for your dashboard",
+    description: "Turn intent into authenticated UI and API actions."
   }
 ] as const
 
@@ -37,11 +37,11 @@ export const SignedOutCard = () => (
         <div className="hidden w-full max-w-xl flex-col gap-6 md:flex">
           <div className="space-y-3">
             <Badge variant="secondary" className="w-fit">
-              Bend the Interface.
+              Jarvis for your dashboard.
             </Badge>
             <h1 className="text-3xl font-semibold tracking-tight">Warpy</h1>
             <p className="max-w-md text-muted-foreground">
-              Embeddable agent widget for dashboards. Turn UI intent into authenticated API actions.
+              Embeddable agent widget for dashboards. Turn intent into authenticated UI and API actions.
             </p>
           </div>
           <div className="grid gap-4">
@@ -64,8 +64,8 @@ export const SignedOutCard = () => (
             <div className="space-y-2">
               <h1 className="text-xl font-semibold md:hidden">Warpy</h1>
               <h1 className="hidden text-xl font-semibold md:block">Sign in</h1>
-              <p className="text-sm text-muted-foreground md:hidden">Bend the Interface.</p>
-              <p className="hidden text-sm text-muted-foreground md:block">Continue to your dashboard control plane.</p>
+              <p className="text-sm text-muted-foreground md:hidden">Jarvis for your dashboard.</p>
+              <p className="hidden text-sm text-muted-foreground md:block">Continue to your Warpy dashboard.</p>
             </div>
             <ThemeToggle />
           </div>

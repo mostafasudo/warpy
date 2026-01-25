@@ -1,6 +1,6 @@
 # Warpy.ai: Brand & Product Strategy
 
-> "Bend the Interface."
+> "Jarvis for your dashboard."
 
 ## 1. Branding Guidelines
 
@@ -36,7 +36,7 @@
 
 ### Primary Slogan:
 
-> "Bend the Interface."
+> "Jarvis for your dashboard."
 
 ### Secondary Taglines:
 
@@ -45,8 +45,6 @@
 - "Your Dashboard, Unlocked."
 
 - "From Read-Only to Real-Time."
-
-- "npm install intelligence" (Developer focused)
 
 ## 3. Core Product Design Guidelines
 
