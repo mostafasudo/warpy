@@ -83,6 +83,7 @@ class ToolResultPayload(BaseModel):
     status_code: int = Field(alias="statusCode")
     body: Any = None
     error: str | None = None
+    consume_action: bool = Field(default=True, alias="consumeAction")
 
 
 class WidgetMessagePayload(BaseModel):

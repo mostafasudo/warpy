@@ -61,6 +61,7 @@ def test_record_widget_tool_results_records_and_sanitizes():
             tool_calls=[
                 ToolCallForLog(
                     id="tc_1",
+                    tool_type="backend",
                     endpoint_id=endpoint.id,
                     params={"id": "123"},
                     query={},
@@ -106,7 +107,7 @@ def test_record_widget_tool_results_is_idempotent():
 
         args = dict(
             tool_results=[ToolResultPayload(id="tc_1", statusCode=200, body={"ok": True})],
-            tool_calls=[ToolCallForLog(id="tc_1", endpoint_id=endpoint.id, params={}, query={}, body={})],
+            tool_calls=[ToolCallForLog(id="tc_1", tool_type="backend", endpoint_id=endpoint.id, params={}, query={}, body={})],
         )
 
         record_widget_tool_results(session, user_id, conversation.id, **args)

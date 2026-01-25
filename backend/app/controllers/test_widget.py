@@ -118,8 +118,33 @@ def test_widget_hides_when_actions_exhausted(client: TestClient):
     assert response.json()["done"] is True
 
 
-def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestClient):
+def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
+    from app.schemas.widget import ToolCallPayload
+
+    tool_call = ToolCallPayload(
+        id="tc_1",
+        endpoint_id=uuid4(),
+        name="get_item",
+        tool_type="backend",
+        method="GET",
+        path="/items/{id}",
+        params={"id": "1"},
+        query={},
+        body={},
+        headers={}
+    )
+
+    class FakeExecutorWithToolCalls:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+            if tool_results:
+                return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolCalls)
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
@@ -134,6 +159,8 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
 
     first = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
     convo_id = first.json()["conversationId"]
+    assert first.json()["done"] is False
+    assert len(first.json()["toolCalls"]) == 1
 
     second = client.post("/widget/chat", json={
         "agentId": agent_id,
@@ -145,8 +172,33 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
     assert second.json()["actionsRemaining"] == 0
 
 
-def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient):
+def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
+    from app.schemas.widget import ToolCallPayload
+
+    tool_call = ToolCallPayload(
+        id="tc_1",
+        endpoint_id=uuid4(),
+        name="get_item",
+        tool_type="backend",
+        method="GET",
+        path="/items/{id}",
+        params={"id": "1"},
+        query={},
+        body={},
+        headers={}
+    )
+
+    class FakeExecutorWithToolCalls:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+            if tool_results:
+                return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolCalls)
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
@@ -161,6 +213,8 @@ def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient
 
     first = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
     convo_id = first.json()["conversationId"]
+    assert first.json()["done"] is False
+    assert len(first.json()["toolCalls"]) == 1
 
     second = client.post("/widget/chat", json={
         "agentId": agent_id,
@@ -231,7 +285,7 @@ def test_widget_chat_returns_tool_calls(client: TestClient, monkeypatch: pytest.
 
     tool_call = ToolCallPayload(
         id="tc_1",
-        endpointId=uuid4(),
+        endpoint_id=uuid4(),
         name="get_user",
         method="GET",
         path="/users/{id}",

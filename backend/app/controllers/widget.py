@@ -215,6 +215,7 @@ async def widget_chat(
             billable_ids = [
                 result.id for result in payload.tool_results
                 if tool_call_type_map.get(result.id) in ("backend", "frontend")
+                and result.consume_action
             ]
 
             consume_result = consume_actions_for_tool_results(
