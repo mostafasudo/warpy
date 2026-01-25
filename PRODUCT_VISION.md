@@ -97,11 +97,7 @@ endpoints:
 - Sales stack:
   - LinkedIn
   - Amplemarket
-
-## Business model
-
-- TODO
-
+  
 ## Valuable resources
 
 - Kapa.ai offers a customizable widget for websites that answers technical documentation questions. Their onboarding process is similar—they ingest all your technical docs (API docs in our case). They also let you style the widget with custom hex codes to match your design. Companies like Docker, Reddit, Netlify, and OpenAI use it.
