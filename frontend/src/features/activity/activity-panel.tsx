@@ -4,6 +4,7 @@ import type { DateRange } from "react-day-picker"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Badge } from "@/components/ui/badge"
+import { MarkdownContent } from "@/components/ui/markdown-content"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -205,7 +206,7 @@ const ConversationDetailDialog = ({
                         </p>
                         <p className="text-xs text-muted-foreground">{toDisplayTime(message.createdAt)}</p>
                       </div>
-                      <p className="mt-2 whitespace-pre-wrap break-words">{message.content}</p>
+                      <MarkdownContent className="mt-2">{message.content}</MarkdownContent>
                     </div>
                   ))}
                   {!messages.length ? (

@@ -1,5 +1,15 @@
 require("@testing-library/jest-dom")
 
+jest.mock("react-markdown", () => {
+  const React = require("react")
+  return {
+    __esModule: true,
+    default: function Markdown({ children }) {
+      return React.createElement("div", { "data-testid": "markdown-content" }, children)
+    }
+  }
+})
+
 process.env.VITE_CLERK_PUBLISHABLE_KEY = process.env.VITE_CLERK_PUBLISHABLE_KEY ?? "test-pk"
 process.env.VITE_API_URL = process.env.VITE_API_URL ?? "http://localhost:8000"
 process.env.VITE_API_TIMEOUT_MS = process.env.VITE_API_TIMEOUT_MS ?? "5000"
