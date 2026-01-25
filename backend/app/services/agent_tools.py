@@ -123,9 +123,8 @@ class FrontendActionInput(BaseModel):
 
 
 class FrontendActionsInput(BaseModel):
-    goal: str | None = Field(
-        default=None,
-        description="Optional short outcome label for the action sequence (e.g., 'Apply date filter')."
+    goal: str = Field(
+        description="Short outcome label for the action sequence (e.g., 'Apply date filter', 'Create new feature')."
     )
     actions: list[FrontendActionInput] = Field(
         default_factory=list,

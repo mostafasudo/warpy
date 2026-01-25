@@ -58,16 +58,30 @@ class ActivityActionRequest(BaseModel):
     body: dict[str, Any] = {}
 
 
+class ActivityFrontendAction(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    action: str
+    selector: str | None = None
+    status: str  # "ok" or "error"
+    error: str | None = None
+    duration_ms: int | None = Field(default=None, alias="durationMs")
+
+
 class ActivityActionEvent(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: UUID
     created_at: datetime = Field(alias="createdAt")
-    feature: str
-    action: str
+    tool_type: str = Field(default="backend", alias="toolType")
+    feature: str | None = None
+    action: str | None = None
+    request: ActivityActionRequest | None = None
+    frontend_goal: str | None = Field(default=None, alias="frontendGoal")
+    frontend_url: str | None = Field(default=None, alias="frontendUrl")
+    frontend_actions: list[ActivityFrontendAction] | None = Field(default=None, alias="frontendActions")
     status_code: int | None = Field(default=None, alias="statusCode")
     error: str | None = None
-    request: ActivityActionRequest
 
 
 class ActivityConversationDetailResponse(BaseModel):

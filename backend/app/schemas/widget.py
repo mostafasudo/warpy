@@ -62,7 +62,7 @@ class ToolCallPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str
-    tool_type: str = Field(default="endpoint", alias="type")
+    tool_type: str = Field(default="backend", alias="type")
     name: str
     endpoint_id: UUID | None = Field(default=None, alias="endpointId")
     method: str | None = None
@@ -81,7 +81,6 @@ class ToolResultPayload(BaseModel):
 
     id: str
     status_code: int = Field(alias="statusCode")
-    consume_action: bool = Field(default=True, alias="consumeAction")
     body: Any = None
     error: str | None = None
 

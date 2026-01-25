@@ -276,12 +276,15 @@ def get_activity_conversation_detail(
         next_action_cursor = _encode_cursor(actions[-1].created_at, actions[-1].id)
     actions.reverse()
 
-    endpoint_ids = list({action.endpoint_id for action in actions})
-    endpoints = session.scalars(
-        select(Endpoint)
-        .where(Endpoint.user_id == user_id, Endpoint.id.in_(endpoint_ids))
-        .options(selectinload(Endpoint.feature))
-    ).all()
-    endpoint_map = {endpoint.id: endpoint for endpoint in endpoints}
+    endpoint_ids = list({action.endpoint_id for action in actions if action.endpoint_id is not None})
+    if endpoint_ids:
+        endpoints = session.scalars(
+            select(Endpoint)
+            .where(Endpoint.user_id == user_id, Endpoint.id.in_(endpoint_ids))
+            .options(selectinload(Endpoint.feature))
+        ).all()
+        endpoint_map = {endpoint.id: endpoint for endpoint in endpoints}
+    else:
+        endpoint_map = {}
 
     return conversation, messages, next_message_cursor, actions, next_action_cursor, endpoint_map

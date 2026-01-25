@@ -366,9 +366,9 @@
   }
 
   function resolveToolType(toolCall) {
-    if (!toolCall) return "endpoint";
+    if (!toolCall) return "backend";
     const raw = toolCall.type || toolCall.toolType;
-    const normalized = raw ? String(raw) : "endpoint";
+    const normalized = raw ? String(raw) : "backend";
     return normalized === "frontend_actions" ? "frontend" : normalized;
   }
 
@@ -1320,9 +1320,9 @@
       } else {
         body = await response.text();
       }
-      return { id: toolCall.id, statusCode: response.status, consumeAction: true, body };
+      return { id: toolCall.id, statusCode: response.status, body };
     } catch (error) {
-      return { id: toolCall.id, statusCode: 0, consumeAction: true, body: null, error: error.message || "Request failed" };
+      return { id: toolCall.id, statusCode: 0, body: null, error: error.message || "Request failed" };
     }
   }
 
@@ -1340,7 +1340,7 @@
           ui.scheduleClear(900);
         }
       }
-      return { id: toolCall.id, statusCode: 200, consumeAction: false, body: context };
+      return { id: toolCall.id, statusCode: 200, body: context };
     } catch (error) {
       if (ui && typeof ui.setActivity === "function") {
         ui.setActivity({ title, status: "error", steps: [] });
@@ -1348,7 +1348,7 @@
           ui.scheduleClear(1400);
         }
       }
-      return { id: toolCall.id, statusCode: 500, consumeAction: false, body: null, error: error.message || "Frontend context failed" };
+      return { id: toolCall.id, statusCode: 500, body: null, error: error.message || "Frontend context failed" };
     }
   }
 
@@ -1359,13 +1359,11 @@
       return {
         id: toolCall.id,
         statusCode: 400,
-        consumeAction: false,
         body: { kind: "frontend_actions", goal, results: [], error: "No actions provided" },
       };
     }
     const results = [];
     let statusCode = 200;
-    let executedAny = false;
     let activity = null;
     if (actions.length && ui && typeof ui.setActivity === "function") {
       activity = {
@@ -1390,7 +1388,6 @@
       const startedAt = Date.now();
       try {
         await runFrontendAction(normalized);
-        executedAny = true;
         results.push({
           index: i,
           action: normalized.action,
@@ -1437,7 +1434,6 @@
     return {
       id: toolCall.id,
       statusCode,
-      consumeAction: executedAny,
       body: {
         kind: "frontend_actions",
         goal,
@@ -1450,7 +1446,7 @@
 
   async function executeToolCall(toolCall, baseUrl, headerConfig, ui) {
     const type = resolveToolType(toolCall);
-    if (type === "endpoint") {
+    if (type === "backend") {
       return executeEndpointToolCall(toolCall, baseUrl, headerConfig);
     }
     if (type === "frontend_context") {
@@ -1459,7 +1455,7 @@
     if (type === "frontend") {
       return executeFrontendActions(toolCall, ui);
     }
-    return { id: toolCall.id, statusCode: 400, consumeAction: false, body: null, error: "Unknown tool type" };
+    return { id: toolCall.id, statusCode: 400, body: null, error: "Unknown tool type" };
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

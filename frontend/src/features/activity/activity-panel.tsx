@@ -252,15 +252,24 @@ const isRecordEmpty = (value: Record<string, unknown> | undefined | null) =>
   !value || Object.keys(value).length === 0
 
 const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
+  const isFrontend = action.toolType === "frontend"
   const statusVariant = action.statusCode && action.statusCode >= 400 ? "destructive" : "secondary"
   const hasError = Boolean(action.error) || Boolean(action.statusCode && action.statusCode >= 400)
-  const label = action.feature ? `${action.action} · ${action.feature}` : action.action
+
+  const label = isFrontend
+    ? `Frontend · ${action.frontendGoal || "Page interaction"}`
+    : action.feature
+      ? `${action.action} · ${action.feature}`
+      : action.action || "Action"
 
   const request = action.request ?? { params: {}, query: {}, body: {} }
   const hasRequest =
-    !isRecordEmpty(request.params as Record<string, unknown>) ||
-    !isRecordEmpty(request.query as Record<string, unknown>) ||
-    !isRecordEmpty(request.body as Record<string, unknown>)
+    !isFrontend &&
+    (!isRecordEmpty(request.params as Record<string, unknown>) ||
+      !isRecordEmpty(request.query as Record<string, unknown>) ||
+      !isRecordEmpty(request.body as Record<string, unknown>))
+
+  const hasFrontendActions = isFrontend && action.frontendActions && action.frontendActions.length > 0
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-4">
@@ -268,6 +277,11 @@ const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
         <div>
           <p className="text-sm font-semibold">{label}</p>
           <p className="mt-1 text-xs text-muted-foreground">{toDisplayTime(action.createdAt)}</p>
+          {isFrontend && action.frontendUrl ? (
+            <p className="mt-0.5 text-xs text-muted-foreground/70 truncate max-w-[200px]" title={action.frontendUrl}>
+              {action.frontendUrl}
+            </p>
+          ) : null}
         </div>
         <Badge variant={statusVariant}>
           {action.statusCode ? action.statusCode : hasError ? "Failed" : "Success"}
@@ -276,6 +290,34 @@ const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
 
       {action.error ? (
         <p className="mt-3 text-sm text-muted-foreground">{action.error}</p>
+      ) : null}
+
+      {hasFrontendActions ? (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" className="mt-2 w-full justify-between" data-testid="action-details">
+              View {action.frontendActions?.length} action{action.frontendActions?.length === 1 ? "" : "s"}
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2 pt-2">
+            {action.frontendActions?.map((fa, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <Badge variant={fa.status === "ok" ? "secondary" : "destructive"} className="text-xs">
+                  {fa.action}
+                </Badge>
+                {fa.selector ? (
+                  <span className="text-muted-foreground truncate max-w-[180px]" title={fa.selector}>
+                    {fa.selector}
+                  </span>
+                ) : null}
+                {fa.error ? (
+                  <span className="text-destructive truncate">{fa.error}</span>
+                ) : null}
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
 
       {hasRequest ? (

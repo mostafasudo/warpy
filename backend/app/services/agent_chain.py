@@ -406,7 +406,7 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                         filtered = {k: v for k, v in serialized.items() if v is not None}
                         pending_tool_calls.append(ToolCallPayload(
                             id=tool_call["id"],
-                            type="endpoint",
+                            type="backend",
                             endpointId=endpoint.id,
                             name=tool_name,
                             method=endpoint.method.value,

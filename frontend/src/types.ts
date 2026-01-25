@@ -215,14 +215,26 @@ export type ActivityActionRequest = {
   body: Record<string, unknown>;
 };
 
+export type ActivityFrontendAction = {
+  action: string;
+  selector: string | null;
+  status: "ok" | "error";
+  error?: string | null;
+  durationMs?: number | null;
+};
+
 export type ActivityActionEvent = {
   id: string;
   createdAt: string;
-  feature: string;
-  action: string;
+  toolType: "backend" | "frontend";
+  feature: string | null;
+  action: string | null;
+  request: ActivityActionRequest | null;
+  frontendGoal: string | null;
+  frontendUrl: string | null;
+  frontendActions: ActivityFrontendAction[] | null;
   statusCode: number | null;
   error: string | null;
-  request: ActivityActionRequest;
 };
 
 export type ActivityConversationDetailResponse = {

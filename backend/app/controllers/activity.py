@@ -13,6 +13,7 @@ from ..schemas.activity import (
     ActivityConversationDetailResponse,
     ActivityConversationRow,
     ActivityConversationsResponse,
+    ActivityFrontendAction,
     ActivityMessage,
     ActivitySummaryResponse,
     ActivityTopAction,
@@ -27,6 +28,61 @@ from ..services.activity_service import (
 )
 
 router = APIRouter(prefix="/activity", tags=["activity"])
+
+
+def _transform_action_event(action, endpoints: dict) -> ActivityActionEvent:
+    tool_type = getattr(action, "tool_type", "backend") or "backend"
+
+    if tool_type == "frontend":
+        frontend_actions_raw = action.frontend_actions or []
+        frontend_actions = [
+            ActivityFrontendAction(
+                action=fa.get("action", ""),
+                selector=fa.get("selector"),
+                status=fa.get("status", "ok"),
+                error=fa.get("error"),
+                durationMs=fa.get("durationMs"),
+            )
+            for fa in frontend_actions_raw
+            if isinstance(fa, dict)
+        ]
+        return ActivityActionEvent(
+            id=action.id,
+            createdAt=action.created_at,
+            toolType="frontend",
+            feature=None,
+            action=None,
+            request=None,
+            frontendGoal=action.frontend_goal,
+            frontendUrl=action.frontend_url,
+            frontendActions=frontend_actions if frontend_actions else None,
+            statusCode=action.status_code,
+            error=action.error,
+        )
+
+    endpoint = endpoints.get(action.endpoint_id) if action.endpoint_id else None
+    feature_name = ""
+    action_name = ""
+    if endpoint:
+        feature_name = getattr(getattr(endpoint, "feature", None), "name", "") or ""
+        action_name = action_label(endpoint)
+    return ActivityActionEvent(
+        id=action.id,
+        createdAt=action.created_at,
+        toolType="backend",
+        feature=feature_name,
+        action=action_name,
+        request=ActivityActionRequest(
+            params=(action.request or {}).get("params") or {},
+            query=(action.request or {}).get("query") or {},
+            body=(action.request or {}).get("body") or {},
+        ),
+        frontendGoal=None,
+        frontendUrl=None,
+        frontendActions=None,
+        statusCode=action.status_code,
+        error=action.error,
+    )
 
 
 @router.get("/summary", response_model=ActivitySummaryResponse)
@@ -139,19 +195,7 @@ def get_activity_conversation_detail_route(
             ],
             nextMessageCursor=next_message_cursor,
             actions=[
-                ActivityActionEvent(
-                    id=action.id,
-                    createdAt=action.created_at,
-                    feature=(getattr(getattr(endpoints.get(action.endpoint_id), "feature", None), "name", "") or ""),
-                    action=action_label(endpoints[action.endpoint_id]) if action.endpoint_id in endpoints else "",
-                    statusCode=action.status_code,
-                    error=action.error,
-                    request=ActivityActionRequest(
-                        params=(action.request or {}).get("params") or {},
-                        query=(action.request or {}).get("query") or {},
-                        body=(action.request or {}).get("body") or {},
-                    ),
-                )
+                _transform_action_event(action, endpoints)
                 for action in actions
             ],
             nextActionCursor=next_action_cursor,

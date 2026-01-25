@@ -1,6 +1,6 @@
 # Frontend Agent Capability (Widget)
 
-Date: 2026-01-17
+Date: 2026-01-25
 
 ## Overview
 This document describes the frontend action capability added to the Warpy agent, how it works end-to-end, and the key implementation details (backend, widget, UI/UX, and safety/performance). It also includes a brief competitive landscape summary and diagrams.
@@ -9,11 +9,13 @@ This document describes the frontend action capability added to the Warpy agent,
 - Added two always-available agent tools:
   - `frontend_context`: request a focused DOM snapshot only when needed.
   - `frontend`: execute ordered UI actions on the current page.
-- Extended widget tool calls with a `type` discriminator and tool results with `consumeAction` for billing control.
+- Extended widget tool calls with a `type` discriminator (`backend`, `frontend_context`, `frontend`).
+- Backend-controlled billing: the backend determines what actions to bill based on `tool_type`, not client flags.
 - Implemented a client-side action engine that simulates real user interactions (click, type, select, scroll, drag, etc.).
 - Added DOM context collection with relevance scoring and strict size limits.
 - Added UI feedback for page actions (status panel + element highlight).
 - Updated the system prompt to encourage proactive frontend retries and context rescans.
+- Frontend actions now appear in the Activity panel alongside backend actions.
 
 ## High-level flow
 ```mermaid
@@ -29,9 +31,9 @@ sequenceDiagram
   L-->>B: frontend_context(goal="filters")
   B-->>W: toolCalls[type=frontend_context]
   W->>W: Collect DOM subset
-  W->>B: toolResults (frontend_context, consumeAction=false)
+  W->>B: toolResults (frontend_context)
   B->>L: ToolMessage (context)
-  L-->>B: frontend(actions=[...])
+  L-->>B: frontend(goal="Apply filter", actions=[...])
   B-->>W: toolCalls[type=frontend]
   W->>W: Execute actions sequentially (real events)
   W->>B: toolResults (frontend actions)
@@ -44,7 +46,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
   A[User request] --> B[find_actions]
-  B -->|Backend tool found| C[Execute endpoint tool]
+  B -->|Backend tool found| C[Execute backend tool]
   B -->|No match or UI task| D[frontend_context]
   D --> E[LLM plans UI steps]
   E --> F[frontend]
@@ -55,18 +57,18 @@ flowchart TD
 ## Tool contracts
 ### Tool call schema (widget response)
 All tool calls returned to the widget include a `type` discriminator:
-- `endpoint` (existing behavior)
-- `frontend_context`
-- `frontend`
+- `backend` (API endpoint calls)
+- `frontend_context` (DOM snapshot, read-only)
+- `frontend` (UI actions, billable)
 
 Example: frontend context tool call
 ```json
 {
   "id": "call_1",
   "type": "frontend_context",
-    "name": "frontend_context",
-    "goal": "filters date range",
-    "context": {
+  "name": "frontend_context",
+  "goal": "filters date range",
+  "context": {
     "goal": "filters date range",
     "maxElements": 60,
     "selectorHints": ["text=Date range"]
@@ -90,29 +92,28 @@ Example: frontend actions tool call
 ```
 
 ### Tool results (widget -> backend)
-Tool results now include optional `consumeAction` (defaults to true):
+Tool results contain the execution outcome:
 ```json
 {
   "id": "call_2",
   "statusCode": 200,
-  "consumeAction": true,
   "body": {
     "kind": "frontend_actions",
     "goal": "Apply last 30 days filter",
+    "url": "https://example.com/dashboard",
     "results": [
-      { "index": 0, "action": "click", "status": "ok" },
-      { "index": 1, "action": "click", "status": "ok" }
+      { "index": 0, "action": "click", "selector": "[data-testid=filter-button]", "status": "ok", "durationMs": 42 },
+      { "index": 1, "action": "click", "selector": "text=Last 30 days", "status": "ok", "durationMs": 38 }
     ]
   }
 }
 ```
 
-Frontend context results set `consumeAction` to false:
+Frontend context results:
 ```json
 {
   "id": "call_1",
   "statusCode": 200,
-  "consumeAction": false,
   "body": {
     "kind": "frontend_context",
     "goal": "filters date range",
@@ -123,6 +124,17 @@ Frontend context results set `consumeAction` to false:
   }
 }
 ```
+
+## Billing
+Billing is controlled entirely by the backend based on `tool_type`:
+
+| Tool Type | Billable | Reason |
+|-----------|----------|--------|
+| `backend` | Yes | API call executed |
+| `frontend` | Yes | DOM actions performed |
+| `frontend_context` | No | Read-only DOM snapshot |
+
+The backend determines billability by checking the `tool_type` stored in pending state when processing tool results. This prevents clients from bypassing billing.
 
 ## DOM context collection
 The widget generates a small, relevant snapshot instead of sending the full DOM.
@@ -167,16 +179,25 @@ Actions accept:
 - Highlight box around the current target element.
 - Status auto-clears shortly after completion.
 
-## Safety and performance
+## Activity panel
+Frontend actions are recorded and displayed in the Activity panel alongside backend actions:
+- Each frontend action shows the goal, URL, and individual DOM actions performed.
+- Actions are stored with `tool_type="frontend"` in the `conversation_actions` table.
+- The panel displays action status, timing, and any errors.
+
+## Safety and privacy
 - Frontend context is only requested when needed.
 - Context is DOM-only, capped, and scored to limit payload size.
 - Frontend actions are sequential and retryable with rescans.
-- Billing consumption can exclude context-only tool calls via `consumeAction`.
+- Sensitive field sanitization: text typed into password/secret/token fields is redacted (`***`) before storage.
+- The `goal` parameter is required for frontend actions to ensure meaningful activity labels.
 
 ## Key backend updates
 - New tool schemas: `FrontendContextRequest`, `FrontendActionPayload`.
 - `ToolCallPayload` now includes `type`, `goal`, `context`, `actions`.
 - `AgentExecutor` understands `frontend_context` and `frontend` tool calls.
+- `ConversationAction` model extended with `tool_type`, `frontend_goal`, `frontend_url`, `frontend_actions` columns.
+- Backend-controlled billing based on `tool_type` (not client flags).
 
 ## Key widget updates
 - DOM context capture with relevance scoring.
@@ -192,13 +213,3 @@ Actions accept:
 1. https://www.perplexity.ai/enterprise/comet
 2. https://openai.com/index/introducing-chatgpt-atlas/
 3. https://www.anthropic.com/claude-code/
-
-## Files changed (by area)
-Backend:
-- `backend/app/services/agent_tools.py` (new frontend tools)
-- `backend/app/services/agent_chain.py` (prompt + tool handling)
-- `backend/app/schemas/widget.py` (tool schemas + consumeAction)
-- `backend/app/controllers/widget.py` (billing filter for consumeAction)
-
-Widget:
-- `frontend/public/widget/agent.js` (context capture, action engine, UI status, highlight)
