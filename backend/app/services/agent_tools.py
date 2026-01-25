@@ -120,6 +120,25 @@ class FrontendActionInput(BaseModel):
         alias="continueOnError",
         description="If true, keep executing later actions after a failure; otherwise stop at first error."
     )
+    retry_count: int = Field(
+        default=0,
+        alias="retryCount",
+        ge=0,
+        le=3,
+        description="Number of retry attempts for transient failures (0-3); uses exponential backoff."
+    )
+    retry_delay_ms: int = Field(
+        default=500,
+        alias="retryDelayMs",
+        ge=100,
+        le=2000,
+        description="Base delay in milliseconds between retries (100-2000); doubles with each attempt."
+    )
+    stability_ms: int | None = Field(
+        default=None,
+        alias="stabilityMs",
+        description="For wait_for_stable: milliseconds of DOM stability required before proceeding (default 300)."
+    )
 
 
 class FrontendActionsInput(BaseModel):

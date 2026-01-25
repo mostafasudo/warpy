@@ -38,6 +38,33 @@
     return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
   }
 
+  // Levenshtein distance for fuzzy matching
+  function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
   function truncateText(value, limit) {
     const text = String(value || "");
     if (!limit || text.length <= limit) return text;
@@ -597,8 +624,23 @@
   function scoreText(haystack, tokens) {
     if (!tokens.length) return 0;
     let score = 0;
+    const words = haystack.split(/\s+/).filter(Boolean);
     for (const token of tokens) {
-      if (haystack.includes(token)) score += 1;
+      // Exact match gets full score
+      if (haystack.includes(token)) {
+        score += 1;
+        continue;
+      }
+      // Fuzzy match: check if any word is within 2 edit distance
+      for (const word of words) {
+        if (word.length >= 3 && token.length >= 3) {
+          const distance = levenshteinDistance(word, token);
+          if (distance <= 2) {
+            score += 0.7; // Partial score for fuzzy match
+            break;
+          }
+        }
+      }
     }
     return score;
   }
@@ -655,8 +697,25 @@
     return safeQuerySelector(base, trimmed);
   }
 
+  // Collect elements including shadow DOM traversal
+  function collectAllInteractiveElements(root, selector) {
+    const elements = Array.from(root.querySelectorAll(selector));
+    // Traverse shadow roots
+    const allElements = root.querySelectorAll("*");
+    for (const el of allElements) {
+      if (el.shadowRoot) {
+        try {
+          elements.push(...collectAllInteractiveElements(el.shadowRoot, selector));
+        } catch {
+          // Shadow root may be closed, skip
+        }
+      }
+    }
+    return elements;
+  }
+
   function collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) {
-    const elements = Array.from(root.querySelectorAll(INTERACTIVE_SELECTOR));
+    const elements = collectAllInteractiveElements(root, INTERACTIVE_SELECTOR);
     const descriptors = [];
     for (const el of elements) {
       if (!isElementVisible(el)) continue;
@@ -715,6 +774,64 @@
   // Frontend Context Collection
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Infer element purpose from attributes and content
+  function inferElementPurpose(el) {
+    const tag = el.tag || "";
+    const type = el.type || "";
+    const text = (el.text || "").toLowerCase();
+    const label = (el.label || "").toLowerCase();
+    const name = (el.name || "").toLowerCase();
+    const id = (el.id || "").toLowerCase();
+    const role = el.role || "";
+
+    // Check common patterns
+    if (type === "submit" || text.includes("submit") || label.includes("submit")) return "submit button";
+    if (type === "search" || name.includes("search") || id.includes("search")) return "search input";
+    if (type === "password" || name.includes("password")) return "password input";
+    if (type === "email" || name.includes("email")) return "email input";
+    if (text.includes("login") || text.includes("sign in")) return "login button";
+    if (text.includes("logout") || text.includes("sign out")) return "logout button";
+    if (text.includes("save") || label.includes("save")) return "save button";
+    if (text.includes("cancel") || label.includes("cancel")) return "cancel button";
+    if (text.includes("close") || label.includes("close")) return "close button";
+    if (text.includes("delete") || text.includes("remove")) return "delete button";
+    if (text.includes("add") || text.includes("create") || text.includes("new")) return "add button";
+    if (text.includes("edit") || text.includes("modify")) return "edit button";
+    if (text.includes("filter") || label.includes("filter")) return "filter control";
+    if (text.includes("sort") || label.includes("sort")) return "sort control";
+    if (role === "checkbox" || type === "checkbox") return "checkbox";
+    if (role === "switch") return "toggle switch";
+    if (tag === "select") return "dropdown";
+    if (tag === "textarea") return "text area";
+    if (tag === "a") return "link";
+    if (tag === "button" || role === "button") return "button";
+    if (tag === "input") return type ? `${type} input` : "input";
+    return tag || "element";
+  }
+
+  // Generate selector recommendations for top elements
+  function generateSelectorRecommendations(elements) {
+    return elements.slice(0, 10).map((el) => {
+      const purpose = inferElementPurpose(el);
+      const recommendation = {
+        purpose,
+        preferred: el.selector || el.selectors?.[0] || "",
+        alternatives: (el.selectors || []).slice(1, 3),
+      };
+      // Add text/label shortcuts if available
+      if (el.text && el.text.length <= 30 && !el.text.includes("\n")) {
+        recommendation.textShortcut = `text=${el.text}`;
+      }
+      if (el.label && el.label.length <= 30) {
+        recommendation.labelShortcut = `label=${el.label}`;
+      }
+      if (el.role) {
+        recommendation.roleShortcut = `role=${el.role}`;
+      }
+      return recommendation;
+    });
+  }
+
   function collectFrontendContext(request) {
     const goal = typeof request.goal === "string" ? request.goal : "";
     const scope = typeof request.scope === "string" ? request.scope : null;
@@ -727,6 +844,7 @@
     const elements = includeDom ? collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) : [];
     const headings = includeDom ? collectHeadings(root) : [];
     const active = document.activeElement && document.activeElement !== document.body ? getElementDescriptor(document.activeElement, false) : null;
+    const suggestedSelectors = includeDom ? generateSelectorRecommendations(elements) : [];
     return {
       kind: "frontend_context",
       goal,
@@ -742,6 +860,7 @@
       elements,
       headings,
       activeElement: active,
+      suggestedSelectors,
     };
   }
 
@@ -1007,6 +1126,8 @@
     waitfor: "Wait for",
     wait_for_text: "Wait for",
     waitfortext: "Wait for",
+    wait_for_stable: "Wait for stable",
+    waitforstable: "Wait for stable",
     navigate: "Open page",
     drag: "Drag",
     drag_and_drop: "Drag",
@@ -1088,6 +1209,99 @@
   // Frontend Action Execution
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // Structured error with code and recovery hint
+  class ActionError extends Error {
+    constructor(message, errorCode, recoveryHint) {
+      super(message);
+      this.name = "ActionError";
+      this.errorCode = errorCode || "UNKNOWN";
+      this.recoveryHint = recoveryHint || null;
+    }
+  }
+
+  function createError(message, errorCode, recoveryHint) {
+    return new ActionError(message, errorCode, recoveryHint);
+  }
+
+  // MutationObserver-based wait for DOM stability
+  async function waitForStable(selector, options) {
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 5000, 400, 20000);
+    const stabilityMs = clampInt(options && options.stabilityMs ? options.stabilityMs : 300, 100, 2000);
+
+    // First wait for element to exist
+    const el = selector ? await waitForElement(selector, { timeoutMs }) : document.body;
+    if (!el) {
+      throw createError("Element not found for stability check", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+    }
+
+    return new Promise((resolve, reject) => {
+      let stabilityTimer = null;
+      let timeoutTimer = null;
+      let observer = null;
+
+      const cleanup = () => {
+        if (stabilityTimer) clearTimeout(stabilityTimer);
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (observer) observer.disconnect();
+      };
+
+      const onStable = () => {
+        cleanup();
+        resolve(el);
+      };
+
+      const resetStabilityTimer = () => {
+        if (stabilityTimer) clearTimeout(stabilityTimer);
+        stabilityTimer = setTimeout(onStable, stabilityMs);
+      };
+
+      observer = new MutationObserver(() => {
+        resetStabilityTimer();
+      });
+
+      observer.observe(el, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true,
+      });
+
+      // Start initial stability timer
+      resetStabilityTimer();
+
+      // Overall timeout
+      timeoutTimer = setTimeout(() => {
+        cleanup();
+        // If we timeout, still resolve - the DOM may be stable enough
+        resolve(el);
+      }, timeoutMs);
+    });
+  }
+
+  // Execute action with retry logic
+  async function executeWithRetry(actionFn, retryCount, retryDelayMs) {
+    let lastError = null;
+    const maxAttempts = Math.max(1, (retryCount || 0) + 1);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await actionFn();
+      } catch (error) {
+        lastError = error;
+        // Don't retry certain errors
+        if (error.errorCode === "SELECTOR_INVALID" || error.errorCode === "ELEMENT_DISABLED") {
+          throw error;
+        }
+        // If not last attempt, wait and retry
+        if (attempt < maxAttempts - 1) {
+          const delay = (retryDelayMs || 500) * Math.pow(2, attempt); // Exponential backoff
+          await sleep(Math.min(delay, 5000));
+        }
+      }
+    }
+    throw lastError;
+  }
+
   async function runFrontendAction(action) {
     const name = action.action;
     if (!name) {
@@ -1101,17 +1315,25 @@
     if (name === "waitfor" || name === "wait_for") {
       const selector = action.selector || (action.text ? `text=${action.text}` : action.value ? String(action.value) : "");
       const el = selector ? await waitForElement(selector, { timeoutMs: action.timeoutMs }) : null;
-      if (!el) throw new Error("Element not found");
+      if (!el) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
       return;
     }
     if (name === "waitfortext" || name === "wait_for_text") {
       const ok = await waitForText(action.text || action.value || "", { timeoutMs: action.timeoutMs });
-      if (!ok) throw new Error("Text not found");
+      if (!ok) throw createError("Text not found", "TIMEOUT", "WAIT_AND_RETRY");
+      return;
+    }
+    if (name === "wait_for_stable" || name === "waitforstable") {
+      const selector = action.selector || action.target || "";
+      await waitForStable(selector || null, {
+        timeoutMs: action.timeoutMs,
+        stabilityMs: action.stabilityMs || 300,
+      });
       return;
     }
     if (name === "navigate") {
       const url = action.url || action.value;
-      if (!url) throw new Error("Missing url");
+      if (!url) throw createError("Missing url", "SELECTOR_INVALID", null);
       window.location.assign(String(url));
       return;
     }
@@ -1122,7 +1344,7 @@
       const y = Number(action.y || action.deltaY || 0);
       if (selector) {
         const target = resolveSelectorTarget(selector, document);
-        if (!target) throw new Error("Element not found");
+        if (!target) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
         target.scrollBy({ left: x, top: y, behavior });
       } else {
         window.scrollBy({ left: x, top: y, behavior });
@@ -1132,7 +1354,7 @@
     if (name === "scroll_into_view" || name === "scrollintoview") {
       const selector = action.selector || action.target || "";
       const target = resolveSelectorTarget(selector, document);
-      if (!target) throw new Error("Element not found");
+      if (!target) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
       target.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
       return;
     }
@@ -1147,8 +1369,12 @@
       el = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
     }
     if (!el) {
-      throw new Error("Element not found");
+      // This is the only hard blocker - we genuinely can't proceed without an element
+      throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
     }
+    // Philosophy: Always try to execute. Don't pre-emptively block based on visibility,
+    // disabled state, or overlay detection. The browser/framework handles these cases,
+    // and we learn from real failures rather than guessing.
     if (action.scroll !== false) {
       try {
         el.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
@@ -1226,7 +1452,7 @@
     if (name === "select") {
       const tag = el.tagName ? el.tagName.toLowerCase() : "";
       if (tag !== "select") {
-        throw new Error("Element is not a select");
+        throw createError("Element is not a select", "SELECTOR_INVALID", "RESCAN_WITH_SCOPE");
       }
       const value = action.value != null ? String(action.value) : action.text != null ? String(action.text) : "";
       const options = Array.from(el.options || []);
@@ -1240,7 +1466,7 @@
       if (!matched && options.length) {
         matched = options[0];
       }
-      if (!matched) throw new Error("Option not found");
+      if (!matched) throw createError("Option not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
       el.value = matched.value;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1259,7 +1485,7 @@
       const toSelector = action.to || action.target;
       const source = fromSelector ? resolveSelectorTarget(fromSelector, document) : el;
       const target = toSelector ? resolveSelectorTarget(toSelector, document) : null;
-      if (!source || !target) throw new Error("Drag target not found");
+      if (!source || !target) throw createError("Drag target not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
       const start = getActionPoint(source, action);
       const end = getActionPoint(target, action);
       dispatchMouseEvent(source, "mousedown", start);
@@ -1278,7 +1504,7 @@
       return;
     }
 
-    throw new Error("Unknown action");
+    throw createError("Unknown action: " + name, "SELECTOR_INVALID", null);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1386,8 +1612,10 @@
         ui.setActivity({ ...activity });
       }
       const startedAt = Date.now();
+      const retryCount = clampInt(normalized.retryCount || 0, 0, 3);
+      const retryDelayMs = clampInt(normalized.retryDelayMs || 500, 100, 2000);
       try {
-        await runFrontendAction(normalized);
+        await executeWithRetry(() => runFrontendAction(normalized), retryCount, retryDelayMs);
         results.push({
           index: i,
           action: normalized.action,
@@ -1400,14 +1628,22 @@
           ui.setActivity({ ...activity });
         }
       } catch (error) {
-        results.push({
+        const result = {
           index: i,
           action: normalized.action,
           selector: normalized.selector || normalized.target || null,
           status: "error",
           error: error.message || "Action failed",
           durationMs: Date.now() - startedAt,
-        });
+        };
+        // Include structured error info if available
+        if (error.errorCode) {
+          result.errorCode = error.errorCode;
+        }
+        if (error.recoveryHint) {
+          result.recoveryHint = error.recoveryHint;
+        }
+        results.push(result);
         statusCode = 207;
         if (step) {
           step.status = "error";
