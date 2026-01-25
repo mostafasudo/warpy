@@ -145,6 +145,33 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
     assert second.json()["actionsRemaining"] == 0
 
 
+def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient):
+    from app.core.database import session_scope
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 1
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    first = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
+    convo_id = first.json()["conversationId"]
+
+    second = client.post("/widget/chat", json={
+        "agentId": agent_id,
+        "conversationId": convo_id,
+        "toolResults": [{"id": "tc_1", "statusCode": 200, "consumeAction": False, "body": {"ok": True}}],
+    })
+    assert second.status_code == 200
+    assert second.json()["isWidgetHidden"] is False
+    assert second.json()["actionsRemaining"] == 1
+
+
 def test_widget_chat_agent_not_found(client: TestClient):
     response = client.post("/widget/chat", json={
         "agentId": str(uuid4()),

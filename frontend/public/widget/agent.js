@@ -1,6 +1,10 @@
 (function () {
   "use strict";
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Constants
+  // ═══════════════════════════════════════════════════════════════════════════
+
   const STORAGE_KEY = "cta_widget_state";
   const UI_STORAGE_KEY = "cta_widget_ui_state";
   const API_TIMEOUT = 30000;
@@ -12,9 +16,64 @@
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
   const WIDGET_CONTAINER_ID = "cta-widget-container";
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Utilities
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
+
+  function clampInt(value, min, max) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return min;
+    return Math.max(min, Math.min(max, Math.round(num)));
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function normalizeText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  // Levenshtein distance for fuzzy matching
+  function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
+  function truncateText(value, limit) {
+    const text = String(value || "");
+    if (!limit || text.length <= limit) return text;
+    return text.slice(0, limit) + "...";
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Color Parsing & Manipulation
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function parseColor(input) {
     if (!input || typeof input !== "string") return null;
@@ -77,6 +136,10 @@
     const B = normalize(b);
     return 0.2126 * R + 0.7152 * G + 0.0722 * B;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Theme Detection & Application
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function inferThemeFromPage() {
     const body = document.body || document.documentElement;
@@ -184,6 +247,10 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // API & State Management
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
@@ -250,12 +317,6 @@
     } catch { }
   }
 
-  function clearState() {
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-    } catch { }
-  }
-
   async function fetchWithTimeout(url, options = {}, timeout = API_TIMEOUT) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -299,27 +360,26 @@
     return null;
   }
 
+  function formatAuthHeaderValue(value, authType) {
+    const type = authType || "bearer";
+    const trimmed = value.trim();
+    const lower = trimmed.toLowerCase();
+    if (type === "basic") {
+      return lower.startsWith("basic ") ? trimmed : "Basic " + trimmed;
+    }
+    if (type === "none") {
+      return trimmed;
+    }
+    return lower.startsWith("bearer ") ? trimmed : "Bearer " + trimmed;
+  }
+
   function buildHeaders(headerConfig) {
     const headers = {};
     for (const [headerName, config] of Object.entries(headerConfig)) {
       const value = extractHeaderValue(config.source, config.key);
-      if (value) {
-        const isAuth = headerName.toLowerCase() === "authorization";
-        if (isAuth) {
-          const type = config.authType || "bearer";
-          const trimmed = value.trim();
-          const lower = trimmed.toLowerCase();
-          if (type === "basic") {
-            headers[headerName] = lower.startsWith("basic ") ? trimmed : "Basic " + trimmed;
-          } else if (type === "none") {
-            headers[headerName] = trimmed;
-          } else {
-            headers[headerName] = lower.startsWith("bearer ") ? trimmed : "Bearer " + trimmed;
-          }
-        } else {
-          headers[headerName] = value;
-        }
-      }
+      if (!value) continue;
+      const isAuth = headerName.toLowerCase() === "authorization";
+      headers[headerName] = isAuth ? formatAuthHeaderValue(value, config.authType) : value;
     }
     return headers;
   }
@@ -332,7 +392,1126 @@
     return result;
   }
 
-  async function executeToolCall(toolCall, baseUrl, headerConfig) {
+  function resolveToolType(toolCall) {
+    if (!toolCall) return "backend";
+    const raw = toolCall.type || toolCall.toolType;
+    const normalized = raw ? String(raw) : "backend";
+    return normalized === "frontend_actions" ? "frontend" : normalized;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOM Inspection & Element Discovery
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function cssEscape(value) {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(String(value));
+    }
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function safeQuerySelector(root, selector) {
+    if (!root || !selector) return null;
+    try {
+      return root.querySelector(selector);
+    } catch {
+      return null;
+    }
+  }
+
+  const INTERACTIVE_SELECTOR = [
+    "button",
+    "a[href]",
+    "input",
+    "select",
+    "textarea",
+    '[role="button"]',
+    '[role="link"]',
+    '[role="checkbox"]',
+    '[role="menuitem"]',
+    '[role="tab"]',
+    '[role="option"]',
+    '[role="switch"]',
+    '[contenteditable="true"]',
+    '[tabindex]:not([tabindex="-1"])',
+    "[onclick]",
+  ].join(", ");
+
+  function isRectInViewport(rect, margin) {
+    const m = typeof margin === "number" ? margin : 0;
+    return rect.bottom >= -m && rect.top <= window.innerHeight + m && rect.right >= -m && rect.left <= window.innerWidth + m;
+  }
+
+  function isElementVisible(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.getAttribute && el.getAttribute("data-warpy-ui") === "true") return false;
+    if (el.closest && el.closest(`#${WIDGET_CONTAINER_ID}`)) return false;
+    const style = getComputedStyle(el);
+    if (!style || style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) return false;
+    if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true") return false;
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    return true;
+  }
+
+  function getAriaLabel(el) {
+    if (!el || !el.getAttribute) return "";
+    const ariaLabel = el.getAttribute("aria-label");
+    if (ariaLabel) return ariaLabel.trim();
+    const labelledBy = el.getAttribute("aria-labelledby");
+    if (labelledBy) {
+      const ids = labelledBy.split(/\s+/).filter(Boolean);
+      const parts = ids
+        .map((id) => {
+          const target = document.getElementById(id);
+          return target ? target.innerText || target.textContent || "" : "";
+        })
+        .filter(Boolean);
+      if (parts.length) return parts.join(" ").trim();
+    }
+    return "";
+  }
+
+  function getAssociatedLabelText(el) {
+    if (!el) return "";
+    const aria = getAriaLabel(el);
+    if (aria) return aria;
+    if (el.id) {
+      const label = document.querySelector(`label[for="${cssEscape(el.id)}"]`);
+      if (label) return (label.innerText || label.textContent || "").trim();
+    }
+    const wrapping = el.closest && el.closest("label");
+    if (wrapping) return (wrapping.innerText || wrapping.textContent || "").trim();
+    return "";
+  }
+
+  function getElementText(el) {
+    if (!el) return "";
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "select" || tag === "textarea") return "";
+    return (el.innerText || el.textContent || "").trim();
+  }
+
+  function getSelectOptions(el) {
+    if (!el || !el.tagName || el.tagName.toLowerCase() !== "select") return [];
+    const options = Array.from(el.options || []);
+    if (options.length > 30) return [];
+    return options.map((option) => ({
+      value: String(option.value),
+      text: truncateText(option.textContent || "", 80),
+      selected: option.selected,
+    }));
+  }
+
+  function buildPathSelector(el) {
+    const parts = [];
+    let current = el;
+    while (current && current.nodeType === 1 && parts.length < 4) {
+      const tag = current.tagName.toLowerCase();
+      const parent = current.parentElement;
+      if (!parent) {
+        parts.unshift(tag);
+        break;
+      }
+      const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1;
+        parts.unshift(`${tag}:nth-of-type(${index})`);
+      } else {
+        parts.unshift(tag);
+      }
+      current = parent;
+      if (current === document.body || current === document.documentElement) {
+        break;
+      }
+    }
+    return parts.join(" > ");
+  }
+
+  function getSelectorCandidates(el) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const candidates = [];
+    const push = (value) => {
+      if (value && !candidates.includes(value)) {
+        candidates.push(value);
+      }
+    };
+    const attrs = ["data-testid", "data-test", "data-qa", "data-cy", "data-test-id"];
+    for (const attr of attrs) {
+      const value = el.getAttribute && el.getAttribute(attr);
+      if (value) {
+        push(`[${attr}="${cssEscape(value)}"]`);
+      }
+    }
+    if (el.id) push(`#${cssEscape(el.id)}`);
+    if (el.name) push(`${tag}[name="${cssEscape(el.name)}"]`);
+    const ariaLabel = el.getAttribute && el.getAttribute("aria-label");
+    if (ariaLabel) push(`${tag}[aria-label="${cssEscape(ariaLabel)}"]`);
+    const placeholder = el.getAttribute && el.getAttribute("placeholder");
+    if (placeholder) push(`${tag}[placeholder="${cssEscape(placeholder)}"]`);
+    const role = el.getAttribute && el.getAttribute("role");
+    if (role) push(`${tag}[role="${cssEscape(role)}"]`);
+    const path = buildPathSelector(el);
+    if (path) push(path);
+    return candidates;
+  }
+
+  function getCheckedState(el) {
+    if (typeof el.checked === "boolean") return el.checked;
+    if (!el.getAttribute) return null;
+    const ariaChecked = el.getAttribute("aria-checked");
+    if (ariaChecked === "true") return true;
+    if (ariaChecked === "false") return false;
+    return null;
+  }
+
+  function getElementDescriptor(el, includeRect) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const rect = el.getBoundingClientRect();
+    const type = tag === "input" ? (el.getAttribute("type") || el.type || "") : "";
+    const role = el.getAttribute ? el.getAttribute("role") || "" : "";
+    const label = truncateText(getAssociatedLabelText(el), 120);
+    const text = truncateText(getElementText(el), 160);
+    const ariaLabel = truncateText(getAriaLabel(el), 120);
+    const placeholder = truncateText(el.getAttribute ? el.getAttribute("placeholder") || "" : "", 120);
+    const name = el.getAttribute ? el.getAttribute("name") || "" : "";
+    const id = el.id || "";
+    const disabled = Boolean(el.disabled) || (el.getAttribute && el.getAttribute("aria-disabled") === "true");
+    const required = Boolean(el.required);
+    const checked = getCheckedState(el);
+    const selectors = getSelectorCandidates(el);
+    const descriptor = {
+      selector: selectors[0] || "",
+      selectors,
+      tag,
+      role,
+      type,
+      text,
+      label,
+      ariaLabel,
+      placeholder,
+      name,
+      id,
+      disabled,
+      required,
+      checked,
+    };
+    if (tag === "select") {
+      descriptor.value = el.value;
+      const options = getSelectOptions(el);
+      if (options.length) {
+        descriptor.options = options;
+      }
+    }
+    if (includeRect) {
+      descriptor.rect = {
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+      descriptor.inViewport = isRectInViewport(rect, 80);
+    }
+    return descriptor;
+  }
+
+  function tokenizeGoal(goal, selectorHints) {
+    const raw = [goal, ...(Array.isArray(selectorHints) ? selectorHints : [])].filter(Boolean).join(" ");
+    const tokens = normalizeText(raw).split(" ").filter((token) => token.length > 1);
+    return Array.from(new Set(tokens)).slice(0, 12);
+  }
+
+  function scoreText(haystack, tokens) {
+    if (!tokens.length) return 0;
+    let score = 0;
+    const words = haystack.split(/\s+/).filter(Boolean);
+    for (const token of tokens) {
+      // Exact match gets full score
+      if (haystack.includes(token)) {
+        score += 1;
+        continue;
+      }
+      // Fuzzy match: check if any word is within 2 edit distance
+      for (const word of words) {
+        if (word.length >= 3 && token.length >= 3) {
+          const distance = levenshteinDistance(word, token);
+          if (distance <= 2) {
+            score += 0.7; // Partial score for fuzzy match
+            break;
+          }
+        }
+      }
+    }
+    return score;
+  }
+
+  const SCOPE_SELECTORS = {
+    modal: '[role="dialog"], [aria-modal="true"], .modal, .dialog',
+    dialog: '[role="dialog"], [aria-modal="true"], .modal, .dialog',
+    header: "header",
+    footer: "footer",
+    nav: "nav",
+    navigation: "nav",
+    main: "main",
+  };
+
+  function resolveScopeRoot(scope) {
+    if (!scope) return document;
+    const trimmed = String(scope).trim();
+    if (!trimmed) return document;
+    const lower = trimmed.toLowerCase();
+    const scopeSelector = SCOPE_SELECTORS[lower];
+    if (scopeSelector) {
+      const el = document.querySelector(scopeSelector);
+      if (el) return el;
+    }
+    return safeQuerySelector(document, trimmed) || document;
+  }
+
+  function collectHeadings(root) {
+    return Array.from(root.querySelectorAll("h1, h2, h3, h4"))
+      .filter(isElementVisible)
+      .slice(0, 12)
+      .map((el) => ({
+        level: el.tagName.toLowerCase(),
+        text: truncateText(el.innerText || el.textContent || "", 120),
+      }))
+      .filter((item) => item.text);
+  }
+
+  function resolveSelectorTarget(selector, root) {
+    if (!selector) return null;
+    const trimmed = String(selector).trim();
+    if (!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    const base = root || document;
+    if (lower.startsWith("text=")) {
+      return findElementByText(trimmed.slice(5), base);
+    }
+    if (lower.startsWith("label=")) {
+      return findElementByLabel(trimmed.slice(6), base);
+    }
+    if (lower.startsWith("role=")) {
+      return findElementByRole(trimmed.slice(5), base);
+    }
+    return safeQuerySelector(base, trimmed);
+  }
+
+  // Collect elements including shadow DOM traversal
+  function collectAllInteractiveElements(root, selector) {
+    const elements = Array.from(root.querySelectorAll(selector));
+    // Traverse shadow roots
+    const allElements = root.querySelectorAll("*");
+    for (const el of allElements) {
+      if (el.shadowRoot) {
+        try {
+          elements.push(...collectAllInteractiveElements(el.shadowRoot, selector));
+        } catch {
+          // Shadow root may be closed, skip
+        }
+      }
+    }
+    return elements;
+  }
+
+  function collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) {
+    const elements = collectAllInteractiveElements(root, INTERACTIVE_SELECTOR);
+    const descriptors = [];
+    for (const el of elements) {
+      if (!isElementVisible(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (!includeOffscreen && !isRectInViewport(rect, 120)) continue;
+      const descriptor = getElementDescriptor(el, true);
+      const haystack = normalizeText(
+        [
+          descriptor.text,
+          descriptor.label,
+          descriptor.ariaLabel,
+          descriptor.placeholder,
+          descriptor.name,
+          descriptor.id,
+          descriptor.role,
+          descriptor.tag,
+        ].join(" ")
+      );
+      descriptor._score = scoreText(haystack, tokens);
+      descriptor._rank = isRectInViewport(rect, 0) ? 1 : 0;
+      descriptors.push(descriptor);
+    }
+    const hints = Array.isArray(selectorHints) ? selectorHints : [];
+    for (const hint of hints) {
+      const target = resolveSelectorTarget(String(hint), root);
+      if (target && isElementVisible(target)) {
+        const descriptor = getElementDescriptor(target, true);
+        descriptor._score = Math.max(descriptor._score || 0, tokens.length ? tokens.length + 1 : 1);
+        descriptor._rank = 2;
+        descriptors.push(descriptor);
+      }
+    }
+    const unique = new Map();
+    for (const item of descriptors) {
+      const key = item.selector || `${item.tag}-${item.id}-${item.name}-${item.text}`;
+      if (!unique.has(key)) {
+        unique.set(key, item);
+      }
+    }
+    const list = Array.from(unique.values());
+    list.sort((a, b) => (b._score || 0) - (a._score || 0) || (b._rank || 0) - (a._rank || 0));
+    const preferred = tokens.length ? list.filter((item) => (item._score || 0) > 0) : list;
+    const selected = preferred.slice(0, maxElements);
+    if (selected.length < maxElements) {
+      for (const item of list) {
+        if (selected.length >= maxElements) break;
+        if (!selected.includes(item)) {
+          selected.push(item);
+        }
+      }
+    }
+    return selected.map(({ _score, _rank, ...rest }) => rest);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Frontend Context Collection
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Infer element purpose from attributes and content
+  function inferElementPurpose(el) {
+    const tag = el.tag || "";
+    const type = el.type || "";
+    const text = (el.text || "").toLowerCase();
+    const label = (el.label || "").toLowerCase();
+    const name = (el.name || "").toLowerCase();
+    const id = (el.id || "").toLowerCase();
+    const role = el.role || "";
+
+    // Check common patterns
+    if (type === "submit" || text.includes("submit") || label.includes("submit")) return "submit button";
+    if (type === "search" || name.includes("search") || id.includes("search")) return "search input";
+    if (type === "password" || name.includes("password")) return "password input";
+    if (type === "email" || name.includes("email")) return "email input";
+    if (text.includes("login") || text.includes("sign in")) return "login button";
+    if (text.includes("logout") || text.includes("sign out")) return "logout button";
+    if (text.includes("save") || label.includes("save")) return "save button";
+    if (text.includes("cancel") || label.includes("cancel")) return "cancel button";
+    if (text.includes("close") || label.includes("close")) return "close button";
+    if (text.includes("delete") || text.includes("remove")) return "delete button";
+    if (text.includes("add") || text.includes("create") || text.includes("new")) return "add button";
+    if (text.includes("edit") || text.includes("modify")) return "edit button";
+    if (text.includes("filter") || label.includes("filter")) return "filter control";
+    if (text.includes("sort") || label.includes("sort")) return "sort control";
+    if (role === "checkbox" || type === "checkbox") return "checkbox";
+    if (role === "switch") return "toggle switch";
+    if (tag === "select") return "dropdown";
+    if (tag === "textarea") return "text area";
+    if (tag === "a") return "link";
+    if (tag === "button" || role === "button") return "button";
+    if (tag === "input") return type ? `${type} input` : "input";
+    return tag || "element";
+  }
+
+  // Generate selector recommendations for top elements
+  function generateSelectorRecommendations(elements) {
+    return elements.slice(0, 10).map((el) => {
+      const purpose = inferElementPurpose(el);
+      const recommendation = {
+        purpose,
+        preferred: el.selector || el.selectors?.[0] || "",
+        alternatives: (el.selectors || []).slice(1, 3),
+      };
+      // Add text/label shortcuts if available
+      if (el.text && el.text.length <= 30 && !el.text.includes("\n")) {
+        recommendation.textShortcut = `text=${el.text}`;
+      }
+      if (el.label && el.label.length <= 30) {
+        recommendation.labelShortcut = `label=${el.label}`;
+      }
+      if (el.role) {
+        recommendation.roleShortcut = `role=${el.role}`;
+      }
+      return recommendation;
+    });
+  }
+
+  function collectFrontendContext(request) {
+    const goal = typeof request.goal === "string" ? request.goal : "";
+    const scope = typeof request.scope === "string" ? request.scope : null;
+    const includeDom = request.includeDom !== false;
+    const includeOffscreen = request.includeOffscreen === true;
+    const maxElements = clampInt(request.maxElements || 60, 20, 160);
+    const selectorHints = Array.isArray(request.selectorHints) ? request.selectorHints : [];
+    const root = resolveScopeRoot(scope);
+    const tokens = tokenizeGoal(goal, selectorHints);
+    const elements = includeDom ? collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) : [];
+    const headings = includeDom ? collectHeadings(root) : [];
+    const active = document.activeElement && document.activeElement !== document.body ? getElementDescriptor(document.activeElement, false) : null;
+    const suggestedSelectors = includeDom ? generateSelectorRecommendations(elements) : [];
+    return {
+      kind: "frontend_context",
+      goal,
+      scope,
+      url: window.location.href,
+      title: document.title,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+      },
+      elements,
+      headings,
+      activeElement: active,
+      suggestedSelectors,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Element Highlight Overlay
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let highlightEl = null;
+  let highlightTimer = null;
+
+  function clearHighlight() {
+    if (!highlightEl) return;
+    highlightEl.style.opacity = "0";
+  }
+
+  function highlightElement(el) {
+    if (!el || !document.body) return;
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    if (!highlightEl) {
+      highlightEl = document.createElement("div");
+      highlightEl.setAttribute("data-warpy-ui", "true");
+      highlightEl.style.position = "fixed";
+      highlightEl.style.pointerEvents = "none";
+      highlightEl.style.zIndex = "2147482999";
+      highlightEl.style.borderRadius = "10px";
+      highlightEl.style.transition = "opacity 160ms ease, transform 160ms ease";
+      highlightEl.style.opacity = "0";
+      document.body.appendChild(highlightEl);
+    }
+    const themeAccent = parseColor(getComputedStyle(document.getElementById(WIDGET_CONTAINER_ID) || document.body).getPropertyValue("--cta-accent")) || parseColor(inferThemeFromPage().accent);
+    const accent = themeAccent || { r: 37, g: 99, b: 235, a: 1 };
+    highlightEl.style.border = `2px solid ${rgbCss(accent)}`;
+    highlightEl.style.background = rgbaCss(accent, 0.08);
+    highlightEl.style.boxShadow = `0 0 0 4px ${rgbaCss(accent, 0.2)}`;
+    highlightEl.style.left = `${Math.max(0, Math.round(rect.left - 6))}px`;
+    highlightEl.style.top = `${Math.max(0, Math.round(rect.top - 6))}px`;
+    highlightEl.style.width = `${Math.round(rect.width + 12)}px`;
+    highlightEl.style.height = `${Math.round(rect.height + 12)}px`;
+    highlightEl.style.opacity = "1";
+    highlightEl.style.transform = "scale(1)";
+    if (highlightTimer) {
+      clearTimeout(highlightTimer);
+    }
+    highlightTimer = setTimeout(() => {
+      clearHighlight();
+    }, 900);
+  }
+
+  function findElementByText(text, root) {
+    const target = normalizeText(text);
+    if (!target) return null;
+    const base = root || document;
+    const elements = Array.from(base.querySelectorAll(INTERACTIVE_SELECTOR));
+    let best = null;
+    let bestScore = Infinity;
+    for (const el of elements) {
+      if (!isElementVisible(el)) continue;
+      const label = normalizeText(getAssociatedLabelText(el));
+      const content = normalizeText(getElementText(el));
+      const aria = normalizeText(getAriaLabel(el));
+      const haystack = [label, content, aria].filter(Boolean).join(" ");
+      if (!haystack) continue;
+      if (haystack === target) return el;
+      if (haystack.includes(target)) {
+        const score = Math.abs(haystack.length - target.length);
+        if (score < bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      }
+    }
+    return best;
+  }
+
+  function findElementByLabel(text, root) {
+    const target = normalizeText(text);
+    if (!target) return null;
+    const base = root || document;
+    const labels = Array.from(base.querySelectorAll("label"));
+    for (const label of labels) {
+      if (!isElementVisible(label)) continue;
+      const labelText = normalizeText(label.innerText || label.textContent || "");
+      if (!labelText) continue;
+      if (labelText === target || labelText.includes(target)) {
+        const forId = label.getAttribute("for");
+        if (forId) {
+          const input = document.getElementById(forId);
+          if (input) return input;
+        }
+        const input = label.querySelector("input, select, textarea, button");
+        if (input) return input;
+      }
+    }
+    return null;
+  }
+
+  function findElementByRole(role, root) {
+    const target = normalizeText(role);
+    if (!target) return null;
+    const base = root || document;
+    return safeQuerySelector(base, `[role="${cssEscape(target)}"]`);
+  }
+
+  async function waitForElement(selector, options) {
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
+    const requireVisible = options && options.visible !== false;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const el = resolveSelectorTarget(selector, document);
+      if (el && (!requireVisible || isElementVisible(el))) {
+        return el;
+      }
+      await sleep(200);
+    }
+    return null;
+  }
+
+  async function waitForText(text, options) {
+    const target = normalizeText(text);
+    if (!target) return false;
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const bodyText = normalizeText(document.body ? document.body.innerText || document.body.textContent || "" : "");
+      if (bodyText.includes(target)) return true;
+      await sleep(200);
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Synthetic Event Dispatch & Input Manipulation
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function getActionPoint(el, action) {
+    const rect = el.getBoundingClientRect();
+    let x = rect.width / 2;
+    let y = rect.height / 2;
+    if (typeof action.x === "number") {
+      x = action.x >= 0 && action.x <= 1 ? rect.width * action.x : action.x;
+    }
+    if (typeof action.y === "number") {
+      y = action.y >= 0 && action.y <= 1 ? rect.height * action.y : action.y;
+    }
+    return {
+      x: Math.round(rect.left + clamp(x, 0, rect.width)),
+      y: Math.round(rect.top + clamp(y, 0, rect.height)),
+    };
+  }
+
+  function dispatchPointerEvent(el, type, point) {
+    if (typeof PointerEvent !== "function") {
+      dispatchMouseEvent(el, type.replace("pointer", "mouse"), point);
+      return;
+    }
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: point.x,
+      clientY: point.y,
+      pointerId: 1,
+      pointerType: "mouse",
+    });
+    el.dispatchEvent(event);
+  }
+
+  function dispatchMouseEvent(el, type, point) {
+    const event = new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: point.x,
+      clientY: point.y,
+    });
+    el.dispatchEvent(event);
+  }
+
+  function dispatchKeyboardEvent(el, type, key) {
+    const event = new KeyboardEvent(type, {
+      key,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(event);
+  }
+
+  function setInputValue(el, value) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea") {
+      const descriptor = Object.getOwnPropertyDescriptor(el.__proto__, "value");
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(el, value);
+      } else {
+        el.value = value;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (el.isContentEditable) {
+      el.textContent = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  function setChecked(el, checked) {
+    if (typeof el.checked === "boolean") {
+      const descriptor = Object.getOwnPropertyDescriptor(el.__proto__, "checked");
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(el, checked);
+      } else {
+        el.checked = checked;
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (el.getAttribute) {
+      el.setAttribute("aria-checked", checked ? "true" : "false");
+    }
+  }
+
+  function focusElement(el) {
+    if (!el || !el.focus) return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch {
+      el.focus();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Action Description & Labeling
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const ACTION_LABELS = {
+    click: "Click",
+    tap: "Tap",
+    double_click: "Double click",
+    dblclick: "Double click",
+    doubleclick: "Double click",
+    right_click: "Right click",
+    contextmenu: "Right click",
+    hover: "Hover",
+    focus: "Focus",
+    blur: "Remove focus",
+    type: "Type",
+    input: "Type",
+    set_value: "Type",
+    clear: "Clear",
+    press: "Press",
+    select: "Select",
+    check: "Check",
+    uncheck: "Uncheck",
+    scroll: "Scroll",
+    scroll_into_view: "Scroll to",
+    scrollintoview: "Scroll to",
+    wait: "Wait",
+    wait_for: "Wait for",
+    waitfor: "Wait for",
+    wait_for_text: "Wait for",
+    waitfortext: "Wait for",
+    wait_for_stable: "Wait for stable",
+    waitforstable: "Wait for stable",
+    navigate: "Open page",
+    drag: "Drag",
+    drag_and_drop: "Drag",
+    dispatch: "Trigger",
+  };
+
+  function normalizeAction(action) {
+    if (!action || typeof action !== "object") {
+      return { action: "" };
+    }
+    const name = action.action || action.type || "";
+    return { ...action, action: String(name).trim().toLowerCase() };
+  }
+
+  function getActionLabel(name) {
+    const normalized = String(name || "").trim().toLowerCase();
+    if (ACTION_LABELS[normalized]) return ACTION_LABELS[normalized];
+    if (!normalized) return "Action";
+    const spaced = normalized.replace(/_/g, " ");
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  }
+
+  function extractSelectorLabel(selector) {
+    if (!selector) return "";
+    const trimmed = String(selector).trim();
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith("text=")) return trimmed.slice(5).trim();
+    if (lower.startsWith("label=")) return trimmed.slice(6).trim();
+    if (lower.startsWith("role=")) return trimmed.slice(5).trim();
+    return "";
+  }
+
+  function isTechnicalLabel(value) {
+    const lower = value.toLowerCase();
+    if (lower.startsWith("#") || lower.startsWith(".") || lower.startsWith("http")) return true;
+    if (lower.includes("[") || lower.includes("]") || lower.includes("::") || lower.includes("data-") || lower.includes("aria-")) return true;
+    if (lower.includes(">") || lower.includes(":nth") || lower.includes("role=")) return true;
+    return false;
+  }
+
+  function formatActionTarget(action) {
+    const selectorLabel = extractSelectorLabel(action.selector || action.target);
+    const candidates = [selectorLabel, action.text, action.value]
+      .filter((value) => value !== null && value !== undefined)
+      .map((value) => String(value).replace(/\s+/g, " ").trim())
+      .filter((value) => value);
+    for (const candidate of candidates) {
+      if (!isTechnicalLabel(candidate)) {
+        return truncateText(candidate, 44);
+      }
+    }
+    return "";
+  }
+
+  function formatKeyLabel(action) {
+    const keys = Array.isArray(action.keys) ? action.keys : action.key ? [action.key] : [];
+    const cleaned = keys.map((key) => String(key).trim()).filter(Boolean);
+    return cleaned.length ? truncateText(cleaned.join(" + "), 32) : "";
+  }
+
+  function describeAction(action) {
+    const name = action.action || "";
+    const label = getActionLabel(name);
+    if (name === "press") {
+      const keys = formatKeyLabel(action);
+      return keys ? `${label} ${keys}` : label;
+    }
+    if (name === "wait") {
+      return label;
+    }
+    if (name === "navigate") {
+      return label;
+    }
+    const target = formatActionTarget(action);
+    return target ? `${label} ${target}` : label;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Frontend Action Execution
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Structured error with code and recovery hint
+  class ActionError extends Error {
+    constructor(message, errorCode, recoveryHint) {
+      super(message);
+      this.name = "ActionError";
+      this.errorCode = errorCode || "UNKNOWN";
+      this.recoveryHint = recoveryHint || null;
+    }
+  }
+
+  function createError(message, errorCode, recoveryHint) {
+    return new ActionError(message, errorCode, recoveryHint);
+  }
+
+  // MutationObserver-based wait for DOM stability
+  async function waitForStable(selector, options) {
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 5000, 400, 20000);
+    const stabilityMs = clampInt(options && options.stabilityMs ? options.stabilityMs : 300, 100, 2000);
+
+    // First wait for element to exist
+    const el = selector ? await waitForElement(selector, { timeoutMs }) : document.body;
+    if (!el) {
+      throw createError("Element not found for stability check", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+    }
+
+    return new Promise((resolve, reject) => {
+      let stabilityTimer = null;
+      let timeoutTimer = null;
+      let observer = null;
+
+      const cleanup = () => {
+        if (stabilityTimer) clearTimeout(stabilityTimer);
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (observer) observer.disconnect();
+      };
+
+      const onStable = () => {
+        cleanup();
+        resolve(el);
+      };
+
+      const resetStabilityTimer = () => {
+        if (stabilityTimer) clearTimeout(stabilityTimer);
+        stabilityTimer = setTimeout(onStable, stabilityMs);
+      };
+
+      observer = new MutationObserver(() => {
+        resetStabilityTimer();
+      });
+
+      observer.observe(el, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true,
+      });
+
+      // Start initial stability timer
+      resetStabilityTimer();
+
+      // Overall timeout
+      timeoutTimer = setTimeout(() => {
+        cleanup();
+        // If we timeout, still resolve - the DOM may be stable enough
+        resolve(el);
+      }, timeoutMs);
+    });
+  }
+
+  // Execute action with retry logic
+  async function executeWithRetry(actionFn, retryCount, retryDelayMs) {
+    let lastError = null;
+    const maxAttempts = Math.max(1, (retryCount || 0) + 1);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await actionFn();
+      } catch (error) {
+        lastError = error;
+        // Don't retry certain errors
+        if (error.errorCode === "SELECTOR_INVALID" || error.errorCode === "ELEMENT_DISABLED") {
+          throw error;
+        }
+        // If not last attempt, wait and retry
+        if (attempt < maxAttempts - 1) {
+          const delay = (retryDelayMs || 500) * Math.pow(2, attempt); // Exponential backoff
+          await sleep(Math.min(delay, 5000));
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  async function runFrontendAction(action) {
+    const name = action.action;
+    if (!name) {
+      throw new Error("Missing action");
+    }
+    if (name === "wait") {
+      const delay = clampInt(action.delayMs || action.ms || 500, 0, 10000);
+      await sleep(delay);
+      return;
+    }
+    if (name === "waitfor" || name === "wait_for") {
+      const selector = action.selector || (action.text ? `text=${action.text}` : action.value ? String(action.value) : "");
+      const el = selector ? await waitForElement(selector, { timeoutMs: action.timeoutMs }) : null;
+      if (!el) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      return;
+    }
+    if (name === "waitfortext" || name === "wait_for_text") {
+      const ok = await waitForText(action.text || action.value || "", { timeoutMs: action.timeoutMs });
+      if (!ok) throw createError("Text not found", "TIMEOUT", "WAIT_AND_RETRY");
+      return;
+    }
+    if (name === "wait_for_stable" || name === "waitforstable") {
+      const selector = action.selector || action.target || "";
+      await waitForStable(selector || null, {
+        timeoutMs: action.timeoutMs,
+        stabilityMs: action.stabilityMs || 300,
+      });
+      return;
+    }
+    if (name === "navigate") {
+      const url = action.url || action.value;
+      if (!url) throw createError("Missing url", "SELECTOR_INVALID", null);
+      window.location.assign(String(url));
+      return;
+    }
+    if (name === "scroll") {
+      const selector = action.selector || action.target || "";
+      const behavior = action.behavior || "auto";
+      const x = Number(action.x || 0);
+      const y = Number(action.y || action.deltaY || 0);
+      if (selector) {
+        const target = resolveSelectorTarget(selector, document);
+        if (!target) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+        target.scrollBy({ left: x, top: y, behavior });
+      } else {
+        window.scrollBy({ left: x, top: y, behavior });
+      }
+      return;
+    }
+    if (name === "scroll_into_view" || name === "scrollintoview") {
+      const selector = action.selector || action.target || "";
+      const target = resolveSelectorTarget(selector, document);
+      if (!target) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      target.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      return;
+    }
+
+    const selector = action.selector || action.target || (action.text ? `text=${action.text}` : action.role ? `role=${action.role}` : "");
+    const timeoutMs = action.timeoutMs;
+    let el = selector ? resolveSelectorTarget(selector, document) : null;
+    if (!el && selector && timeoutMs) {
+      el = await waitForElement(selector, { timeoutMs });
+    }
+    if (!el && !selector && (name === "press" || name === "type" || name === "input" || name === "clear")) {
+      el = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    }
+    if (!el) {
+      // This is the only hard blocker - we genuinely can't proceed without an element
+      throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+    }
+    // Philosophy: Always try to execute. Don't pre-emptively block based on visibility,
+    // disabled state, or overlay detection. The browser/framework handles these cases,
+    // and we learn from real failures rather than guessing.
+    if (action.scroll !== false) {
+      try {
+        el.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      } catch {
+        el.scrollIntoView();
+      }
+    }
+    highlightElement(el);
+    const point = getActionPoint(el, action);
+
+    if (name === "hover") {
+      dispatchPointerEvent(el, "pointerover", point);
+      dispatchMouseEvent(el, "mouseover", point);
+      return;
+    }
+    if (name === "focus") {
+      focusElement(el);
+      return;
+    }
+    if (name === "blur") {
+      if (el.blur) el.blur();
+      return;
+    }
+    if (name === "click" || name === "tap") {
+      dispatchPointerEvent(el, "pointerdown", point);
+      dispatchMouseEvent(el, "mousedown", point);
+      focusElement(el);
+      dispatchPointerEvent(el, "pointerup", point);
+      dispatchMouseEvent(el, "mouseup", point);
+      dispatchMouseEvent(el, "click", point);
+      return;
+    }
+    if (name === "double_click" || name === "dblclick" || name === "doubleclick") {
+      for (let i = 0; i < 2; i += 1) {
+        dispatchPointerEvent(el, "pointerdown", point);
+        dispatchMouseEvent(el, "mousedown", point);
+        dispatchPointerEvent(el, "pointerup", point);
+        dispatchMouseEvent(el, "mouseup", point);
+        dispatchMouseEvent(el, "click", point);
+      }
+      dispatchMouseEvent(el, "dblclick", point);
+      return;
+    }
+    if (name === "right_click" || name === "contextmenu") {
+      dispatchMouseEvent(el, "contextmenu", point);
+      return;
+    }
+    if (name === "type" || name === "input" || name === "set_value") {
+      const text = action.text != null ? String(action.text) : action.value != null ? String(action.value) : "";
+      const mode = action.mode || "replace";
+      focusElement(el);
+      if (mode === "append") {
+        const current = el.value != null ? String(el.value) : "";
+        setInputValue(el, current + text);
+      } else {
+        setInputValue(el, text);
+      }
+      return;
+    }
+    if (name === "clear") {
+      focusElement(el);
+      setInputValue(el, "");
+      return;
+    }
+    if (name === "press") {
+      const keys = action.keys || (action.key ? [action.key] : []);
+      const target = el || document.activeElement || document.body;
+      for (const key of keys) {
+        dispatchKeyboardEvent(target, "keydown", key);
+        dispatchKeyboardEvent(target, "keypress", key);
+        dispatchKeyboardEvent(target, "keyup", key);
+      }
+      return;
+    }
+    if (name === "select") {
+      const tag = el.tagName ? el.tagName.toLowerCase() : "";
+      if (tag !== "select") {
+        throw createError("Element is not a select", "SELECTOR_INVALID", "RESCAN_WITH_SCOPE");
+      }
+      const value = action.value != null ? String(action.value) : action.text != null ? String(action.text) : "";
+      const options = Array.from(el.options || []);
+      let matched = null;
+      if (value) {
+        matched = options.find((option) => option.value === value) || options.find((option) => normalizeText(option.textContent || "") === normalizeText(value));
+      }
+      if (!matched && typeof action.index === "number") {
+        matched = options[action.index] || null;
+      }
+      if (!matched && options.length) {
+        matched = options[0];
+      }
+      if (!matched) throw createError("Option not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      el.value = matched.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (name === "check") {
+      setChecked(el, true);
+      return;
+    }
+    if (name === "uncheck") {
+      setChecked(el, false);
+      return;
+    }
+    if (name === "drag_and_drop" || name === "drag") {
+      const fromSelector = action.from || action.selector;
+      const toSelector = action.to || action.target;
+      const source = fromSelector ? resolveSelectorTarget(fromSelector, document) : el;
+      const target = toSelector ? resolveSelectorTarget(toSelector, document) : null;
+      if (!source || !target) throw createError("Drag target not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      const start = getActionPoint(source, action);
+      const end = getActionPoint(target, action);
+      dispatchMouseEvent(source, "mousedown", start);
+      dispatchMouseEvent(source, "dragstart", start);
+      dispatchMouseEvent(target, "dragover", end);
+      dispatchMouseEvent(target, "drop", end);
+      dispatchMouseEvent(target, "mouseup", end);
+      return;
+    }
+    if (name === "dispatch") {
+      const events = Array.isArray(action.events) ? action.events : [];
+      for (const evt of events) {
+        if (!evt) continue;
+        el.dispatchEvent(new Event(String(evt), { bubbles: true, cancelable: true }));
+      }
+      return;
+    }
+
+    throw createError("Unknown action: " + name, "SELECTOR_INVALID", null);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Tool Call Execution (Endpoint, Frontend Context, Frontend Actions)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async function executeEndpointToolCall(toolCall, baseUrl, headerConfig) {
     const sessionHeaders = buildHeaders(headerConfig);
     const path = substitutePath(toolCall.path, toolCall.params || {});
     const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
@@ -372,6 +1551,152 @@
       return { id: toolCall.id, statusCode: 0, body: null, error: error.message || "Request failed" };
     }
   }
+
+  async function executeFrontendContext(toolCall, ui) {
+    const request = toolCall && toolCall.context && typeof toolCall.context === "object" ? toolCall.context : toolCall || {};
+    const title = toolCall.goal || request.goal || "Reviewing the page";
+    if (ui && typeof ui.setActivity === "function") {
+      ui.setActivity({ title, status: "running", steps: [] });
+    }
+    try {
+      const context = collectFrontendContext(request);
+      if (ui && typeof ui.setActivity === "function") {
+        ui.setActivity({ title, status: "done", steps: [] });
+        if (typeof ui.scheduleClear === "function") {
+          ui.scheduleClear(900);
+        }
+      }
+      return { id: toolCall.id, statusCode: 200, body: context };
+    } catch (error) {
+      if (ui && typeof ui.setActivity === "function") {
+        ui.setActivity({ title, status: "error", steps: [] });
+        if (typeof ui.scheduleClear === "function") {
+          ui.scheduleClear(1400);
+        }
+      }
+      return { id: toolCall.id, statusCode: 500, body: null, error: error.message || "Frontend context failed" };
+    }
+  }
+
+  async function executeFrontendActions(toolCall, ui) {
+    const actions = Array.isArray(toolCall.actions) ? toolCall.actions : [];
+    const goal = toolCall.goal || "Applying changes";
+    if (!actions.length) {
+      return {
+        id: toolCall.id,
+        statusCode: 400,
+        body: { kind: "frontend_actions", goal, results: [], error: "No actions provided" },
+      };
+    }
+    const results = [];
+    let statusCode = 200;
+    let activity = null;
+    if (actions.length && ui && typeof ui.setActivity === "function") {
+      activity = {
+        title: goal,
+        status: "running",
+        steps: actions.map((action, index) => ({
+          index,
+          label: describeAction(normalizeAction(action)),
+          status: "pending",
+        })),
+      };
+      ui.setActivity({ ...activity });
+    }
+
+    for (let i = 0; i < actions.length; i += 1) {
+      const normalized = normalizeAction(actions[i]);
+      const step = activity && activity.steps ? activity.steps[i] : null;
+      if (step) {
+        step.status = "running";
+        ui.setActivity({ ...activity });
+      }
+      const startedAt = Date.now();
+      const retryCount = clampInt(normalized.retryCount || 0, 0, 3);
+      const retryDelayMs = clampInt(normalized.retryDelayMs || 500, 100, 2000);
+      try {
+        await executeWithRetry(() => runFrontendAction(normalized), retryCount, retryDelayMs);
+        results.push({
+          index: i,
+          action: normalized.action,
+          selector: normalized.selector || normalized.target || null,
+          status: "ok",
+          durationMs: Date.now() - startedAt,
+        });
+        if (step) {
+          step.status = "done";
+          ui.setActivity({ ...activity });
+        }
+      } catch (error) {
+        const result = {
+          index: i,
+          action: normalized.action,
+          selector: normalized.selector || normalized.target || null,
+          status: "error",
+          error: error.message || "Action failed",
+          durationMs: Date.now() - startedAt,
+        };
+        // Include structured error info if available
+        if (error.errorCode) {
+          result.errorCode = error.errorCode;
+        }
+        if (error.recoveryHint) {
+          result.recoveryHint = error.recoveryHint;
+        }
+        results.push(result);
+        statusCode = 207;
+        if (step) {
+          step.status = "error";
+          ui.setActivity({ ...activity });
+        }
+        if (!normalized.continueOnError) {
+          break;
+        }
+      }
+      const delay = clampInt(normalized.delayMs || 0, 0, 10000);
+      if (delay) {
+        await sleep(delay);
+      }
+    }
+
+    if (activity && ui && typeof ui.setActivity === "function") {
+      activity.status = statusCode === 200 ? "done" : "error";
+      ui.setActivity({ ...activity });
+      if (typeof ui.scheduleClear === "function") {
+        ui.scheduleClear(1400);
+      }
+    }
+    clearHighlight();
+    return {
+      id: toolCall.id,
+      statusCode,
+      body: {
+        kind: "frontend_actions",
+        goal,
+        url: window.location.href,
+        title: document.title,
+        results,
+      },
+    };
+  }
+
+  async function executeToolCall(toolCall, baseUrl, headerConfig, ui) {
+    const type = resolveToolType(toolCall);
+    if (type === "backend") {
+      return executeEndpointToolCall(toolCall, baseUrl, headerConfig);
+    }
+    if (type === "frontend_context") {
+      return executeFrontendContext(toolCall, ui);
+    }
+    if (type === "frontend") {
+      return executeFrontendActions(toolCall, ui);
+    }
+    return { id: toolCall.id, statusCode: 400, body: null, error: "Unknown tool type" };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // External Script Loading & Markdown Rendering
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function loadExternalScript(src, integrity) {
     return new Promise((resolve, reject) => {
@@ -443,6 +1768,10 @@
       return safe.replace(/\n/g, "<br>");
     };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Widget Styles (Shadow DOM)
+  // ═══════════════════════════════════════════════════════════════════════════
 
   function createStyles() {
     const style = document.createElement("style");
@@ -1044,6 +2373,81 @@
         max-width: 320px;
       }
 
+      .cta-widget-activity {
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+        border-radius: 16px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .cta-widget-activity-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-activity-status {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-activity-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .cta-widget-activity-step {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-activity-step::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--cta-border);
+        flex-shrink: 0;
+      }
+
+      .cta-widget-activity-step[data-status="running"] {
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-activity-step[data-status="running"]::before {
+        background: var(--cta-accent);
+        animation: cta-widget-activity-pulse 1s ease-in-out infinite;
+      }
+
+      .cta-widget-activity-step[data-status="done"] {
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-activity-step[data-status="done"]::before {
+        background: var(--cta-fg-muted);
+      }
+
+      .cta-widget-activity-step[data-status="error"] {
+        color: var(--cta-accent);
+      }
+
+      .cta-widget-activity-step[data-status="error"]::before {
+        background: var(--cta-accent);
+      }
+
       .cta-widget-message {
         max-width: 92%;
         padding: 10px 12px;
@@ -1430,6 +2834,12 @@
         100% { transform: scale(1); }
       }
 
+      @keyframes cta-widget-activity-pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.35); }
+        100% { transform: scale(1); }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .cta-widget-toggle,
         .cta-widget-panel,
@@ -1450,13 +2860,24 @@
         .cta-widget-toggle.unread-pulse::after {
           animation: none !important;
         }
+
+        .cta-widget-activity-step[data-status="running"]::before {
+          animation: none !important;
+        }
       }
     `;
     return style;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Widget Creation & Lifecycle
+  // ═══════════════════════════════════════════════════════════════════════════
+
   function createWidget(config, initialConfigData) {
     const apiUrl = resolveApiUrl();
+
+    // ─── State ───────────────────────────────────────────────────────────────
+
     const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
     if (!state.voice) state.voice = {};
     if (!state.auth) state.auth = {};
@@ -1505,6 +2926,10 @@
     let widgetInputPlaceholder = "Ask Warpy…";
     let securityDisclosureEnabled = true;
     let isSecurityPanelOpen = false;
+    let frontendActivity = null;
+    let frontendActivityTimer = null;
+
+    // ─── DOM Construction ──────────────────────────────────────────────────
 
     const root = document.createElement("div");
     let widgetHidden = false;
@@ -1513,6 +2938,7 @@
       if (widgetHidden) return;
       widgetHidden = true;
       closePanel({ restoreLauncherFocus: false });
+      clearHighlight();
       root.style.display = "none";
       root.setAttribute("aria-hidden", "true");
     }
@@ -1533,9 +2959,9 @@
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
-	          <div class="cta-widget-avatar">
-	            ${DEFAULT_WIDGET_ICON}
-	          </div>
+          <div class="cta-widget-avatar">
+            ${DEFAULT_WIDGET_ICON}
+          </div>
           <div>
             <p class="cta-widget-title"></p>
             <p class="cta-widget-subtitle"></p>
@@ -1571,11 +2997,11 @@
                 </svg>
                 <span class="cta-mic-dot"></span>
               </button>
-      <button class="cta-widget-mic-select" aria-label="Select microphone" title="Select microphone">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 15l6-6 6 6"/>
-        </svg>
-      </button>
+              <button class="cta-widget-mic-select" aria-label="Select microphone" title="Select microphone">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 15l6-6 6 6"/>
+                </svg>
+              </button>
             </div>
             <div class="cta-widget-mic-menu"></div>
           </div>
@@ -1643,6 +3069,8 @@
     const securityBackEl = panel.querySelector(".cta-security-back");
     const renderMarkdown = createMarkdownRenderer(() => renderMessages());
 
+    // ─── UI Sync Helpers ────────────────────────────────────────────────────
+
     function getToggleAriaLabel() {
       return hasUnread ? `Open ${widgetTitle} (new message)` : `Open ${widgetTitle}`;
     }
@@ -1684,6 +3112,39 @@
       syncToggleAriaLabel();
       renderMessages();
     }
+
+    // ─── Frontend Activity Tracking ──────────────────────────────────────────
+
+    function setFrontendActivity(activity) {
+      frontendActivity = activity;
+      if (!activity && frontendActivityTimer) {
+        clearTimeout(frontendActivityTimer);
+        frontendActivityTimer = null;
+      }
+      renderMessages();
+    }
+
+    function scheduleFrontendActivityClear(delayMs) {
+      if (frontendActivityTimer) {
+        clearTimeout(frontendActivityTimer);
+      }
+      frontendActivityTimer = setTimeout(() => {
+        frontendActivity = null;
+        frontendActivityTimer = null;
+        renderMessages();
+      }, delayMs || 1200);
+    }
+
+    function clearFrontendActivity() {
+      if (frontendActivityTimer) {
+        clearTimeout(frontendActivityTimer);
+        frontendActivityTimer = null;
+      }
+      frontendActivity = null;
+      renderMessages();
+    }
+
+    // ─── Launcher Positioning & Drag ─────────────────────────────────────────
 
     function getViewportHeight() {
       if (window.visualViewport && typeof window.visualViewport.height === "number") {
@@ -1771,13 +3232,15 @@
       if (isOpen) togglePanel();
     });
 
+    // ─── Message Rendering ──────────────────────────────────────────────────
+
     function renderMessages() {
-      if (state.messages.length === 0) {
+      if (state.messages.length === 0 && !frontendActivity) {
         messagesEl.innerHTML = `
           <div class="cta-widget-empty">
-	            <div class="cta-widget-empty-icon">
-	              ${getIconMarkup()}
-	            </div>
+            <div class="cta-widget-empty-icon">
+              ${getIconMarkup()}
+            </div>
             <h3>${escapeHtml(widgetEmptyTitle)}</h3>
             <p>${escapeHtml(widgetEmptyDescription)}</p>
           </div>
@@ -1786,6 +3249,35 @@
       }
 
       messagesEl.innerHTML = "";
+
+      if (frontendActivity) {
+        const activity = document.createElement("div");
+        activity.className = "cta-widget-activity";
+        const header = document.createElement("div");
+        header.className = "cta-widget-activity-header";
+        const title = document.createElement("span");
+        title.textContent = frontendActivity.title || "Applying changes";
+        const status = document.createElement("span");
+        status.className = "cta-widget-activity-status";
+        status.textContent =
+          frontendActivity.status === "done" ? "Done" : frontendActivity.status === "error" ? "Needs attention" : "Working";
+        header.appendChild(title);
+        header.appendChild(status);
+        activity.appendChild(header);
+        if (frontendActivity.steps && frontendActivity.steps.length > 0) {
+          const list = document.createElement("div");
+          list.className = "cta-widget-activity-list";
+          frontendActivity.steps.forEach((step) => {
+            const row = document.createElement("div");
+            row.className = "cta-widget-activity-step";
+            row.dataset.status = step.status || "pending";
+            row.textContent = step.label || `Step ${step.index + 1}`;
+            list.appendChild(row);
+          });
+          activity.appendChild(list);
+        }
+        messagesEl.appendChild(activity);
+      }
 
       state.messages.forEach((msg) => {
         const bubble = document.createElement("div");
@@ -1808,12 +3300,19 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    const frontendUi = {
+      setActivity: setFrontendActivity,
+      scheduleClear: scheduleFrontendActivityClear,
+    };
+
     function setLoading(loading) {
       isLoading = loading;
       sendEl.disabled = loading;
       updateMicState();
       renderMessages();
     }
+
+    // ─── Voice Input & Recording ─────────────────────────────────────────────
 
     function persistVoiceState() {
       state.voice = {
@@ -2076,6 +3575,12 @@
       inputEl.selectionEnd = inputEl.value.length;
     }
 
+    // ─── Configuration & Authentication ──────────────────────────────────────
+
+    function getConfigString(data, key) {
+      return typeof data[key] === "string" && data[key].trim() ? data[key].trim() : null;
+    }
+
     function applyRemoteConfig(data) {
       if (widgetHidden) return;
       if (!data || typeof data !== "object") return;
@@ -2085,22 +3590,12 @@
       }
       headerConfig = data.headers || {};
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
-      if (typeof data.widgetTitle === "string" && data.widgetTitle.trim()) {
-        widgetTitle = data.widgetTitle.trim();
-      }
-      if (typeof data.widgetSubtitle === "string" && data.widgetSubtitle.trim()) {
-        widgetSubtitle = data.widgetSubtitle.trim();
-      }
-      widgetIconUrl = typeof data.widgetIconUrl === "string" && data.widgetIconUrl.trim() ? data.widgetIconUrl.trim() : null;
-      if (typeof data.widgetEmptyTitle === "string" && data.widgetEmptyTitle.trim()) {
-        widgetEmptyTitle = data.widgetEmptyTitle.trim();
-      }
-      if (typeof data.widgetEmptyDescription === "string" && data.widgetEmptyDescription.trim()) {
-        widgetEmptyDescription = data.widgetEmptyDescription.trim();
-      }
-      if (typeof data.widgetInputPlaceholder === "string" && data.widgetInputPlaceholder.trim()) {
-        widgetInputPlaceholder = data.widgetInputPlaceholder.trim();
-      }
+      widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
+      widgetSubtitle = getConfigString(data, "widgetSubtitle") || widgetSubtitle;
+      widgetIconUrl = getConfigString(data, "widgetIconUrl");
+      widgetEmptyTitle = getConfigString(data, "widgetEmptyTitle") || widgetEmptyTitle;
+      widgetEmptyDescription = getConfigString(data, "widgetEmptyDescription") || widgetEmptyDescription;
+      widgetInputPlaceholder = getConfigString(data, "widgetInputPlaceholder") || widgetInputPlaceholder;
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;
       }
@@ -2165,6 +3660,8 @@
       return response;
     }
 
+    // ─── Chat & Messaging ───────────────────────────────────────────────────
+
     function setUnread(nextHasUnread) {
       hasUnread = Boolean(nextHasUnread);
       toggle.classList.toggle("has-unread", hasUnread);
@@ -2175,6 +3672,18 @@
       toggle.classList.remove("unread-pulse");
       void toggle.offsetWidth;
       toggle.classList.add("unread-pulse");
+    }
+
+    async function runToolCalls(toolCalls) {
+      const hasFrontend = toolCalls.some((call) => resolveToolType(call) !== "endpoint");
+      if (!hasFrontend) {
+        return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig, frontendUi)));
+      }
+      const results = [];
+      for (const call of toolCalls) {
+        results.push(await executeToolCall(call, config.baseUrl, headerConfig, frontendUi));
+      }
+      return results;
     }
 
     async function sendMessage(text) {
@@ -2214,9 +3723,7 @@
             }
 
             if (data.toolCalls && data.toolCalls.length > 0) {
-              const toolResults = await Promise.all(
-                data.toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig))
-              );
+              const toolResults = await runToolCalls(data.toolCalls);
 
               response = await postWidgetChat({
                 agentId: config.agentId,
@@ -2272,6 +3779,8 @@
       }
     }
 
+    // ─── Panel Management ──────────────────────────────────────────────────
+
     function openPanel() {
       if (isOpen) return;
       isOpen = true;
@@ -2295,6 +3804,7 @@
       toggle.setAttribute("aria-expanded", "false");
       closeMicMenu();
       stopRecording();
+      clearHighlight();
       if (restoreLauncherFocus) {
         toggle.focus();
       } else {
@@ -2315,8 +3825,11 @@
       state.conversationId = null;
       saveState(state);
       setUnread(false);
+      clearFrontendActivity();
       renderMessages();
     }
+
+    // ─── Event Binding ──────────────────────────────────────────────────────
 
     toggle.addEventListener("click", async () => {
       if (ignoreToggleClick || widgetHidden) return;
@@ -2356,7 +3869,7 @@
       }
       closePanel({ restoreLauncherFocus: false });
     });
-    micEl.addEventListener("click", (event) => {
+    micEl.addEventListener("click", () => {
       if (isRecording) {
         stopRecording();
       } else {
@@ -2413,6 +3926,10 @@
 
     return root;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Initialization
+  // ═══════════════════════════════════════════════════════════════════════════
 
   async function init() {
     try {

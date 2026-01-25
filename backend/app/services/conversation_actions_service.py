@@ -18,6 +18,26 @@ def _is_sensitive_key(key: str) -> bool:
     return any(fragment in lowered for fragment in SENSITIVE_KEY_FRAGMENTS)
 
 
+def _is_sensitive_selector(selector: str) -> bool:
+    lowered = selector.lower()
+    return (
+        "password" in lowered
+        or 'type="password"' in lowered
+        or "[type=password]" in lowered
+        or "secret" in lowered
+        or "token" in lowered
+    )
+
+
+def _sanitize_frontend_action(action: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(action, dict):
+        return action
+    selector = str(action.get("selector") or "")
+    if _is_sensitive_selector(selector) and "text" in action:
+        return {**action, "text": "***"}
+    return action
+
+
 def _sanitize(value: Any) -> Any:
     if isinstance(value, dict):
         sanitized: dict[str, Any] = {}
@@ -35,10 +55,11 @@ def _sanitize(value: Any) -> Any:
 @dataclass(frozen=True)
 class ToolCallForLog:
     id: str
-    endpoint_id: UUID
-    params: dict[str, Any]
-    query: dict[str, Any]
-    body: dict[str, Any]
+    tool_type: str
+    endpoint_id: UUID | None = None
+    params: dict[str, Any] | None = None
+    query: dict[str, Any] | None = None
+    body: dict[str, Any] | None = None
 
 
 def _tool_call_map(tool_calls: list[ToolCallForLog]) -> dict[str, ToolCallForLog]:
@@ -93,6 +114,7 @@ def record_widget_tool_results(
             session.add(ConversationAction(
                 user_id=user_id,
                 conversation_id=conversation_id,
+                tool_type="backend",
                 endpoint_id=endpoint.id,
                 feature_id=endpoint.feature_id,
                 tool_call_id=tool_call_id,
@@ -116,3 +138,49 @@ def record_widget_tool_results(
             )
     if added:
         session.flush()
+
+
+def record_frontend_action(
+    session: Session,
+    user_id: str,
+    conversation_id: UUID,
+    tool_call_id: str,
+    goal: str,
+    url: str,
+    actions: list[dict[str, Any]],
+    status_code: int,
+    error: str | None,
+) -> None:
+    existing = session.scalar(
+        select(ConversationAction.id).where(
+            ConversationAction.user_id == user_id,
+            ConversationAction.conversation_id == conversation_id,
+            ConversationAction.tool_call_id == tool_call_id,
+        )
+    )
+    if existing:
+        return
+
+    try:
+        session.add(ConversationAction(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            tool_type="frontend",
+            frontend_goal=goal,
+            frontend_url=url,
+            frontend_actions=[_sanitize_frontend_action(a) for a in actions],
+            tool_call_id=tool_call_id,
+            request={},
+            status_code=status_code,
+            error=error,
+        ))
+        session.flush()
+    except Exception as exc:
+        log_error(
+            "ConversationActionsService",
+            "record_frontend_action",
+            "Failed to record frontend action",
+            exc=exc,
+            conversation_id=str(conversation_id),
+            tool_call_id=tool_call_id,
+        )

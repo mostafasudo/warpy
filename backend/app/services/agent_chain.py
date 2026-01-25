@@ -16,7 +16,7 @@ from ..models import Endpoint
 from ..schemas.widget import ToolCallPayload, ToolResultPayload
 from .agent_execution import execute_endpoint
 from .agent_schema import SchemaFactory, serialize_args
-from .agent_tools import create_find_actions_tool, get_endpoint_tools
+from .agent_tools import create_find_actions_tool, create_frontend_actions_tool, create_frontend_context_tool, get_endpoint_tools
 from .hallucination_checker import HallucinationChecker
 from .tool_cache import ToolCache
 
@@ -24,31 +24,31 @@ BLOCKED_RESPONSE = "I can only help with dashboard actions. Please ask me to per
 BLOCKED_SYSTEM_NOTE = "Your previous response was blocked because it did not align with your role as a dashboard assistant. Stay focused on discovering and executing dashboard actions only."
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
 
-SYSTEM_PROMPT = """You are a helpful dashboard assistant that can perform actions on behalf of the user.
+SYSTEM_PROMPT = """Context: You are a dashboard assistant that can execute backend endpoints and frontend UI steps on the current page.
 
-Your role:
-- You help users accomplish tasks by discovering and executing available actions
-- You communicate in a friendly, non-technical way
-- You stay strictly within the scope of dashboard actions
+Task: Help the user achieve their dashboard goal.
 
-Understanding your capabilities:
-- You have access to many actions, but you only see a RELEVANT SUBSET at a time based on the conversation.
-- The `find_actions` tool returns the most relevant actions, but potentially not ALL of them.
-- When listing capabilities, mention the examples you see but ALWAYS clarify that you can perform many other tasks if the user describes their goal.
-- Example response: "I can help with [Action A] and [Action B], but I have many other capabilities. What would you like to achieve?"
+Constraints:
+- Discover backend actions with find_actions first.
+- If find_actions returns no suitable actions (empty list) or the returned actions don't match the user's goal, request frontend_context next.
+- If the task is a UI change or find_actions is not relevant, request frontend_context.
+- Ask for any required values; do not guess.
+- Execute frontend actions in small, ordered steps; include waits for dynamic UI.
+- If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user.
+- Use only available tools; stay within the current page.
+- Keep responses friendly and non-technical.
 
-When a user asks you to do something:
-1. Use the find_actions tool to discover what actions are available for their request
-2. Before executing any action, ensure you have gathered ALL required information from the user in a natural, conversational way
-3. Never guess or assume values for required fields - always ask the user
-4. Execute actions only when you have complete information matching the expected format
-5. Summarize what you accomplished in simple terms
+Frontend Action Tips:
+- If an action reports ELEMENT_NOT_FOUND, the selector didn't match anything - request fresh frontend_context with refined scope/hints
+- If an action succeeds but nothing changes, the element may be disabled or hidden - check the page state and try a different approach
+- For dynamic UIs, use wait_for_stable or add wait actions between steps
+- When context returns fewer elements than expected, increase maxElements to 100-160
+- Use suggestedSelectors from context response to pick reliable selectors
+- After failures, always request fresh frontend_context - the DOM may have changed
 
-Important guidelines:
-- Only execute actions that are available to you - do not invent capabilities
-- If an action requires specific values, ask for them clearly without using technical terminology
-- If something goes wrong, explain the issue in plain language and suggest next steps
-- You cannot perform actions outside of what has been configured for this dashboard"""
+Output:
+- Either tool calls OR a short response that summarizes what you did or asks one clear question for missing info.
+- When listing capabilities, mention a few examples and state you can do more if the user describes their goal."""
 
 
 @dataclass
@@ -129,7 +129,11 @@ class AgentExecutor:
         self._tool_cache.save()
 
     def _get_tools(self):
-        tools = [create_find_actions_tool(self.session, self.user_id)]
+        tools = [
+            create_find_actions_tool(self.session, self.user_id),
+            create_frontend_context_tool(),
+            create_frontend_actions_tool(),
+        ]
         tools.extend(get_endpoint_tools(
             self.session,
             self.user_id,
@@ -302,14 +306,18 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                 messages.append(HumanMessage(content=user_message))
         else:
             messages = self._build_messages_from_history(user_message, conversation_history)
+        runtime_messages = list(messages)
 
         if tool_results:
             for result in tool_results:
+                body = result.body
                 if result.error:
                     content = json.dumps({"error": result.error})
                 else:
-                    content = json.dumps({"status_code": result.status_code, "body": result.body})
-                messages.append(ToolMessage(content=content, tool_call_id=result.id))
+                    content = json.dumps({"status_code": result.status_code, "body": body})
+                tool_message = ToolMessage(content=content, tool_call_id=result.id)
+                messages.append(tool_message)
+                runtime_messages.append(tool_message)
 
         max_iterations = llm_config.max_iterations
         iteration = 0
@@ -318,8 +326,9 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
             iteration += 1
             tools = self._get_tools()
             llm_with_tools = self.llm.bind_tools(tools)
-            response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
+            response = await llm_with_tools.ainvoke(runtime_messages, config={"tags": ["main-agent"]})
             messages.append(response)
+            runtime_messages.append(response)
 
             if not response.tool_calls:
                 raw_response = response.content or ""
@@ -337,7 +346,7 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                     active_endpoint_ids=self.active_endpoint_ids
                 )
 
-            endpoint_tool_calls: list[ToolCallPayload] = []
+            pending_tool_calls: list[ToolCallPayload] = []
 
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
@@ -361,14 +370,51 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                             tool_result = f"Error: {str(error)}"
                     else:
                         tool_result = "Tool not found"
-                    messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
+                    tool_message = ToolMessage(content=tool_result, tool_call_id=tool_call["id"])
+                    messages.append(tool_message)
+                    runtime_messages.append(tool_message)
+                elif tool_name == "frontend_context":
+                    try:
+                        pending_tool_calls.append(ToolCallPayload(
+                            id=tool_call["id"],
+                            type="frontend_context",
+                            name=tool_name,
+                            goal=tool_args.get("goal") if isinstance(tool_args, dict) else None,
+                            context=tool_args if isinstance(tool_args, dict) else None,
+                        ))
+                    except Exception as error:
+                        log_error("AgentExecutor", "run_step", "frontend_context args invalid", exc=error)
+                        tool_message = ToolMessage(
+                            content="frontend_context args invalid",
+                            tool_call_id=tool_call["id"]
+                        )
+                        messages.append(tool_message)
+                        runtime_messages.append(tool_message)
+                elif tool_name == "frontend":
+                    try:
+                        pending_tool_calls.append(ToolCallPayload(
+                            id=tool_call["id"],
+                            type="frontend",
+                            name=tool_name,
+                            goal=tool_args.get("goal") if isinstance(tool_args, dict) else None,
+                            actions=tool_args.get("actions", []) if isinstance(tool_args, dict) else [],
+                        ))
+                    except Exception as error:
+                        log_error("AgentExecutor", "run_step", "frontend args invalid", exc=error)
+                        tool_message = ToolMessage(
+                            content="frontend args invalid",
+                            tool_call_id=tool_call["id"]
+                        )
+                        messages.append(tool_message)
+                        runtime_messages.append(tool_message)
                 else:
                     endpoint = self._get_endpoint_by_tool_name(tool_name)
                     if endpoint:
                         serialized = serialize_args(tool_args)
                         filtered = {k: v for k, v in serialized.items() if v is not None}
-                        endpoint_tool_calls.append(ToolCallPayload(
+                        pending_tool_calls.append(ToolCallPayload(
                             id=tool_call["id"],
+                            type="backend",
                             endpointId=endpoint.id,
                             name=tool_name,
                             method=endpoint.method.value,
@@ -379,14 +425,16 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                             headers=filtered.get("headers", {})
                         ))
                     else:
-                        messages.append(ToolMessage(
+                        tool_message = ToolMessage(
                             content=f"Tool '{tool_name}' not found",
                             tool_call_id=tool_call["id"]
-                        ))
+                        )
+                        messages.append(tool_message)
+                        runtime_messages.append(tool_message)
 
-            if endpoint_tool_calls:
+            if pending_tool_calls:
                 return StepResult(
-                    tool_calls=endpoint_tool_calls,
+                    tool_calls=pending_tool_calls,
                     done=False,
                     messages=messages,
                     active_endpoint_ids=self.active_endpoint_ids
@@ -448,6 +496,12 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                     if added_ids:
                         self._update_cache_after_discovery(added_ids)
                     messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
+                    continue
+                if tool_name in ("frontend_context", "frontend"):
+                    messages.append(ToolMessage(
+                        content="Frontend tools require the widget runtime",
+                        tool_call_id=tool_call["id"]
+                    ))
                     continue
 
                 endpoint = self._get_endpoint_by_tool_name(tool_name)

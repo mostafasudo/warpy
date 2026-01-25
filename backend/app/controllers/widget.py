@@ -33,7 +33,7 @@ from ..services.widget_service import (
     save_tool_context,
     save_widget_message,
 )
-from ..services.conversation_actions_service import ToolCallForLog, record_widget_tool_results
+from ..services.conversation_actions_service import ToolCallForLog, record_frontend_action, record_widget_tool_results
 from ..services.widget_auth_service import WidgetJwtError, verify_widget_jwt
 from ..services.user_rate_limit_service import (
     extract_client_ip,
@@ -63,7 +63,8 @@ def serialize_state(messages: list, active_endpoint_ids: list[UUID], tool_calls:
         "tool_calls": [
             {
                 "id": call.id,
-                "endpoint_id": str(call.endpoint_id),
+                "tool_type": call.tool_type,
+                "endpoint_id": str(call.endpoint_id) if call.endpoint_id else None,
                 "params": call.params,
                 "query": call.query,
                 "body": call.body,
@@ -84,12 +85,15 @@ def deserialize_state(state: str) -> tuple[list, list[UUID], list[ToolCallForLog
                 if not isinstance(call, dict):
                     continue
                 call_id = str(call.get("id") or "").strip()
-                endpoint_id = str(call.get("endpoint_id") or "").strip()
-                if not call_id or not endpoint_id:
+                if not call_id:
                     continue
+                tool_type = str(call.get("tool_type") or "backend")
+                endpoint_id_str = call.get("endpoint_id")
+                endpoint_id = UUID(endpoint_id_str) if endpoint_id_str else None
                 tool_calls.append(ToolCallForLog(
                     id=call_id,
-                    endpoint_id=UUID(endpoint_id),
+                    tool_type=tool_type,
+                    endpoint_id=endpoint_id,
                     params=call.get("params") or {},
                     query=call.get("query") or {},
                     body=call.get("body") or {},
@@ -196,16 +200,56 @@ async def widget_chat(
         else:
             conversation = create_widget_conversation(session, payload.agent_id)
 
+        pending_messages = None
+        active_endpoint_ids = None
+        pending_tool_calls: list[ToolCallForLog] = []
+        tool_results: list[ToolResultPayload] | None = None
+
         if payload.tool_results:
+            tool_results = payload.tool_results
+            pending_state = get_pending_state(session, conversation.id)
+            if pending_state:
+                pending_messages, active_endpoint_ids, pending_tool_calls = deserialize_state(pending_state)
+
+            tool_call_type_map = {tc.id: tc.tool_type for tc in pending_tool_calls}
+            billable_ids = [
+                result.id for result in payload.tool_results
+                if tool_call_type_map.get(result.id) in ("backend", "frontend")
+            ]
+
             consume_result = consume_actions_for_tool_results(
                 session,
                 agent.user_id,
                 conversation.id,
-                [result.id for result in payload.tool_results],
+                billable_ids,
             )
             actions_remaining = consume_result.remaining
             if consume_result.consumed > 0 and redis_client and agent.user_rate_limit_enabled:
                 increment_rate_limit_usage(redis_client, agent.id, client_ip, consume_result.consumed)
+
+            if pending_tool_calls:
+                record_widget_tool_results(
+                    session,
+                    agent.user_id,
+                    conversation.id,
+                    tool_results=tool_results,
+                    tool_calls=pending_tool_calls,
+                )
+                for result in tool_results:
+                    tool_call = tool_call_type_map.get(result.id)
+                    if tool_call == "frontend" and result.body:
+                        body = result.body if isinstance(result.body, dict) else {}
+                        record_frontend_action(
+                            session,
+                            agent.user_id,
+                            conversation.id,
+                            tool_call_id=result.id,
+                            goal=body.get("goal", ""),
+                            url=body.get("url", ""),
+                            actions=body.get("results", []),
+                            status_code=result.status_code,
+                            error=result.error,
+                        )
         else:
             summary = get_billing_actions_summary(session, agent.user_id)
             actions_remaining = summary.total_remaining
@@ -233,26 +277,10 @@ async def widget_chat(
             if m.role in ("user", "assistant")
         ]
 
-        pending_messages = None
-        active_endpoint_ids = None
-        tool_results: list[ToolResultPayload] | None = None
-
         if payload.message:
             save_widget_message(session, conversation.id, "user", payload.message)
 
         if payload.tool_results:
-            tool_results = payload.tool_results
-            pending_state = get_pending_state(session, conversation.id)
-            if pending_state:
-                pending_messages, active_endpoint_ids, pending_tool_calls = deserialize_state(pending_state)
-                if pending_tool_calls:
-                    record_widget_tool_results(
-                        session,
-                        agent.user_id,
-                        conversation.id,
-                        tool_results=tool_results,
-                        tool_calls=pending_tool_calls,
-                    )
             if actions_remaining <= 0:
                 message = ASSISTANT_UNAVAILABLE_MESSAGE
                 log_info(
@@ -313,13 +341,14 @@ async def widget_chat(
                 [
                     ToolCallForLog(
                         id=call.id,
-                        endpoint_id=call.endpoint_id,
+                        tool_type=call.tool_type,
+                        endpoint_id=call.endpoint_id if call.tool_type == "backend" else None,
                         params=call.params or {},
                         query=call.query or {},
                         body=call.body or {},
                     )
                     for call in result.tool_calls
-                    if call.id
+                    if call.id and call.tool_type in ("backend", "frontend")
                 ],
             )
             save_widget_message(session, conversation.id, "pending_state", state)
