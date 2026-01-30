@@ -77,6 +77,12 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - You add shadcdn components such as `pnpm dlx shadcn@latest add label`
 
 ## PR checklist
-- Title: `feat(scope): short description`.
 - Lint/typecheck/tests **green** (JS + Py). **Coverage 100%**.
 - Diff small and focused with a brief summary.
+
+## Docs
+**Load only when needed.**
+
+| Doc | When to load |
+|-----|--------------|
+| [Backend Conventions](docs/prompt-engineering.md) | Reference guide for prompt engineering best practices. Use when creating, modifying, or optimizing LLM agent system prompts, tool descriptions, parameter descriptions, or any AI instruction text. Apply when writing prompts for Claude, GPT, or other language models. |
