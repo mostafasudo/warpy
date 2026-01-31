@@ -27,6 +27,9 @@ Production infrastructure reference: [INFRA_GUIDE.md](INFRA_GUIDE.md).
 
 We use the GitHub Project in this repo (Projects tab) for planning and task tracking (no Linear / external PM tools).
 
+## Docs
+If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
+
 ## Landing page
 
 The marketing/landing site: [LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing).

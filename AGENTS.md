@@ -11,6 +11,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
+- If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.
