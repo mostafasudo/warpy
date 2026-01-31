@@ -4,21 +4,20 @@
 
 ## 1. Branding Guidelines
 
-**Brand Archetype: The Adaptive Architect** Warpy is a precision engine, not a chatty assistant. It combines the visionary capability of The Magician (generating UI from nothing) with the structural rigor of The Sage (analyzing deep data).
+**Brand Archetype: The Adaptive Architect**  
+Warpy is a precision engine, not a chatty assistant. It combines the visionary capability of The Magician (generating UI from nothing) with the structural rigor of The Sage (analyzing deep data).
 
 ### Core Values & Tone
 
 - **Fluidity:** The interface is liquid. It morphs to fit the data, rejecting static grids.
-
 - **Invisibility:** Warpy is unobtrusive. It is a lens, not a wall. It waits for intent, then acts instantly.
-
 - **Precision:** We speak the language of developers and analysts. No fluff. High signal-to-noise ratio.
+- **Minimal Intrusion:** The widget must be as vanilla and minimal as possible. It must avoid being invasive to the user's dashboard and styling. Warpy overlays, morphs, and acts, but never disrupts or overwrites the host product experience.
 
 **Voice:** Technical Co-Pilot.
 
 - **Do:** Use active verbs ("Morph," "Generate," "Synthesize"). Speak in concise, data-driven statements.
-
-- **Don't:** Use anthropomorphic language ("I think," "Here's a helper"). Avoid playful/cartoony slang.
+- **Don't:** Use anthropomorphic language ("I think," "Here's a helper"). Avoid playful or cartoony slang.
 
 ### Visual Style Guide: "The Cherenkov Void" & "The Laboratory"
 
@@ -29,8 +28,7 @@
 **Logo Usage:**
 
 - **Primary:** White strokes on Deep Gunmetal.
-
-- **Motion:** The strokes should drift slightly, like objects in zero gravity, never remaining perfectly static.
+- **Motion:** The strokes should drift slightly, like objects in zero gravity—never remaining perfectly static.
 
 ## 2. Catchy Brand Statements
 
@@ -41,45 +39,36 @@
 ### Secondary Taglines:
 
 - "Static is Dead. Go Fluid."
-
 - "Your Dashboard, Unlocked."
-
 - "From Read-Only to Real-Time."
 
 ## 3. Core Product Design Guidelines
+
+> **Minimal, non-invasive widget:** Above all, Warpy’s widget must remain as minimal and vanilla as possible, leaving the user’s dashboard styling untouched and providing functional overlays only when necessary.
 
 ### Design System Tokens
 
 #### Palette: The Event Horizon System (Refined)
 
 **Surfaces (Dark Mode - The Staircase):**
-
 - `#090a0b` Deep Void (Main Background - L4%)
-
 - `#121416` Gunmetal Surface (Cards - L8%)
-
 - `#1b1e22` Active Layer (Inputs/Muted - L12%)
-
 - `#23262b` Stealth Border (Borders - L16%)
 
 **Accents & Semantics:**
-
 - **Primary:** Interstellar Blue (HSL 215 100% 50%). A heavier, authoritative electric blue that anchors the UI.
-
 - **Secondary:** Moon Rock (HSL 217 19% 27%). A subtle technical grey for tags and secondary actions. Do not use Violet here.
-
 - **AI Glow:** Generative Violet (HSL 255 60% 65%). Reserved exclusively for AI-generated elements and magic moments. Never used for standard UI buttons.
 
 #### Typography: The Unified Stack
 
 - **Headlines & UI:** Space Grotesk. A geometric sans-serif that maintains a professional, "invisible" structural feel with a futuristic edge. Tight tracking (-0.025em) enhances its modern, technical character.
-
 - **Code/Data:** JetBrains Mono. Used strictly for code blocks, JSON payloads, and technical values.
 
 #### Border Radius
 
 - **Pill (999px):** For the collapsed "Beacon" widget and primary buttons.
-
 - **Standard (8px):** For cards, inputs, and detached windows.
 
 ### UI/UX Design Principles
@@ -93,17 +82,13 @@ Never use high-contrast borders to separate layers in dark mode. Instead, use 4%
 Color indicates function, not just brand.
 
 - Blue = User Action (Save, Submit, Navigate).
-
 - Violet = AI Action (Generate, Morph, Analyze).
-
 - Grey = Meta Information (Tags, Secondary options).
 
 #### 3. Polymorphic Interface (States of Matter)
 
 - **Solid:** The collapsed "Beacon" (a small, glowing pill).
-
 - **Liquid:** The expanded "Command Center" (flows over the content).
-
 - **Gas:** Detached "Projections" (floating windows pinned to the dashboard).
 
 #### 4. Skeleton Morphing
