@@ -1,5 +1,8 @@
 # AGENTS.md
 
+## What is Warpy
+Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
+
 ## Modes
 - **Ask mode:** answers are short, clear, and strictly concise.
 
@@ -22,6 +25,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - **Backend tests (local):** activate `backend/.venv` then `python3 -m pytest app`
 - **Backend tests (docker):** `docker compose exec backend python3 -m pytest app`
 - **Widget `<script>`:** tiny, idempotent init, no globals, no CSS bleed, works without the dashboard.
+- **White-labeling:** the widget runs on customers' dashboards and must be fully white-label-ready. Never hard-code "Warpy" (or any Warpy branding) in user-facing widget output. Any product name shown to end users must come from a configurable value that defaults to "Warpy" only when the customer hasn't set their own.
 - **Backend:** **FastAPI**, **SQLAlchemy**, **Redis + RQ** for background jobs, **LangChain** via existing clients.
 - **DB:** write **efficient queries** only; avoid N+1; never full table scans; always use appropriate indexes/limits/projections.
 - **Concurrency:** make all operations **idempotent and atomic**; use upserts instead of inserts; implement proper locking; design for high concurrency safety.
