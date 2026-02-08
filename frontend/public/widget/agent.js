@@ -3154,6 +3154,7 @@
     function hideWidget() {
       if (widgetHidden) return;
       widgetHidden = true;
+      chatEpoch += 1;
       stopCurrentExecution();
       closePanel({ restoreLauncherFocus: false });
       clearHighlight();
