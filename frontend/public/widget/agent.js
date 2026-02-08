@@ -15,6 +15,9 @@
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
   const DOMPURIFY_INTEGRITY = "sha384-Y2u+tbsy03z8jtFrNMeiCU+7VdECSbkt7TIkTU95qOc01ZuCLYXbHnfuJa6WHLHw";
   const WIDGET_CONTAINER_ID = "cta-widget-container";
+  const FRONTEND_WARNING_LEAD_MS = 450;
+  const FRONTEND_WARNING_MIN_VISIBLE_MS = 2400;
+  const FRONTEND_WARNING_HOLD_MS = 2200;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Utilities
@@ -30,8 +33,42 @@
     return Math.max(min, Math.min(max, Math.round(num)));
   }
 
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function createAbortError() {
+    const error = new Error("Execution stopped");
+    error.name = "AbortError";
+    return error;
+  }
+
+  function isAbortError(error) {
+    return Boolean(error && (error.name === "AbortError" || error.code === "ABORT_ERR"));
+  }
+
+  function throwIfAborted(signal) {
+    if (signal && signal.aborted) {
+      throw createAbortError();
+    }
+  }
+
+  function sleep(ms, signal) {
+    const delay = Math.max(0, Number(ms) || 0);
+    if (!signal) {
+      return new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    if (signal.aborted) {
+      return Promise.reject(createAbortError());
+    }
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      }, delay);
+      const onAbort = () => {
+        clearTimeout(timeoutId);
+        signal.removeEventListener("abort", onAbort);
+        reject(createAbortError());
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   function normalizeText(value) {
@@ -319,12 +356,26 @@
 
   async function fetchWithTimeout(url, options = {}, timeout = API_TIMEOUT) {
     const controller = new AbortController();
+    const externalSignal = options && options.signal ? options.signal : null;
+    const requestOptions = { ...(options || {}) };
+    delete requestOptions.signal;
+    const forwardAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener("abort", forwardAbort, { once: true });
+      }
+    }
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
+      const response = await fetch(url, { ...requestOptions, signal: controller.signal });
       return response;
     } finally {
       clearTimeout(timeoutId);
+      if (externalSignal) {
+        externalSignal.removeEventListener("abort", forwardAbort);
+      }
     }
   }
 
@@ -965,29 +1016,31 @@
     return safeQuerySelector(base, `[role="${cssEscape(target)}"]`);
   }
 
-  async function waitForElement(selector, options) {
+  async function waitForElement(selector, options, signal) {
     const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
     const requireVisible = options && options.visible !== false;
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
+      throwIfAborted(signal);
       const el = resolveSelectorTarget(selector, document);
       if (el && (!requireVisible || isElementVisible(el))) {
         return el;
       }
-      await sleep(200);
+      await sleep(200, signal);
     }
     return null;
   }
 
-  async function waitForText(text, options) {
+  async function waitForText(text, options, signal) {
     const target = normalizeText(text);
     if (!target) return false;
     const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
+      throwIfAborted(signal);
       const bodyText = normalizeText(document.body ? document.body.innerText || document.body.textContent || "" : "");
       if (bodyText.includes(target)) return true;
-      await sleep(200);
+      await sleep(200, signal);
     }
     return false;
   }
@@ -1224,12 +1277,12 @@
   }
 
   // MutationObserver-based wait for DOM stability
-  async function waitForStable(selector, options) {
+  async function waitForStable(selector, options, signal) {
     const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 5000, 400, 20000);
     const stabilityMs = clampInt(options && options.stabilityMs ? options.stabilityMs : 300, 100, 2000);
 
     // First wait for element to exist
-    const el = selector ? await waitForElement(selector, { timeoutMs }) : document.body;
+    const el = selector ? await waitForElement(selector, { timeoutMs }, signal) : document.body;
     if (!el) {
       throw createError("Element not found for stability check", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
     }
@@ -1243,11 +1296,19 @@
         if (stabilityTimer) clearTimeout(stabilityTimer);
         if (timeoutTimer) clearTimeout(timeoutTimer);
         if (observer) observer.disconnect();
+        if (signal) {
+          signal.removeEventListener("abort", onAbort);
+        }
       };
 
       const onStable = () => {
         cleanup();
         resolve(el);
+      };
+
+      const onAbort = () => {
+        cleanup();
+        reject(createAbortError());
       };
 
       const resetStabilityTimer = () => {
@@ -1269,6 +1330,14 @@
       // Start initial stability timer
       resetStabilityTimer();
 
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
       // Overall timeout
       timeoutTimer = setTimeout(() => {
         cleanup();
@@ -1279,14 +1348,18 @@
   }
 
   // Execute action with retry logic
-  async function executeWithRetry(actionFn, retryCount, retryDelayMs) {
+  async function executeWithRetry(actionFn, retryCount, retryDelayMs, signal) {
     let lastError = null;
     const maxAttempts = Math.max(1, (retryCount || 0) + 1);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      throwIfAborted(signal);
       try {
         return await actionFn();
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         lastError = error;
         // Don't retry certain errors
         if (error.errorCode === "SELECTOR_INVALID" || error.errorCode === "ELEMENT_DISABLED") {
@@ -1295,31 +1368,32 @@
         // If not last attempt, wait and retry
         if (attempt < maxAttempts - 1) {
           const delay = (retryDelayMs || 500) * Math.pow(2, attempt); // Exponential backoff
-          await sleep(Math.min(delay, 5000));
+          await sleep(Math.min(delay, 5000), signal);
         }
       }
     }
     throw lastError;
   }
 
-  async function runFrontendAction(action) {
+  async function runFrontendAction(action, signal) {
+    throwIfAborted(signal);
     const name = action.action;
     if (!name) {
       throw new Error("Missing action");
     }
     if (name === "wait") {
       const delay = clampInt(action.delayMs || action.ms || 500, 0, 10000);
-      await sleep(delay);
+      await sleep(delay, signal);
       return;
     }
     if (name === "waitfor" || name === "wait_for") {
       const selector = action.selector || (action.text ? `text=${action.text}` : action.value ? String(action.value) : "");
-      const el = selector ? await waitForElement(selector, { timeoutMs: action.timeoutMs }) : null;
+      const el = selector ? await waitForElement(selector, { timeoutMs: action.timeoutMs }, signal) : null;
       if (!el) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
       return;
     }
     if (name === "waitfortext" || name === "wait_for_text") {
-      const ok = await waitForText(action.text || action.value || "", { timeoutMs: action.timeoutMs });
+      const ok = await waitForText(action.text || action.value || "", { timeoutMs: action.timeoutMs }, signal);
       if (!ok) throw createError("Text not found", "TIMEOUT", "WAIT_AND_RETRY");
       return;
     }
@@ -1328,7 +1402,7 @@
       await waitForStable(selector || null, {
         timeoutMs: action.timeoutMs,
         stabilityMs: action.stabilityMs || 300,
-      });
+      }, signal);
       return;
     }
     if (name === "navigate") {
@@ -1363,7 +1437,7 @@
     const timeoutMs = action.timeoutMs;
     let el = selector ? resolveSelectorTarget(selector, document) : null;
     if (!el && selector && timeoutMs) {
-      el = await waitForElement(selector, { timeoutMs });
+      el = await waitForElement(selector, { timeoutMs }, signal);
     }
     if (!el && !selector && (name === "press" || name === "type" || name === "input" || name === "clear")) {
       el = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
@@ -1382,6 +1456,7 @@
         el.scrollIntoView();
       }
     }
+    throwIfAborted(signal);
     highlightElement(el);
     const point = getActionPoint(el, action);
 
@@ -1511,7 +1586,8 @@
   // Tool Call Execution (Endpoint, Frontend Context, Frontend Actions)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async function executeEndpointToolCall(toolCall, baseUrl, headerConfig) {
+  async function executeEndpointToolCall(toolCall, baseUrl, headerConfig, signal) {
+    throwIfAborted(signal);
     const sessionHeaders = buildHeaders(headerConfig);
     const path = substitutePath(toolCall.path, toolCall.params || {});
     const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
@@ -1538,7 +1614,7 @@
     }
 
     try {
-      const response = await fetchWithTimeout(url.toString(), fetchOptions);
+      const response = await fetchWithTimeout(url.toString(), { ...fetchOptions, signal });
       let body;
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("application/json")) {
@@ -1548,17 +1624,22 @@
       }
       return { id: toolCall.id, statusCode: response.status, body };
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       return { id: toolCall.id, statusCode: 0, body: null, error: error.message || "Request failed" };
     }
   }
 
-  async function executeFrontendContext(toolCall, ui) {
+  async function executeFrontendContext(toolCall, ui, signal) {
+    throwIfAborted(signal);
     const request = toolCall && toolCall.context && typeof toolCall.context === "object" ? toolCall.context : toolCall || {};
     const title = toolCall.goal || request.goal || "Reviewing the page";
     if (ui && typeof ui.setActivity === "function") {
       ui.setActivity({ title, status: "running", steps: [] });
     }
     try {
+      throwIfAborted(signal);
       const context = collectFrontendContext(request);
       if (ui && typeof ui.setActivity === "function") {
         ui.setActivity({ title, status: "done", steps: [] });
@@ -1568,6 +1649,15 @@
       }
       return { id: toolCall.id, statusCode: 200, body: context };
     } catch (error) {
+      if (isAbortError(error)) {
+        if (ui && typeof ui.setActivity === "function") {
+          ui.setActivity({ title, status: "error", steps: [] });
+          if (typeof ui.scheduleClear === "function") {
+            ui.scheduleClear(600);
+          }
+        }
+        throw error;
+      }
       if (ui && typeof ui.setActivity === "function") {
         ui.setActivity({ title, status: "error", steps: [] });
         if (typeof ui.scheduleClear === "function") {
@@ -1578,7 +1668,8 @@
     }
   }
 
-  async function executeFrontendActions(toolCall, ui) {
+  async function executeFrontendActions(toolCall, ui, signal) {
+    throwIfAborted(signal);
     const actions = Array.isArray(toolCall.actions) ? toolCall.actions : [];
     const goal = toolCall.goal || "Applying changes";
     if (!actions.length) {
@@ -1605,6 +1696,7 @@
     }
 
     for (let i = 0; i < actions.length; i += 1) {
+      throwIfAborted(signal);
       const normalized = normalizeAction(actions[i]);
       const step = activity && activity.steps ? activity.steps[i] : null;
       if (step) {
@@ -1615,7 +1707,7 @@
       const retryCount = clampInt(normalized.retryCount || 0, 0, 3);
       const retryDelayMs = clampInt(normalized.retryDelayMs || 500, 100, 2000);
       try {
-        await executeWithRetry(() => runFrontendAction(normalized), retryCount, retryDelayMs);
+        await executeWithRetry(() => runFrontendAction(normalized, signal), retryCount, retryDelayMs, signal);
         results.push({
           index: i,
           action: normalized.action,
@@ -1628,6 +1720,21 @@
           ui.setActivity({ ...activity });
         }
       } catch (error) {
+        if (isAbortError(error)) {
+          if (step) {
+            step.status = "error";
+            ui.setActivity({ ...activity });
+          }
+          if (activity && ui && typeof ui.setActivity === "function") {
+            activity.status = "error";
+            ui.setActivity({ ...activity });
+            if (typeof ui.scheduleClear === "function") {
+              ui.scheduleClear(700);
+            }
+          }
+          clearHighlight();
+          throw error;
+        }
         const result = {
           index: i,
           action: normalized.action,
@@ -1655,7 +1762,7 @@
       }
       const delay = clampInt(normalized.delayMs || 0, 0, 10000);
       if (delay) {
-        await sleep(delay);
+        await sleep(delay, signal);
       }
     }
 
@@ -1680,16 +1787,17 @@
     };
   }
 
-  async function executeToolCall(toolCall, baseUrl, headerConfig, ui) {
+  async function executeToolCall(toolCall, baseUrl, headerConfig, ui, signal) {
+    throwIfAborted(signal);
     const type = resolveToolType(toolCall);
     if (type === "backend") {
-      return executeEndpointToolCall(toolCall, baseUrl, headerConfig);
+      return executeEndpointToolCall(toolCall, baseUrl, headerConfig, signal);
     }
     if (type === "frontend_context") {
-      return executeFrontendContext(toolCall, ui);
+      return executeFrontendContext(toolCall, ui, signal);
     }
     if (type === "frontend") {
-      return executeFrontendActions(toolCall, ui);
+      return executeFrontendActions(toolCall, ui, signal);
     }
     return { id: toolCall.id, statusCode: 400, body: null, error: "Unknown tool type" };
   }
@@ -1891,6 +1999,30 @@
         animation: cta-widget-unread-pulse 420ms ease-out;
       }
 
+      .cta-widget-toggle-warning {
+        position: fixed;
+        right: calc(68px + env(safe-area-inset-right, 0px));
+        transform: translateY(-50%) translateX(8px);
+        max-width: min(280px, calc(100vw - 96px));
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+        color: var(--cta-fg);
+        font-size: 12px;
+        line-height: 1.35;
+        box-shadow: 0 14px 42px var(--cta-shadow-color);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease, transform 180ms ease;
+        z-index: 2;
+      }
+
+      .cta-widget-toggle-warning.visible {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+      }
+
       @keyframes cta-widget-unread-pulse {
         0% {
           transform: scale(0.9);
@@ -1910,6 +2042,13 @@
         .cta-widget-toggle {
           transform: translateY(-50%);
           opacity: 0.9;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .cta-widget-toggle-warning {
+          max-width: min(220px, calc(100vw - 88px));
+          font-size: 11px;
         }
       }
 
@@ -2570,6 +2709,38 @@
         margin-bottom: 0;
       }
 
+      .cta-widget-message-actions {
+        margin-top: 10px;
+        display: flex;
+        justify-content: flex-start;
+      }
+
+      .cta-widget-resume {
+        height: 30px;
+        padding: 0 12px;
+        border-radius: 10px;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+        color: var(--cta-fg);
+        font-size: 12px;
+        cursor: pointer;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+
+      .cta-widget-resume:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      .cta-widget-resume:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      .cta-widget-resume:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
       .cta-widget-loading {
         align-self: flex-start;
         display: flex;
@@ -2601,6 +2772,22 @@
         background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
+      }
+
+      .cta-widget-front-warning {
+        margin-bottom: 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-bubble-assistant);
+        color: var(--cta-fg);
+        font-size: 12px;
+        line-height: 1.35;
+        display: none;
+      }
+
+      .cta-widget-front-warning.visible {
+        display: block;
       }
 
       .cta-widget-input-row {
@@ -2652,6 +2839,14 @@
         color: var(--cta-accent);
       }
 
+      .cta-widget-send.is-stop {
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-send.is-stop:hover:not(:disabled) {
+        color: var(--cta-fg);
+      }
+
       .cta-widget-send:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -2666,6 +2861,13 @@
         width: 18px;
         height: 18px;
         color: inherit;
+      }
+
+      .cta-widget-send.is-stop svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+        stroke: none;
       }
 
       .cta-voice-controls {
@@ -2917,6 +3119,16 @@
         <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z"/>
       </svg>
     `;
+    const SEND_ICON = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+      </svg>
+    `;
+    const STOP_ICON = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+      </svg>
+    `;
 
     let widgetTitle = "Warpy";
     let widgetSubtitle = "Ready to act";
@@ -2928,6 +3140,11 @@
     let isSecurityPanelOpen = false;
     let frontendActivity = null;
     let frontendActivityTimer = null;
+    let chatEpoch = 0;
+    let activeRunAbortController = null;
+    let frontendWarningText = "";
+    let frontendWarningVisibleSince = 0;
+    let frontendWarningTimer = null;
 
     // ─── DOM Construction ──────────────────────────────────────────────────
 
@@ -2937,8 +3154,10 @@
     function hideWidget() {
       if (widgetHidden) return;
       widgetHidden = true;
+      stopCurrentExecution();
       closePanel({ restoreLauncherFocus: false });
       clearHighlight();
+      clearFrontendWarning();
       root.style.display = "none";
       root.setAttribute("aria-hidden", "true");
     }
@@ -2950,6 +3169,10 @@
     toggle.className = "cta-widget-toggle";
     toggle.setAttribute("aria-expanded", "false");
     toggle.innerHTML = DEFAULT_WIDGET_ICON;
+
+    const toggleWarning = document.createElement("div");
+    toggleWarning.className = "cta-widget-toggle-warning";
+    toggleWarning.setAttribute("aria-live", "polite");
 
     const panel = document.createElement("div");
     panel.className = "cta-widget-panel";
@@ -2984,6 +3207,7 @@
       </div>
       <div class="cta-widget-messages"></div>
       <div class="cta-widget-input-area">
+        <div class="cta-widget-front-warning" aria-live="polite"></div>
         <div class="cta-widget-input-row">
           <input type="text" class="cta-widget-input" placeholder="" />
           <div class="cta-voice-controls">
@@ -3005,11 +3229,7 @@
             </div>
             <div class="cta-widget-mic-menu"></div>
           </div>
-          <button class="cta-widget-send" aria-label="Send message">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-            </svg>
-          </button>
+          <button class="cta-widget-send" aria-label="Send message">${SEND_ICON}</button>
         </div>
         <div class="cta-voice-hint" aria-live="polite"></div>
         <div class="cta-voice-error" aria-live="assertive"></div>
@@ -3049,6 +3269,7 @@
 
     root.appendChild(scrim);
     root.appendChild(toggle);
+    root.appendChild(toggleWarning);
     root.appendChild(panel);
 
     const messagesEl = panel.querySelector(".cta-widget-messages");
@@ -3061,6 +3282,7 @@
     const micMenuEl = panel.querySelector(".cta-widget-mic-menu");
     const voiceHintEl = panel.querySelector(".cta-voice-hint");
     const voiceErrorEl = panel.querySelector(".cta-voice-error");
+    const frontWarningEl = panel.querySelector(".cta-widget-front-warning");
     const titleEl = panel.querySelector(".cta-widget-title");
     const subtitleEl = panel.querySelector(".cta-widget-subtitle");
     const avatarEl = panel.querySelector(".cta-widget-avatar");
@@ -3110,7 +3332,88 @@
       syncIcons();
       syncSecurityButton();
       syncToggleAriaLabel();
+      syncSendButton();
+      syncFrontendWarningUi();
       renderMessages();
+    }
+
+    function syncToggleWarningPosition() {
+      const top = parseFloat(toggle.style.top);
+      if (Number.isFinite(top)) {
+        toggleWarning.style.top = `${top}px`;
+        return;
+      }
+      const rect = toggle.getBoundingClientRect();
+      toggleWarning.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
+    }
+
+    function syncFrontendWarningUi() {
+      const hasWarning = Boolean(frontendWarningText);
+      if (frontWarningEl) {
+        frontWarningEl.textContent = frontendWarningText;
+        frontWarningEl.classList.toggle("visible", hasWarning);
+      }
+      toggleWarning.textContent = frontendWarningText;
+      toggleWarning.classList.toggle("visible", hasWarning && !isOpen);
+      syncToggleWarningPosition();
+    }
+
+    function showFrontendWarning(message) {
+      frontendWarningText = message || "";
+      if (!frontendWarningVisibleSince && frontendWarningText) {
+        frontendWarningVisibleSince = Date.now();
+      }
+      if (frontendWarningTimer) {
+        clearTimeout(frontendWarningTimer);
+        frontendWarningTimer = null;
+      }
+      syncFrontendWarningUi();
+    }
+
+    function scheduleFrontendWarningClear(delayMs) {
+      if (!frontendWarningText) return;
+      const visibleFor = Date.now() - frontendWarningVisibleSince;
+      const minRemaining = Math.max(0, FRONTEND_WARNING_MIN_VISIBLE_MS - visibleFor);
+      const delay = Math.max(delayMs || 0, minRemaining);
+      if (frontendWarningTimer) {
+        clearTimeout(frontendWarningTimer);
+      }
+      frontendWarningTimer = setTimeout(() => {
+        frontendWarningText = "";
+        frontendWarningVisibleSince = 0;
+        frontendWarningTimer = null;
+        syncFrontendWarningUi();
+      }, delay);
+      syncFrontendWarningUi();
+    }
+
+    async function primeFrontendWarning(signal) {
+      showFrontendWarning("The agent is running page actions. Avoid using the dashboard until it finishes.");
+      await sleep(FRONTEND_WARNING_LEAD_MS, signal);
+    }
+
+    function clearFrontendWarning() {
+      if (frontendWarningTimer) {
+        clearTimeout(frontendWarningTimer);
+        frontendWarningTimer = null;
+      }
+      frontendWarningText = "";
+      frontendWarningVisibleSince = 0;
+      syncFrontendWarningUi();
+    }
+
+    function syncSendButton() {
+      const showStop = isLoading && isOpen;
+      sendEl.classList.toggle("is-stop", showStop);
+      sendEl.setAttribute("aria-label", showStop ? "Stop running actions" : "Send message");
+      sendEl.setAttribute("title", showStop ? "Stop running actions" : "Send message");
+      sendEl.innerHTML = showStop ? STOP_ICON : SEND_ICON;
+      sendEl.disabled = !showStop && isTranscribing;
+    }
+
+    function stopCurrentExecution() {
+      if (!activeRunAbortController || activeRunAbortController.signal.aborted) return;
+      activeRunAbortController.abort();
     }
 
     // ─── Frontend Activity Tracking ──────────────────────────────────────────
@@ -3158,6 +3461,7 @@
       const safe = 72;
       const top = clamp(height * clamp(state.ui.launcherY, 0, 1), safe, height - safe);
       toggle.style.top = `${Math.round(top)}px`;
+      syncToggleWarningPosition();
     }
 
     function persistLauncherPosition() {
@@ -3222,6 +3526,7 @@
       const safe = 72;
       const nextTop = clamp(dragStartTop + delta, safe, height - safe);
       toggle.style.top = `${Math.round(nextTop)}px`;
+      syncToggleWarningPosition();
       ignoreToggleClick = true;
     });
 
@@ -3233,6 +3538,27 @@
     });
 
     // ─── Message Rendering ──────────────────────────────────────────────────
+
+    function isResumeErrorMessage(msg) {
+      return Boolean(msg && msg.role === "assistant" && msg.kind === "resume_error" && typeof msg.resumeQuery === "string");
+    }
+
+    function upsertResumeErrorMessage(query, content) {
+      const resumeQuery = String(query || "").trim();
+      if (!resumeQuery) return;
+      const message = {
+        role: "assistant",
+        kind: "resume_error",
+        resumeQuery,
+        content: content || "Something interrupted execution before it finished. Resume to retry your previous request.",
+      };
+      const latest = state.messages[state.messages.length - 1];
+      if (isResumeErrorMessage(latest)) {
+        state.messages[state.messages.length - 1] = { ...latest, ...message };
+        return;
+      }
+      state.messages.push(message);
+    }
 
     function renderMessages() {
       if (state.messages.length === 0 && !frontendActivity) {
@@ -3279,11 +3605,27 @@
         messagesEl.appendChild(activity);
       }
 
-      state.messages.forEach((msg) => {
+      state.messages.forEach((msg, index) => {
         const bubble = document.createElement("div");
         bubble.className = `cta-widget-message ${msg.role}`;
         if (msg.role === "assistant") {
           bubble.innerHTML = renderMarkdown(msg.content);
+          if (isResumeErrorMessage(msg)) {
+            const actions = document.createElement("div");
+            actions.className = "cta-widget-message-actions";
+            const resumeButton = document.createElement("button");
+            resumeButton.type = "button";
+            resumeButton.className = "cta-widget-resume";
+            resumeButton.textContent = "Resume";
+            const canResume = index === state.messages.length - 1 && !isLoading && !widgetHidden;
+            resumeButton.disabled = !canResume;
+            resumeButton.addEventListener("click", () => {
+              if (!canResume) return;
+              sendMessage(msg.resumeQuery, { skipUserEcho: true });
+            });
+            actions.appendChild(resumeButton);
+            bubble.appendChild(actions);
+          }
         } else {
           bubble.textContent = msg.content;
         }
@@ -3303,11 +3645,13 @@
     const frontendUi = {
       setActivity: setFrontendActivity,
       scheduleClear: scheduleFrontendActivityClear,
+      primeWarning: primeFrontendWarning,
+      clearWarningSoon: () => scheduleFrontendWarningClear(FRONTEND_WARNING_HOLD_MS),
     };
 
     function setLoading(loading) {
       isLoading = loading;
-      sendEl.disabled = loading;
+      syncSendButton();
       updateMicState();
       renderMessages();
     }
@@ -3364,6 +3708,7 @@
       } else {
         setVoiceHint("");
       }
+      syncSendButton();
     }
 
     function closeMicMenu() {
@@ -3636,7 +3981,7 @@
       saveState(state);
     }
 
-    async function postWidgetChat(body) {
+    async function postWidgetChat(body, signal) {
       await ensureConfigLoaded();
       const makeRequest = () =>
         fetchWithTimeout(`${apiUrl}/widget/chat`, {
@@ -3646,6 +3991,7 @@
             ...(widgetAuthToken ? { Authorization: `Bearer ${widgetAuthToken}` } : {}),
           },
           body: JSON.stringify(body),
+          signal,
         });
 
       let response = await makeRequest();
@@ -3674,25 +4020,46 @@
       toggle.classList.add("unread-pulse");
     }
 
-    async function runToolCalls(toolCalls) {
-      const hasFrontend = toolCalls.some((call) => resolveToolType(call) !== "endpoint");
-      if (!hasFrontend) {
-        return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig, frontendUi)));
+    async function runToolCalls(toolCalls, signal) {
+      throwIfAborted(signal);
+      const hasFrontendActions = toolCalls.some((call) => resolveToolType(call) === "frontend");
+      let didPrimeWarning = false;
+      try {
+        const hasOnlyBackend = toolCalls.every((call) => resolveToolType(call) === "backend");
+        if (hasOnlyBackend) {
+          return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig, frontendUi, signal)));
+        }
+        const results = [];
+        for (const call of toolCalls) {
+          if (!didPrimeWarning && resolveToolType(call) === "frontend" && typeof frontendUi.primeWarning === "function") {
+            await frontendUi.primeWarning(signal);
+            didPrimeWarning = true;
+          }
+          results.push(await executeToolCall(call, config.baseUrl, headerConfig, frontendUi, signal));
+        }
+        return results;
+      } finally {
+        if (hasFrontendActions && typeof frontendUi.clearWarningSoon === "function") {
+          frontendUi.clearWarningSoon();
+        }
       }
-      const results = [];
-      for (const call of toolCalls) {
-        results.push(await executeToolCall(call, config.baseUrl, headerConfig, frontendUi));
-      }
-      return results;
     }
 
-    async function sendMessage(text) {
-      if (!text.trim() || isLoading || widgetHidden) return;
+    async function sendMessage(text, options = {}) {
+      const messageText = String(text || "").trim();
+      if (!messageText || isLoading || widgetHidden) return;
+      const runEpoch = chatEpoch;
+      const isRunStale = () => runEpoch !== chatEpoch;
 
-      state.messages.push({ role: "user", content: text.trim() });
-      saveState(state);
+      const skipUserEcho = options && options.skipUserEcho === true;
+      if (!skipUserEcho) {
+        state.messages.push({ role: "user", content: messageText });
+        saveState(state);
+      }
       renderMessages();
       setLoading(true);
+      const runAbortController = new AbortController();
+      activeRunAbortController = runAbortController;
 
       let didReceiveAssistant = false;
       let shouldHide = false;
@@ -3700,16 +4067,18 @@
         const payload = {
           agentId: config.agentId,
           conversationId: state.conversationId,
-          message: text.trim(),
+          message: messageText,
         };
 
-        let response = await postWidgetChat(payload);
+        let response = await postWidgetChat(payload, runAbortController.signal);
+        if (isRunStale()) return;
 
         if (!response.ok) {
           throw new Error("Chat request failed");
         }
 
         let data = await response.json();
+        if (isRunStale()) return;
         state.conversationId = data.conversationId;
         saveState(state);
 
@@ -3718,24 +4087,28 @@
           const MAX_ITERATIONS = 25;
           let iterations = 0;
           while (!data.done && !shouldHide) {
+            if (isRunStale()) return;
             if (++iterations > MAX_ITERATIONS) {
               throw new Error("Too many tool call iterations");
             }
 
             if (data.toolCalls && data.toolCalls.length > 0) {
-              const toolResults = await runToolCalls(data.toolCalls);
+              const toolResults = await runToolCalls(data.toolCalls, runAbortController.signal);
+              if (isRunStale()) return;
 
               response = await postWidgetChat({
                 agentId: config.agentId,
                 conversationId: state.conversationId,
                 toolResults,
-              });
+              }, runAbortController.signal);
+              if (isRunStale()) return;
 
               if (!response.ok) {
                 throw new Error("Tool result request failed");
               }
 
               data = await response.json();
+              if (isRunStale()) return;
               shouldHide = shouldHideWidget(data);
             } else {
               break;
@@ -3744,6 +4117,7 @@
         }
 
         if (!shouldHide && data.messages && data.messages.length > 0) {
+          if (isRunStale()) return;
           for (const msg of data.messages) {
             state.messages.push({ role: msg.role, content: msg.content });
             if (msg.role === "assistant") {
@@ -3756,17 +4130,24 @@
           saveState(state);
         }
       } catch (error) {
-        if (!shouldHide) {
-          state.messages.push({
-            role: "assistant",
-            content: "Sorry, something went wrong. Please try again.",
-          });
+        if (!shouldHide && !isRunStale()) {
+          const isStopped = isAbortError(error);
+          upsertResumeErrorMessage(
+            messageText,
+            isStopped
+              ? "Execution stopped before it finished. Resume to continue from your previous request."
+              : "Something went wrong while executing this request. Resume to try your previous request again."
+          );
           didReceiveAssistant = true;
           saveState(state);
         }
       } finally {
+        if (activeRunAbortController === runAbortController) {
+          activeRunAbortController = null;
+        }
         setLoading(false);
       }
+      if (isRunStale()) return;
 
       if (shouldHide) {
         hideWidget();
@@ -3790,6 +4171,8 @@
       toggle.classList.add("open");
       toggle.setAttribute("aria-expanded", "true");
       inputEl.focus();
+      syncSendButton();
+      syncFrontendWarningUi();
       renderMessages();
     }
 
@@ -3805,6 +4188,8 @@
       closeMicMenu();
       stopRecording();
       clearHighlight();
+      syncSendButton();
+      syncFrontendWarningUi();
       if (restoreLauncherFocus) {
         toggle.focus();
       } else {
@@ -3821,11 +4206,16 @@
     }
 
     function startNewChat() {
+      chatEpoch += 1;
+      if (isLoading) {
+        stopCurrentExecution();
+      }
       state.messages = [];
       state.conversationId = null;
       saveState(state);
       setUnread(false);
       clearFrontendActivity();
+      clearFrontendWarning();
       renderMessages();
     }
 
@@ -3902,8 +4292,13 @@
     });
 
     sendEl.addEventListener("click", () => {
+      if (isLoading) {
+        stopCurrentExecution();
+        return;
+      }
       sendMessage(inputEl.value);
       inputEl.value = "";
+      syncSendButton();
     });
 
     inputEl.addEventListener("keydown", (e) => {
@@ -3916,6 +4311,7 @@
         if (isLoading) return;
         sendMessage(inputEl.value);
         inputEl.value = "";
+        syncSendButton();
       }
     });
 

@@ -14,6 +14,9 @@ This document describes the frontend action capability added to the Warpy agent,
 - Implemented a client-side action engine that simulates real user interactions (click, type, select, scroll, drag, etc.).
 - Added DOM context collection with relevance scoring and strict size limits.
 - Added UI feedback for page actions (status panel + element highlight).
+- Added a frontend-interaction warning lifecycle for frontend actions (pre-action lead, visible in open and collapsed widget states, delayed clear).
+- Added a user stop control while runs are in progress (Send becomes Stop in open widget state).
+- Added resumable default error handling with a `Resume` action tied to the failed user query (with duplicate prevention for consecutive errors).
 - Updated the system prompt to encourage proactive frontend retries and context rescans.
 - Frontend actions now appear in the Activity panel alongside backend actions.
 
@@ -178,6 +181,10 @@ Actions accept:
 - Per-step status updates (pending/running/done/error).
 - Highlight box around the current target element.
 - Status auto-clears shortly after completion.
+- Frontend-interaction warning appears slightly before frontend actions run, remains visible for a minimum duration, and persists briefly after completion.
+- Warning is visible both when the panel is open (inline subtle alert) and when collapsed (launcher-adjacent subtle alert).
+- While a run is active and the panel is open, Send is replaced by an immediate Stop button.
+- Default execution failures render a Resume button that retries the original failed query; consecutive duplicate resume errors are collapsed into a single latest message.
 
 ## Activity panel
 Frontend actions are recorded and displayed in the Activity panel alongside backend actions:
