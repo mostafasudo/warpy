@@ -134,7 +134,7 @@ export const BillingPanel = () => {
         <PlanCard
           title="Free"
           price="$0"
-          description="500 lifetime actions."
+          description="250 lifetime actions."
           current={currentPlan === "free"}
           action={<Button type="button" variant="secondary" disabled>Included</Button>}
         />

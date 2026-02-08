@@ -63,7 +63,7 @@ def test_billing_summary_defaults_to_free(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert data["plan"] == "free"
-    assert data["actionsRemaining"] == 500
+    assert data["actionsRemaining"] == 250
     assert data["isWidgetHidden"] is False
     assert data["canManageSubscription"] is False
 

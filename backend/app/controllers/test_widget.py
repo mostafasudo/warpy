@@ -84,7 +84,7 @@ def test_widget_config_returns_headers(client: TestClient):
     body = config.json()
     assert "headers" in body
     assert body["isWidgetHidden"] is False
-    assert body["actionsRemaining"] == 500
+    assert body["actionsRemaining"] == 250
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetSubtitle"] == "Ready to act"
     assert body["widgetIconUrl"] is None

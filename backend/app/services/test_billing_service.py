@@ -38,7 +38,7 @@ def test_get_or_create_billing_account_initializes_free_plan():
     with session_scope() as session:
         account = get_or_create_billing_account(session, "user-1")
         assert account.plan == BillingPlan.free
-        assert account.lifetime_actions_remaining == 500
+        assert account.lifetime_actions_remaining == 250
         assert account.monthly_actions_remaining == 0
         assert account.topup_actions_remaining == 0
 
@@ -144,4 +144,3 @@ def test_is_subscription_entitled_requires_active_status_and_future_ends_at():
     future = datetime.now(tz=UTC) + timedelta(seconds=1)
     assert is_subscription_entitled("active", past) is False
     assert is_subscription_entitled("active", future) is True
-
