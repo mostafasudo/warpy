@@ -149,6 +149,15 @@ Services:
 - Postgres (port exposed by compose): localhost:5434
 - Redis (port exposed by compose): localhost:6380
 
+## Multi-Worktree Workflow
+Run multiple branches in parallel with isolated Docker containers and ports:
+```sh
+pnpm worktree start   # spin up all worktrees
+pnpm worktree list    # see URLs per worktree
+pnpm worktree stop    # tear down
+```
+See [docs/worktrees.md](docs/worktrees.md) for full reference (commands, port allocation, promote, cleanup).
+
 ## Optional Widget JWT Auth (Advanced Security)
 If you enable **Require signed widget token** on the Agent page, the widget will require a short‑lived JWT for `/widget/chat` (and will refresh it via the configured refresh endpoint path).
 

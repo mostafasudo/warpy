@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "worktree": "bash scripts/worktree.sh"
+  },
   "devDependencies": {
     "shadcn": "^3.7.0"
   }

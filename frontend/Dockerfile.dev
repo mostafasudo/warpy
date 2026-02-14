@@ -11,5 +11,6 @@ RUN CI=true pnpm install --frozen-lockfile
 
 COPY . .
 
-EXPOSE 5173
-CMD ["pnpm", "dev", "--host", "0.0.0.0", "--port", "5173"]
+ENV FRONTEND_PORT=5173
+EXPOSE ${FRONTEND_PORT}
+CMD sh -c "pnpm dev --host 0.0.0.0 --port ${FRONTEND_PORT}"

@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: true,
-      port: 5173,
+      port: Number(process.env.FRONTEND_PORT || 5173),
       strictPort: true,
       watch: {
         usePolling: true

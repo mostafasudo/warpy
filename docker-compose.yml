@@ -6,14 +6,19 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5434:5432"
+      - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - warpy-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6380:6379"
+      - "${REDIS_PORT:-6380}:6379"
 
   backend:
     build:
@@ -50,12 +55,16 @@ services:
       BILLING_ADMIN_TOKEN: ${BILLING_ADMIN_TOKEN:-}
       USE_GOOD_MODELS: ${USE_GOOD_MODELS:-false}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend/app:/app/app
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   worker:
     build:
@@ -80,8 +89,10 @@ services:
       USE_GOOD_MODELS: ${USE_GOOD_MODELS:-false}
     command: ["rq", "worker", "default", "--url", "redis://redis:6379/0"]
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./backend/app:/app/app
 
@@ -95,10 +106,11 @@ services:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
       VITE_API_TIMEOUT_MS: ${VITE_API_TIMEOUT_MS:-5000}
       VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+      FRONTEND_PORT: ${FRONTEND_PORT:-5173}
     depends_on:
       - backend
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:${FRONTEND_PORT:-5173}"
     volumes:
       - ./frontend:/app
       - /app/node_modules

@@ -91,3 +91,4 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 | Doc | When to load |
 |-----|--------------|
 | [Backend Conventions](docs/prompt-engineering.md) | Reference guide for prompt engineering best practices. Use when creating, modifying, or optimizing LLM agent system prompts, tool descriptions, parameter descriptions, or any AI instruction text. Apply when writing prompts for Claude, GPT, or other language models. |
+| [Worktrees](docs/worktrees.md) | Multi-worktree Docker Compose workflow. Use when running parallel worktrees with isolated ports and containers. |
