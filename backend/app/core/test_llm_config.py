@@ -8,11 +8,17 @@ def test_calculate_top_k_bounds():
 
 
 def test_build_llm_config_local_defaults():
-    config = build_llm_config("local")
+    config = build_llm_config("local", use_good_models=False)
     assert config.chat_model == "gpt-4o"
     assert config.embedding_model == "text-embedding-3-small"
     assert config.embedding_dimensions == 1536
     assert config.whisper_model == "whisper-1"
+
+
+def test_build_llm_config_use_good_models():
+    config = build_llm_config("local", use_good_models=True)
+    assert config.chat_model == "gpt-5.2"
+    assert config.whisper_model == "gpt-4o-transcribe"
 
 
 def test_build_llm_config_production_overrides():

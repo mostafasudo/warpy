@@ -25,15 +25,20 @@ class LLMConfig:
         return min(total_endpoints, max(self.top_k_min, min(calculated, self.top_k_max)))
 
 
-def build_llm_config(environment: str) -> LLMConfig:
-    if environment.strip().lower() == "production":
+def build_llm_config(environment: str, use_good_models: bool = False) -> LLMConfig:
+    if environment == "production":
         return LLMConfig(
             chat_model="gpt-5.2",
             embedding_model="text-embedding-3-large",
             embedding_dimensions=3072,
             whisper_model="gpt-4o-transcribe",
         )
+    if use_good_models:
+        return LLMConfig(
+            chat_model="gpt-5.2",
+            whisper_model="gpt-4o-transcribe",
+        )
     return LLMConfig()
 
 
-llm_config = build_llm_config(get_settings().environment)
+llm_config = build_llm_config(get_settings().environment, get_settings().use_good_models)

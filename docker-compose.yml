@@ -48,6 +48,7 @@ services:
       LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID: ${LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID:-}
       LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID: ${LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID:-}
       BILLING_ADMIN_TOKEN: ${BILLING_ADMIN_TOKEN:-}
+      USE_GOOD_MODELS: ${USE_GOOD_MODELS:-false}
     depends_on:
       - postgres
       - redis
@@ -76,6 +77,7 @@ services:
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
       WIDGET_JWT_SECRET: ${WIDGET_JWT_SECRET:-}
       TEST_WIDGET_TOKEN_API_KEY: ${TEST_WIDGET_TOKEN_API_KEY:-}
+      USE_GOOD_MODELS: ${USE_GOOD_MODELS:-false}
     command: ["rq", "worker", "default", "--url", "redis://redis:6379/0"]
     depends_on:
       - postgres
