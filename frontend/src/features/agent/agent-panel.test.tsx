@@ -16,7 +16,6 @@ import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useConfigQuery } from "@/queries/use-config"
-import { useFeaturesQuery } from "@/queries/use-features"
 import { useNavigationStore } from "@/stores/navigation"
 
 jest.mock("@/stores/toast", () => {
@@ -57,10 +56,6 @@ jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
 }))
 
-jest.mock("@/queries/use-features", () => ({
-  useFeaturesQuery: jest.fn()
-}))
-
 jest.mock("@/queries/use-agent", () => ({
   useAgentQuery: jest.fn(),
   agentQueryKey: ["agent"]
@@ -91,7 +86,6 @@ jest.mock("@/mutations/use-deploy-agent-widget-security", () => ({
 }))
 
 const mockedUseConfigQuery = useConfigQuery as unknown as jest.Mock
-const mockedUseFeaturesQuery = useFeaturesQuery as unknown as jest.Mock
 const mockedUseAgentQuery = useAgentQuery as unknown as jest.Mock
 const mockedUseCreateAgent = useCreateAgent as unknown as jest.Mock
 const mockedUseAgentWidgetSecurityQuery = useAgentWidgetSecurityQuery as unknown as jest.Mock
@@ -115,10 +109,6 @@ const createWrapper = () => {
 const openAdvancedSecurity = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(await screen.findByRole("button", { name: /expand advanced security/i }))
 }
-
-const baseFeatures = [
-  { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }
-]
 
 const baseWidgetSecurity = {
   active: {
@@ -144,10 +134,6 @@ const baseWidgetConfig = {
 const renderPanelWithInstall = (install: { framework: string; packageManager: string }) => {
   mockedUseConfigQuery.mockReturnValue({
     data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-    isPending: false
-  })
-  mockedUseFeaturesQuery.mockReturnValue({
-    data: baseFeatures,
     isPending: false
   })
   mockedUseAgentQuery.mockReturnValue({
@@ -203,7 +189,6 @@ describe("AgentPanel", () => {
 
   it("shows loading skeleton when pending", () => {
     mockedUseConfigQuery.mockReturnValue({ data: null, isPending: true })
-    mockedUseFeaturesQuery.mockReturnValue({ data: null, isPending: true })
     mockedUseAgentQuery.mockReturnValue({ data: null, isPending: true, error: null })
     mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
@@ -212,58 +197,12 @@ describe("AgentPanel", () => {
     expect(screen.getByTestId("agent-panel-loading")).not.toBeNull()
   })
 
-  it("shows empty state when no endpoints exist", () => {
-    mockedUseConfigQuery.mockReturnValue({
-      data: { baseUrl: { local: "http://localhost" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: [],
-      isPending: false
-    })
-    mockedUseAgentQuery.mockReturnValue({
-      data: { id: "agent-1", userId: "user-1" },
-      isPending: false,
-      error: null
-    })
-    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
-
-    render(<AgentPanel />, { wrapper: createWrapper() })
-
-    expect(screen.getByText("Activate Your Agent")).not.toBeNull()
-    expect(screen.getByText(/define your endpoints/i)).not.toBeNull()
-  })
-
-  it("navigates to endpoints when CTA is clicked", async () => {
-    mockedUseConfigQuery.mockReturnValue({
-      data: { baseUrl: { local: "http://localhost" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({ data: [], isPending: false })
-    mockedUseAgentQuery.mockReturnValue({
-      data: { id: "agent-1", userId: "user-1" },
-      isPending: false,
-      error: null
-    })
-    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
-
-    const user = userEvent.setup({ pointerEventsCheck: 0 })
-    render(<AgentPanel />, { wrapper: createWrapper() })
-
-    await user.click(screen.getByRole("button", { name: /configure features/i }))
-    expect(useNavigationStore.getState().section).toBe("features")
-  })
-
-  it("shows environment tabs and usage when endpoints exist", () => {
+  it("shows environment tabs and usage", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: {
         baseUrl: { local: "http://localhost:3000", production: "https://api.example.com" },
         headers: {}
       },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -315,10 +254,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -339,10 +274,6 @@ describe("AgentPanel", () => {
   it("saves widget config changes and shows toast", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -392,10 +323,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -436,10 +363,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -474,10 +397,6 @@ describe("AgentPanel", () => {
   it("switches icon mode and saves icon URL", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -532,10 +451,6 @@ describe("AgentPanel", () => {
       },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -555,10 +470,6 @@ describe("AgentPanel", () => {
   it("shows copied state when copy button is clicked", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -588,10 +499,6 @@ describe("AgentPanel", () => {
   it("persists widget install selections", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -627,10 +534,6 @@ describe("AgentPanel", () => {
   it("shows error toast when script copy fails", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -669,7 +572,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({ data: baseFeatures, isPending: false })
     mockedUseAgentQuery.mockReturnValue({
       data: null,
       isPending: false,
@@ -685,10 +587,6 @@ describe("AgentPanel", () => {
   it("stages widget auth when enable button is clicked", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -721,10 +619,6 @@ describe("AgentPanel", () => {
   it("generates api key and shows it once", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -788,10 +682,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -825,10 +715,6 @@ describe("AgentPanel", () => {
   it("shows error toast when prompt copy fails", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -870,10 +756,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -896,10 +778,6 @@ describe("AgentPanel", () => {
   it("stages refresh endpoint path on blur", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({
@@ -934,10 +812,6 @@ describe("AgentPanel", () => {
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
     })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
-      isPending: false
-    })
     mockedUseAgentQuery.mockReturnValue({
       data: { id: "agent-123", userId: "user-1" },
       isPending: false,
@@ -966,10 +840,6 @@ describe("AgentPanel", () => {
   it("deploys staged changes when enabled", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseFeaturesQuery.mockReturnValue({
-      data: baseFeatures,
       isPending: false
     })
     mockedUseAgentQuery.mockReturnValue({

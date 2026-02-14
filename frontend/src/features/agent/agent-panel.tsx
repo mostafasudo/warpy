@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, Copy, Info, Network, Sparkles, Terminal, RotateCw } from "lucide-react"
+import { Check, ChevronDown, Copy, Info, Sparkles, Terminal, RotateCw } from "lucide-react"
 import clsx from "clsx"
 
 import { PanelShell } from "@/components/panel-shell"
@@ -18,7 +18,6 @@ import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
 import { useConfigQuery } from "@/queries/use-config"
-import { useFeaturesQuery } from "@/queries/use-features"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
@@ -27,7 +26,6 @@ import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
 import { useUpdateAgentUserRateLimits } from "@/mutations/use-update-agent-user-rate-limits"
-import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
@@ -40,26 +38,6 @@ const getWidgetCdnUrl = (): string => {
     return process.env.VITE_WIDGET_CDN_URL
   }
   return ""
-}
-
-const EmptyState = () => {
-  const setSection = useNavigationStore(navigationSelectors.setSection)
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-        <Network className="h-10 w-10 text-primary" />
-      </div>
-      <h3 className="mb-2 text-xl font-semibold">Activate Your Agent</h3>
-      <p className="mb-6 max-w-md text-sm text-muted-foreground">
-        Your agent will be able to access any endpoint on behalf of the user. For that to work, we
-        need you to define your endpoints in the Features tab.
-      </p>
-      <Button onClick={() => setSection("features")}>
-        <Network className="mr-2 h-4 w-4" />
-        Configure Features
-      </Button>
-    </div>
-  )
 }
 
 type EnvironmentTabsProps = {
@@ -1217,7 +1195,6 @@ const AdvancedSecurityPanel = () => {
 }
 
 export const AgentPanel = () => {
-  const { data: features, isPending: isFeaturesPending } = useFeaturesQuery("")
   const { data: config, isPending: isConfigPending } = useConfigQuery()
   const { data: agent, isPending: isAgentPending, error: agentError } = useAgentQuery()
   const { mutate: createAgent, isPending: isCreating } = useCreateAgent()
@@ -1238,9 +1215,7 @@ export const AgentPanel = () => {
     }
   }, [agentError, agent, isCreating, createAgent])
 
-  const isPending = isFeaturesPending || isConfigPending || isAgentPending
-  const endpointTotal = (features ?? []).reduce((total, feature) => total + (feature.endpointCount ?? 0), 0)
-  const hasEndpoints = endpointTotal > 0
+  const isPending = isConfigPending || isAgentPending
 
   if (isPending || isCreating) {
     return (
@@ -1249,14 +1224,6 @@ export const AgentPanel = () => {
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-40 w-full" />
         </div>
-      </PanelShell>
-    )
-  }
-
-  if (!hasEndpoints) {
-    return (
-      <PanelShell title="Activate Agent" description="Install the widget with a script tag or an npm package.">
-        <EmptyState />
       </PanelShell>
     )
   }
