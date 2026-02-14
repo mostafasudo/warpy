@@ -156,7 +156,7 @@ pnpm worktree start   # spin up all worktrees
 pnpm worktree list    # see URLs per worktree
 pnpm worktree stop    # tear down
 ```
-See [docs/worktrees.md](docs/worktrees.md) for full reference (commands, port allocation, promote, cleanup).
+See [docs/worktrees.md](docs/worktrees.md) for full reference (commands, port allocation, promote, clean).
 
 ## Optional Widget JWT Auth (Advanced Security)
 If you enable **Require signed widget token** on the Agent page, the widget will require a short‑lived JWT for `/widget/chat` (and will refresh it via the configured refresh endpoint path).

@@ -320,7 +320,7 @@ Commands:
   stop              Stop Docker Compose for all worktrees
   list              List all worktrees with their URLs and ports
   promote <index>   Merge a worktree branch into the current branch
-  cleanup           Stop containers and remove all worktrees except current
+  clean             Stop containers and remove all worktrees except current
 
 Port bases (worktree N gets base + N):
   Postgres  15434
@@ -337,6 +337,6 @@ case "${1:-}" in
   stop)    cmd_stop ;;
   list)    cmd_list ;;
   promote) cmd_promote "${2:-}" ;;
-  cleanup) cmd_cleanup ;;
+  clean)   cmd_cleanup ;;
   *)       usage ;;
 esac

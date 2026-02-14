@@ -8,7 +8,7 @@ Run multiple git worktrees in parallel, each with isolated Docker containers and
 | `pnpm worktree stop` | Stop containers for all worktrees |
 | `pnpm worktree list` | Print URLs and ports for every worktree |
 | `pnpm worktree promote <index>` | Merge a worktree branch into the current branch |
-| `pnpm worktree cleanup` | Stop containers and remove all worktrees except current |
+| `pnpm worktree clean` | Stop containers and remove all worktrees except current |
 
 ## Commands
 
@@ -39,7 +39,7 @@ Aborts if any of those files already have uncommitted changes locally, so existi
 
 Run `pnpm worktree list` to find the index.
 
-### `pnpm worktree cleanup`
+### `pnpm worktree clean`
 
 Stops containers and removes all worktrees except the current one. Prunes stale worktree refs.
 
