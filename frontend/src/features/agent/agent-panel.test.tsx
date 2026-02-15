@@ -131,9 +131,12 @@ const baseWidgetConfig = {
   widgetSecurityDisclosureEnabled: true
 }
 
-const renderPanelWithInstall = (install: { framework: string; packageManager: string }) => {
+const renderPanelWithInstall = (
+  install: { framework: string; packageManager: string },
+  baseUrl: Record<string, string> = { local: "http://localhost:3000" }
+) => {
   mockedUseConfigQuery.mockReturnValue({
-    data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+    data: { baseUrl, headers: {} },
     isPending: false
   })
   mockedUseAgentQuery.mockReturnValue({
@@ -236,6 +239,20 @@ describe("AgentPanel", () => {
 
     const usageCode = screen.getByTestId("usage-code")
     expect(usageCode.textContent).toContain(expected)
+  })
+
+  it.each([
+    ["script", "data-base-url="],
+    ["react", 'baseUrl="'],
+    ["vue", 'baseUrl="'],
+    ["angular", 'baseUrl="'],
+    ["svelte", 'baseUrl="'],
+    ["vanilla", "baseUrl:"]
+  ])("omits base url from %s usage snippet when selected environment value is empty", (framework, forbidden) => {
+    renderPanelWithInstall({ framework, packageManager: "npm" }, { local: "" })
+
+    const usageCode = screen.getByTestId("usage-code")
+    expect(usageCode.textContent).not.toContain(forbidden)
   })
 
   it.each([

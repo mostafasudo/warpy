@@ -104,10 +104,15 @@ const PACKAGE_MANAGER_OPTIONS: Array<{ value: WidgetInstallPackageManager; label
   { value: "yarn", label: "yarn" }
 ]
 
-const buildScriptSnippet = (agentId: string, baseUrl: string, scriptSrc: string) =>
-  `<script src="${scriptSrc}"
-  data-agent-id="${agentId}"
-  data-base-url="${baseUrl}"></script>`
+const getNormalizedBaseUrl = (baseUrl: string) => baseUrl.trim()
+
+const buildScriptSnippet = (agentId: string, baseUrl: string, scriptSrc: string) => {
+  const normalizedBaseUrl = getNormalizedBaseUrl(baseUrl)
+  const baseUrlAttribute = normalizedBaseUrl ? `\n  data-base-url="${normalizedBaseUrl}"` : ""
+  return `<script src="${scriptSrc}"
+  data-agent-id="${agentId}"${baseUrlAttribute}
+></script>`
+}
 
 const buildInstallCommand = (packageManager: WidgetInstallPackageManager) => {
   if (packageManager === "pnpm") return "pnpm add @warpy-ai/widget"
@@ -128,13 +133,15 @@ const buildUsageSnippet = ({
   scriptSrc: string
   scriptSnippet: string
 }) => {
+  const normalizedBaseUrl = getNormalizedBaseUrl(baseUrl)
+  const baseUrlProp = normalizedBaseUrl ? `\n  baseUrl="${normalizedBaseUrl}"` : ""
+  const baseUrlObjectEntry = normalizedBaseUrl ? `\n    baseUrl: "${normalizedBaseUrl}",` : ""
   if (framework === "script") return scriptSnippet
   if (framework === "react") {
     return `import { Widget } from "@warpy-ai/widget/react"
 
 <Widget
-  agentId="${agentId}"
-  baseUrl="${baseUrl}"
+  agentId="${agentId}"${baseUrlProp}
   scriptSrc="${scriptSrc}"
 />`
   }
@@ -142,8 +149,7 @@ const buildUsageSnippet = ({
     return `import { Widget } from "@warpy-ai/widget/vue"
 
 <Widget
-  agentId="${agentId}"
-  baseUrl="${baseUrl}"
+  agentId="${agentId}"${baseUrlProp}
   scriptSrc="${scriptSrc}"
 />`
   }
@@ -151,8 +157,7 @@ const buildUsageSnippet = ({
     return `import { WidgetComponent } from "@warpy-ai/widget/angular"
 
 <warpy-widget
-  agentId="${agentId}"
-  baseUrl="${baseUrl}"
+  agentId="${agentId}"${baseUrlProp}
   scriptSrc="${scriptSrc}"
 ></warpy-widget>`
   }
@@ -160,8 +165,7 @@ const buildUsageSnippet = ({
     return `import Widget from "@warpy-ai/widget/svelte"
 
 <Widget
-  agentId="${agentId}"
-  baseUrl="${baseUrl}"
+  agentId="${agentId}"${baseUrlProp}
   scriptSrc="${scriptSrc}"
 />`
   }
@@ -172,9 +176,8 @@ const shouldShow = true
 
 if (shouldShow) {
   widget = mountWidget({
-  agentId: "${agentId}",
-  baseUrl: "${baseUrl}",
-  scriptSrc: "${scriptSrc}"
+    agentId: "${agentId}",${baseUrlObjectEntry}
+    scriptSrc: "${scriptSrc}"
   })
 }
 
