@@ -10,6 +10,7 @@
   const API_TIMEOUT = 30000;
   const API_URL = "http://localhost:8000";
   const PROD_API_URL = "https://api.warpy.ai";
+  const LOCAL_PORT_OFFSET = 2827;
   const MARKED_SRC = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";
   const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
   const DOMPURIFY_SRC = "https://cdn.jsdelivr.net/npm/dompurify@3.1.2/dist/purify.min.js";
@@ -299,7 +300,21 @@
       const host = window.location && window.location.hostname ? window.location.hostname : "";
       const localHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
       const isLocal = localHosts.has(host);
-      return (isLocal ? API_URL : PROD_API_URL).replace(/\/$/, "");
+      if (!isLocal) return PROD_API_URL.replace(/\/$/, "");
+      try {
+        const scriptEl =
+          document.currentScript ||
+          (() => {
+            const all = document.querySelectorAll("script[data-agent-id]");
+            return all.length ? all[all.length - 1] : null;
+          })();
+        if (scriptEl && scriptEl.src) {
+          const srcUrl = new URL(scriptEl.src);
+          const fePort = parseInt(srcUrl.port, 10);
+          if (fePort) return srcUrl.protocol + "//" + srcUrl.hostname + ":" + (fePort + LOCAL_PORT_OFFSET);
+        }
+      } catch {}
+      return API_URL.replace(/\/$/, "");
     } catch {
       return PROD_API_URL;
     }
