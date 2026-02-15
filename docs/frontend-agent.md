@@ -210,6 +210,8 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 - DOM context capture with relevance scoring.
 - Action engine for UI interactions (user-like events).
 - Activity UI and element highlighting.
+- Host-token theming: widget colors and typography resolve from host design tokens first (`background`, `foreground`, `muted`, `card/popover`, `border`, `primary/accent`, `ring`) with safe computed-style fallbacks.
+- Border tuning: launcher/icon borders use a slightly stronger subtle border token, while other widget borders stay softer to avoid harsh lines.
 
 ## Competitive landscape (brief)
 - Perplexity Comet positions itself as an AI browser that can click, type, submit, and autofill in the browser, emphasizing agentic actions inside the page. Source: Perplexity Comet Enterprise page. [1]

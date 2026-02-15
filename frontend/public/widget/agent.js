@@ -154,6 +154,15 @@
     return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
   }
 
+  function colorCss(color) {
+    if (!color) return null;
+    return color.a < 1 ? rgbaCss(color, color.a) : rgbCss(color);
+  }
+
+  function applyAlpha(color, alpha) {
+    return { r: color.r, g: color.g, b: color.b, a: clamp(alpha, 0, 1) };
+  }
+
   function mixRgb(a, b, t) {
     const ratio = clamp(t, 0, 1);
     return {
@@ -173,6 +182,99 @@
     const G = normalize(g);
     const B = normalize(b);
     return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  }
+
+  function createCssColorResolver() {
+    const mount = document.body || document.documentElement;
+    if (!mount) {
+      return {
+        resolve: () => null,
+        cleanup: () => { },
+      };
+    }
+
+    const probe = document.createElement("span");
+    probe.style.position = "fixed";
+    probe.style.left = "-99999px";
+    probe.style.top = "-99999px";
+    probe.style.opacity = "0";
+    probe.style.pointerEvents = "none";
+    mount.appendChild(probe);
+
+    return {
+      resolve: (value) => {
+        const expression = typeof value === "string" ? value.trim() : "";
+        if (!expression) return null;
+        probe.style.color = "";
+        probe.style.color = expression;
+        if (!probe.style.color && !/^var\(/i.test(expression)) return null;
+        const computed = getComputedStyle(probe).color;
+        return parseColor(computed);
+      },
+      cleanup: () => {
+        if (probe.parentNode) {
+          probe.parentNode.removeChild(probe);
+        }
+      },
+    };
+  }
+
+  function resolveTokenColor(stylesList, tokenNames, resolveCssColor) {
+    const readCustomProperty = (name) => {
+      for (const styles of stylesList) {
+        if (!styles || typeof styles.getPropertyValue !== "function") continue;
+        const value = styles.getPropertyValue(name).trim();
+        if (value) return value;
+      }
+      return "";
+    };
+
+    const expandTokenValue = (rawValue) => {
+      let value = rawValue;
+      const seen = new Set();
+      for (let i = 0; i < 6; i += 1) {
+        const match = value.match(/^var\(\s*(--[^,\s)]+)\s*(?:,\s*([^)]+))?\)$/i);
+        if (!match) break;
+        const variableName = match[1];
+        if (seen.has(variableName)) break;
+        seen.add(variableName);
+        const resolved = readCustomProperty(variableName);
+        if (resolved) {
+          value = resolved;
+          continue;
+        }
+        const fallback = match[2] ? match[2].trim() : "";
+        if (!fallback) break;
+        value = fallback;
+      }
+      return value;
+    };
+
+    for (const token of tokenNames) {
+      for (const styles of stylesList) {
+        if (!styles || typeof styles.getPropertyValue !== "function") continue;
+        const raw = styles.getPropertyValue(token).trim();
+        if (!raw) continue;
+        const value = expandTokenValue(raw);
+        if (/^var\(/i.test(value)) continue;
+        const candidates = [];
+        candidates.push(value);
+        if (!/[#(]/.test(value) && !/^var\(/i.test(value)) {
+          if (/%/.test(value)) {
+            candidates.push(`hsl(${value})`);
+            candidates.push(`oklch(${value})`);
+          } else {
+            candidates.push(`oklch(${value})`);
+            candidates.push(`hsl(${value})`);
+          }
+        }
+        for (const candidate of candidates) {
+          const resolved = resolveCssColor(candidate);
+          if (resolved) return resolved;
+        }
+      }
+    }
+    return null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -197,42 +299,92 @@
       bg = prefersDark || relativeLuminance(fg) > 0.6 ? { r: 9, g: 10, b: 11, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
     }
 
-    const isDark = relativeLuminance(bg) < 0.5;
-
     const link = document.querySelector("a[href]");
     const linkColor = link ? parseColor(getComputedStyle(link).color) : null;
-    const accent = linkColor && linkColor.a > 0.5 ? linkColor : fg;
-    const accentContrast = relativeLuminance(accent) > 0.6 ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 };
+    const fallbackAccent = linkColor && linkColor.a > 0.5 ? linkColor : fg;
+    const fallbackIsDark = relativeLuminance(bg) < 0.5;
+    const fallbackAccentContrast = relativeLuminance(fallbackAccent) > 0.6 ? { r: 0, g: 0, b: 0, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
+    const fallbackSurface = applyAlpha(bg, fallbackIsDark ? 0.62 : 0.72);
+    const fallbackSurfaceStrong = applyAlpha(bg, fallbackIsDark ? 0.82 : 0.92);
+    const fallbackBorder = applyAlpha(fg, fallbackIsDark ? 0.22 : 0.14);
+    const fallbackMuted = applyAlpha(fg, fallbackIsDark ? 0.72 : 0.68);
+    const fallbackBubbleAssistant = mixRgb(bg, fg, fallbackIsDark ? 0.08 : 0.04);
+    const fallbackBubbleUser = mixRgb(bg, fg, fallbackIsDark ? 0.14 : 0.07);
+    const fallbackCodeBg = mixRgb(bg, fg, fallbackIsDark ? 0.18 : 0.09);
 
-    const surface = rgbaCss(bg, isDark ? 0.62 : 0.72);
-    const surfaceStrong = rgbaCss(bg, isDark ? 0.82 : 0.92);
-    const border = rgbaCss(fg, isDark ? 0.22 : 0.14);
-    const muted = rgbaCss(fg, isDark ? 0.72 : 0.68);
-    const bubbleAssistant = rgbCss(mixRgb(bg, fg, isDark ? 0.08 : 0.04));
-    const bubbleUser = rgbCss(mixRgb(bg, fg, isDark ? 0.14 : 0.07));
-    const codeBg = rgbCss(mixRgb(bg, fg, isDark ? 0.18 : 0.09));
-    const scrim = isDark ? "rgba(0, 0, 0, 0.55)" : "rgba(0, 0, 0, 0.22)";
-    const shadowColor = isDark ? "rgba(0, 0, 0, 0.62)" : "rgba(0, 0, 0, 0.20)";
-    const focus = rgbaCss(accent, isDark ? 0.45 : 0.32);
+    const styleSources = [bodyStyles, htmlStyles];
+    const resolver = createCssColorResolver();
+    const resolveCssColor = resolver.resolve;
+    let themedFg;
+    let themedBg;
+    let themedAccent;
+    let themedAccentContrast;
+    let themedSurface;
+    let themedSurfaceStrong;
+    let themedMuted;
+    let themedBorder;
+    let themedBubbleAssistant;
+    let themedBubbleUser;
+    let themedCodeBg;
+    let themedFocus;
+    try {
+      themedFg = resolveTokenColor(styleSources, ["--foreground", "--color-foreground"], resolveCssColor) || fg;
+      themedBg = resolveTokenColor(styleSources, ["--background", "--color-background", "--surface"], resolveCssColor) || bg;
+      themedAccent = resolveTokenColor(styleSources, ["--primary", "--accent", "--color-primary"], resolveCssColor) || fallbackAccent;
+      themedAccentContrast =
+        resolveTokenColor(styleSources, ["--primary-foreground", "--accent-foreground", "--color-primary-foreground"], resolveCssColor) ||
+        fallbackAccentContrast;
+      themedSurface =
+        resolveTokenColor(styleSources, ["--card", "--popover", "--surface", "--background"], resolveCssColor) || fallbackSurface;
+      themedSurfaceStrong =
+        resolveTokenColor(styleSources, ["--popover", "--card", "--surface", "--background"], resolveCssColor) || fallbackSurfaceStrong;
+      themedMuted =
+        resolveTokenColor(
+          styleSources,
+          ["--muted-foreground", "--color-muted-foreground", "--secondary-foreground", "--foreground"],
+          resolveCssColor
+        ) || fallbackMuted;
+      themedBorder =
+        resolveTokenColor(styleSources, ["--border", "--input", "--separator", "--color-border"], resolveCssColor) || fallbackBorder;
+      themedBubbleAssistant =
+        resolveTokenColor(styleSources, ["--muted", "--secondary", "--card", "--surface"], resolveCssColor) || fallbackBubbleAssistant;
+      themedBubbleUser =
+        resolveTokenColor(styleSources, ["--secondary", "--muted", "--card", "--surface"], resolveCssColor) || fallbackBubbleUser;
+      themedCodeBg =
+        resolveTokenColor(styleSources, ["--muted", "--secondary", "--card", "--surface"], resolveCssColor) || fallbackCodeBg;
+      themedFocus =
+        resolveTokenColor(styleSources, ["--ring", "--focus", "--primary", "--accent", "--color-ring"], resolveCssColor) ||
+        applyAlpha(themedAccent, fallbackIsDark ? 0.45 : 0.32);
+    } finally {
+      resolver.cleanup();
+    }
+
+    const themedIsDark = relativeLuminance(themedBg) < 0.5;
+    const borderAlpha = themedBorder.a > 0 ? themedBorder.a : 1;
+    const borderSoft = applyAlpha(themedBorder, clamp(borderAlpha, 0.1, 0.18));
+    const borderStrong = applyAlpha(themedBorder, clamp(borderAlpha, 0.14, 0.26));
+    const scrim = themedIsDark ? "rgba(0, 0, 0, 0.55)" : "rgba(0, 0, 0, 0.22)";
+    const shadowColor = themedIsDark ? "rgba(0, 0, 0, 0.62)" : "rgba(0, 0, 0, 0.2)";
 
     return {
       fontFamily,
       fontSize,
-      fg: rgbCss(fg),
-      bg: rgbCss(bg),
-      bgRgb: `${bg.r}, ${bg.g}, ${bg.b}`,
-      muted,
-      surface,
-      surfaceStrong,
-      border,
+      fg: colorCss(themedFg),
+      bg: colorCss(themedBg),
+      bgRgb: `${themedBg.r}, ${themedBg.g}, ${themedBg.b}`,
+      muted: colorCss(themedMuted),
+      surface: colorCss(themedSurface),
+      surfaceStrong: colorCss(themedSurfaceStrong),
+      border: colorCss(borderSoft),
+      borderStrong: colorCss(borderStrong),
       shadowColor,
       scrim,
-      accent: rgbCss(accent),
-      accentContrast: rgbCss(accentContrast),
-      bubbleAssistant,
-      bubbleUser,
-      codeBg,
-      focus,
+      accent: colorCss(themedAccent),
+      accentContrast: colorCss(themedAccentContrast),
+      bubbleAssistant: colorCss(themedBubbleAssistant),
+      bubbleUser: colorCss(themedBubbleUser),
+      codeBg: colorCss(themedCodeBg),
+      focus: colorCss(themedFocus),
     };
   }
 
@@ -247,6 +399,7 @@
     host.style.setProperty("--cta-surface", theme.surface);
     host.style.setProperty("--cta-surface-strong", theme.surfaceStrong);
     host.style.setProperty("--cta-border", theme.border);
+    host.style.setProperty("--cta-border-strong", theme.borderStrong);
     host.style.setProperty("--cta-shadow-color", theme.shadowColor);
     host.style.setProperty("--cta-scrim", theme.scrim);
     host.style.setProperty("--cta-accent", theme.accent);
@@ -957,8 +1110,10 @@
       highlightEl.style.opacity = "0";
       document.body.appendChild(highlightEl);
     }
-    const themeAccent = parseColor(getComputedStyle(document.getElementById(WIDGET_CONTAINER_ID) || document.body).getPropertyValue("--cta-accent")) || parseColor(inferThemeFromPage().accent);
-    const accent = themeAccent || { r: 37, g: 99, b: 235, a: 1 };
+    const themeAccent =
+      parseColor(getComputedStyle(document.getElementById(WIDGET_CONTAINER_ID) || document.body).getPropertyValue("--cta-accent")) ||
+      { r: 37, g: 99, b: 235, a: 1 };
+    const accent = themeAccent;
     highlightEl.style.border = `2px solid ${rgbCss(accent)}`;
     highlightEl.style.background = rgbaCss(accent, 0.08);
     highlightEl.style.boxShadow = `0 0 0 4px ${rgbaCss(accent, 0.2)}`;
@@ -1914,6 +2069,7 @@
         --cta-surface: rgba(255, 255, 255, 0.72);
         --cta-surface-strong: rgba(255, 255, 255, 0.92);
         --cta-border: rgba(17, 24, 39, 0.12);
+        --cta-border-strong: rgba(17, 24, 39, 0.18);
         --cta-shadow-color: rgba(0, 0, 0, 0.2);
         --cta-scrim: rgba(0, 0, 0, 0.22);
         --cta-accent: rgb(37, 99, 235);
@@ -1945,7 +2101,7 @@
         height: 44px;
         border-radius: 999px;
         background: var(--cta-surface);
-        border: 1px solid var(--cta-border);
+        border: 1px solid var(--cta-border-strong);
         color: var(--cta-accent);
         cursor: grab;
         display: flex;
@@ -2153,7 +2309,7 @@
         align-items: center;
         justify-content: center;
         background: var(--cta-bubble-assistant);
-        border: 1px solid var(--cta-border);
+        border: 1px solid var(--cta-border-strong);
         flex-shrink: 0;
         position: relative;
       }
@@ -2492,7 +2648,7 @@
         justify-content: center;
         margin-bottom: 14px;
         background: var(--cta-bubble-assistant);
-        border: 1px solid var(--cta-border);
+        border: 1px solid var(--cta-border-strong);
       }
 
       .cta-widget-empty-icon svg,
