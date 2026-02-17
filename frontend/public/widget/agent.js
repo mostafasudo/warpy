@@ -2691,6 +2691,10 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        margin-top: auto;
       }
 
       .cta-widget-activity-header {
@@ -3748,6 +3752,33 @@
 
       messagesEl.innerHTML = "";
 
+      state.messages.forEach((msg, index) => {
+        const bubble = document.createElement("div");
+        bubble.className = `cta-widget-message ${msg.role}`;
+        if (msg.role === "assistant") {
+          bubble.innerHTML = renderMarkdown(msg.content);
+          if (isResumeErrorMessage(msg)) {
+            const actions = document.createElement("div");
+            actions.className = "cta-widget-message-actions";
+            const resumeButton = document.createElement("button");
+            resumeButton.type = "button";
+            resumeButton.className = "cta-widget-resume";
+            resumeButton.textContent = "Resume";
+            const canResume = index === state.messages.length - 1 && !isLoading && !widgetHidden;
+            resumeButton.disabled = !canResume;
+            resumeButton.addEventListener("click", () => {
+              if (!canResume) return;
+              sendMessage(msg.resumeQuery, { skipUserEcho: true });
+            });
+            actions.appendChild(resumeButton);
+            bubble.appendChild(actions);
+          }
+        } else {
+          bubble.textContent = msg.content;
+        }
+        messagesEl.appendChild(bubble);
+      });
+
       if (frontendActivity) {
         const activity = document.createElement("div");
         activity.className = "cta-widget-activity";
@@ -3776,33 +3807,6 @@
         }
         messagesEl.appendChild(activity);
       }
-
-      state.messages.forEach((msg, index) => {
-        const bubble = document.createElement("div");
-        bubble.className = `cta-widget-message ${msg.role}`;
-        if (msg.role === "assistant") {
-          bubble.innerHTML = renderMarkdown(msg.content);
-          if (isResumeErrorMessage(msg)) {
-            const actions = document.createElement("div");
-            actions.className = "cta-widget-message-actions";
-            const resumeButton = document.createElement("button");
-            resumeButton.type = "button";
-            resumeButton.className = "cta-widget-resume";
-            resumeButton.textContent = "Resume";
-            const canResume = index === state.messages.length - 1 && !isLoading && !widgetHidden;
-            resumeButton.disabled = !canResume;
-            resumeButton.addEventListener("click", () => {
-              if (!canResume) return;
-              sendMessage(msg.resumeQuery, { skipUserEcho: true });
-            });
-            actions.appendChild(resumeButton);
-            bubble.appendChild(actions);
-          }
-        } else {
-          bubble.textContent = msg.content;
-        }
-        messagesEl.appendChild(bubble);
-      });
 
       if (isLoading) {
         const loading = document.createElement("div");
