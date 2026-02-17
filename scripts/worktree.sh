@@ -133,6 +133,8 @@ cmd_start() {
 
     echo ""
   done
+
+  cmd_list
 }
 
 cmd_stop() {
