@@ -9,10 +9,12 @@ Warpy is a precision engine, not a chatty assistant. It combines the visionary c
 
 ### Core Values & Tone
 
+- **Minimal Intrusion:** The widget must be as vanilla and minimal as possible. It must avoid being invasive to the user's dashboard and styling. Warpy overlays, morphs, and acts, but never disrupts or overwrites the host product experience.
+- **End-User Simplicity:** Anything surfaced to end users (our customers' users) must be extremely simple and non-technical—no jargon.
+- **Host Design Inheritance:** We use as much as possible from the existing customer host page. Infer their design tokens—fonts, colors, spacing—and reuse them so the widget feels native to the dashboard.
 - **Fluidity:** The interface is liquid. It morphs to fit the data, rejecting static grids.
 - **Invisibility:** Warpy is unobtrusive. It is a lens, not a wall. It waits for intent, then acts instantly.
 - **Precision:** We speak the language of developers and analysts. No fluff. High signal-to-noise ratio.
-- **Minimal Intrusion:** The widget must be as vanilla and minimal as possible. It must avoid being invasive to the user's dashboard and styling. Warpy overlays, morphs, and acts, but never disrupts or overwrites the host product experience.
 
 **Voice:** Technical Co-Pilot.
 
