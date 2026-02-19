@@ -1,24 +1,22 @@
 # Frontend Agent Capability (Widget)
 
-Date: 2026-01-25
-
 ## Overview
-This document describes the frontend action capability added to the Warpy agent, how it works end-to-end, and the key implementation details (backend, widget, UI/UX, and safety/performance). It also includes a brief competitive landscape summary and diagrams.
+The Warpy agent can observe and act on the host dashboard directly. Two always-available tools give it this ability:
 
-## What changed
-- Added two always-available agent tools:
-  - `frontend_context`: request a focused DOM snapshot only when needed.
-  - `frontend`: execute ordered UI actions on the current page.
-- Extended widget tool calls with a `type` discriminator (`backend`, `frontend_context`, `frontend`).
-- Backend-controlled billing: the backend determines what actions to bill based on `tool_type`, not client flags.
-- Implemented a client-side action engine that simulates real user interactions (click, type, select, scroll, drag, etc.).
-- Added DOM context collection with relevance scoring and strict size limits.
-- Added UI feedback for page actions (status panel + element highlight).
-- Added a frontend-interaction warning lifecycle for frontend actions (pre-action lead, visible in open and collapsed widget states, delayed clear).
-- Added a user stop control while runs are in progress (Send becomes Stop in open widget state).
-- Added resumable default error handling with a `Resume` action tied to the failed user query (with duplicate prevention for consecutive errors).
-- Updated the system prompt to encourage proactive frontend retries and context rescans.
-- Frontend actions now appear in the Activity panel alongside backend actions.
+- **`frontend_context`** — requests a focused DOM snapshot of the current page. When the user has granted tab screen sharing, it also captures a pixel-perfect screenshot.
+- **`frontend`** — executes ordered UI actions (click, type, select, scroll, drag, etc.) on the current page by simulating real user interactions.
+
+Tool calls use a `type` discriminator (`backend`, `frontend_context`, `frontend`) so the widget knows how to execute each one. Billing is backend-controlled based on `tool_type`.
+
+## Capabilities
+- DOM context collection with relevance scoring and strict size limits.
+- Tab screen sharing via `getDisplayMedia` to enrich context with a real screenshot (inline prompt with 20s countdown auto-skip).
+- Client-side action engine that simulates real user interactions across frameworks (React, Vue, Angular).
+- UI feedback for page actions: status panel, element highlight, frontend-interaction warning lifecycle.
+- User stop control while runs are in progress (Send becomes Stop).
+- Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
+- System prompt encourages proactive frontend retries and context rescans.
+- Frontend actions tracked in the Activity panel alongside backend actions.
 
 ## High-level flow
 ```mermaid
@@ -33,8 +31,10 @@ sequenceDiagram
   B->>L: find_actions + frontend tools
   L-->>B: frontend_context(goal="filters")
   B-->>W: toolCalls[type=frontend_context]
-  W->>W: Collect DOM subset
-  W->>B: toolResults (frontend_context)
+  W->>U: Screen share prompt (if not already sharing)
+  U-->>W: Share / Skip / auto-skip after 20s
+  W->>W: Collect DOM subset + capture screenshot (if sharing)
+  W->>B: toolResults (frontend_context + screenshot)
   B->>L: ToolMessage (context)
   L-->>B: frontend(goal="Apply filter", actions=[...])
   B-->>W: toolCalls[type=frontend]
@@ -123,10 +123,12 @@ Frontend context results:
     "url": "https://example.com/dashboard",
     "elements": [
       { "selector": "#date-range", "label": "Date range" }
-    ]
+    ],
+    "screenshot": "data:image/webp;base64,..."
   }
 }
 ```
+The `screenshot` field is present only when the user has granted tab screen sharing. It contains a base64-encoded WebP image of the current tab captured via `getDisplayMedia`.
 
 ## Billing
 Billing is controlled entirely by the backend based on `tool_type`:
@@ -154,6 +156,19 @@ Each element includes:
 - `tag`, `role`, `type`, `disabled`, `checked`, `required`
 - `rect` and `inViewport`
 - `options` for select elements (when small)
+
+## Tab screenshot capture
+When `frontend_context` is called, the widget attempts to capture a screenshot of the current tab via the browser `getDisplayMedia` API. This gives the agent a pixel-perfect view of the page alongside the structured DOM context.
+
+Flow:
+1. On the first `frontend_context` call, the widget shows an inline prompt asking the user to share the current tab.
+2. The prompt includes a 20-second countdown. If the user doesn't act, it auto-skips and continues without a screenshot.
+3. The user can click **Share** (triggers the browser's tab-sharing picker) or **Skip**.
+4. `getDisplayMedia` is configured with `preferCurrentTab: true`, `selfBrowserSurface: "include"`, `monitorTypeSurface: "exclude"`, and `surfaceSwitching: "exclude"` to restrict sharing to the current tab only.
+5. Once sharing is active, every subsequent `frontend_context` call captures a frame without re-prompting.
+6. The frame is drawn to an offscreen canvas and exported as `image/webp` at 0.75 quality, then included in the tool result as a base64 data URL in the `screenshot` field.
+
+The sharing bar persists across messages (including empty/new-chat state) so the user always has a visible **Stop** control. Sharing is fully optional — the agent receives structured DOM context regardless.
 
 ## Action execution engine
 The widget executes actions sequentially to preserve correct UI state. It simulates user events to trigger framework handlers (React/Vue/Angular):
@@ -185,6 +200,7 @@ Actions accept:
 - Warning is visible both when the panel is open (inline subtle alert) and when collapsed (launcher-adjacent subtle alert).
 - While a run is active and the panel is open, Send is replaced by an immediate Stop button.
 - Default execution failures render a Resume button that retries the original failed query; consecutive duplicate resume errors are collapsed into a single latest message.
+- Screen share prompt: a minimal inline bar (sticky at the top of the messages area) with a status dot, descriptive text, and Share/Skip actions. Uses the same design tokens as the rest of the widget (`.cta-widget-screen-prompt`). Shows a live countdown ("Continuing in Xs") on a second line. When sharing is active, the bar changes to "Sharing this tab" with a pulsing dot and a "Stop" link. The bar remains visible in the empty-state/new-chat view so users always have access to the stop control.
 
 ## Activity panel
 Frontend actions are recorded and displayed in the Activity panel alongside backend actions:
@@ -198,20 +214,31 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 - Frontend actions are sequential and retryable with rescans.
 - Sensitive field sanitization: text typed into password/secret/token fields is redacted (`***`) before storage.
 - The `goal` parameter is required for frontend actions to ensure meaningful activity labels.
+- Tab screen sharing requires explicit user consent via the browser's native permission dialog.
+- The `getDisplayMedia` call is restricted to the current tab only — users cannot share other tabs, windows, or their entire screen.
+- Screen sharing is fully optional; the user can skip or ignore the prompt and the agent continues with DOM context only.
+- The user can stop sharing at any time via the widget's "Stop" control or the browser's built-in stop-sharing UI.
+- Screenshots are captured client-side, encoded as base64, and sent inline with the tool result — no images are uploaded to external storage.
+- Screen share state is cleaned up on widget hide, new chat, and abort to prevent hidden ongoing capture.
 
-## Key backend updates
-- New tool schemas: `FrontendContextRequest`, `FrontendActionPayload`.
-- `ToolCallPayload` now includes `type`, `goal`, `context`, `actions`.
-- `AgentExecutor` understands `frontend_context` and `frontend` tool calls.
-- `ConversationAction` model extended with `tool_type`, `frontend_goal`, `frontend_url`, `frontend_actions` columns.
-- Backend-controlled billing based on `tool_type` (not client flags).
+## Architecture
 
-## Key widget updates
+### Backend
+- Tool schemas: `FrontendContextRequest`, `FrontendActionPayload`.
+- `ToolCallPayload` includes `type`, `goal`, `context`, `actions`.
+- `AgentExecutor` routes `frontend_context` and `frontend` tool calls to the widget for client-side execution.
+- `ConversationAction` model stores `tool_type`, `frontend_goal`, `frontend_url`, `frontend_actions`.
+- Billing determined by `tool_type` on the backend (not client flags).
+
+### Widget
 - DOM context capture with relevance scoring.
-- Action engine for UI interactions (user-like events).
+- Action engine for UI interactions (user-like events dispatched to framework handlers).
 - Activity UI and element highlighting.
 - Host-token theming: widget colors and typography resolve from host design tokens first (`background`, `foreground`, `muted`, `card/popover`, `border`, `primary/accent`, `ring`) with safe computed-style fallbacks.
-- Border tuning: launcher/icon borders use a slightly stronger subtle border token, while other widget borders stay softer to avoid harsh lines.
+- Border tuning: launcher/icon borders use a slightly stronger subtle border token; other widget borders stay softer.
+- Tab screenshot capture via `getDisplayMedia` with current-tab-only constraints.
+- Screen share prompt UI: minimal sticky bar with countdown, share/skip actions, and active-sharing status with stop control.
+- `screenShareEndedCallback` hook re-renders the widget when the user stops sharing from the browser chrome.
 
 ## Competitive landscape (brief)
 - Perplexity Comet positions itself as an AI browser that can click, type, submit, and autofill in the browser, emphasizing agentic actions inside the page. Source: Perplexity Comet Enterprise page. [1]
