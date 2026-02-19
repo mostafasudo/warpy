@@ -228,11 +228,15 @@ cmd_promote() {
   merge_base="$(git -C "$REPO_ROOT" merge-base "$current_branch" "$target_branch")"
 
   local files
-  files="$(git -C "$target_wt" diff --name-only "$merge_base" HEAD)"
-  if ! git -C "$target_wt" diff --quiet || ! git -C "$target_wt" diff --cached --quiet; then
-    files="$(printf '%s\n%s' "$files" "$(git -C "$target_wt" diff --name-only HEAD)")"
-  fi
-  files="$(echo "$files" | sort -u | grep -v '^$')"
+  files="$(
+    {
+      git -C "$target_wt" diff --name-only "$merge_base" HEAD
+      if ! git -C "$target_wt" diff --quiet || ! git -C "$target_wt" diff --cached --quiet; then
+        git -C "$target_wt" diff --name-only HEAD
+      fi
+      git -C "$target_wt" ls-files --others --exclude-standard
+    } | sort -u | sed '/^$/d'
+  )"
 
   if [[ -z "$files" ]]; then
     echo "No changes to promote."

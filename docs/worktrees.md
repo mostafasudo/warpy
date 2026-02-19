@@ -33,7 +33,7 @@ Prints all worktrees with their branch, path, project name, and localhost URLs.
 
 ### `pnpm worktree promote <index>`
 
-Copies all changed files from a worktree into the current branch as uncommitted changes.
+Copies all changed files from a worktree into the current branch as uncommitted changes, including untracked files.
 
 Aborts if any of those files already have uncommitted changes locally, so existing work is never overwritten. Commit or stash local changes first if there's a conflict.
 
