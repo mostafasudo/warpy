@@ -248,6 +248,12 @@ export type ActivityConversationDetailResponse = {
   nextActionCursor: string | null;
 };
 
+export type FrontendCapabilityResponse = {
+  enabled: boolean;
+};
+
+export type FrontendCapabilityUpdate = FrontendCapabilityResponse;
+
 export type UserRateLimitsResponse = {
   enabled: boolean;
   dailyLimit: number | null;

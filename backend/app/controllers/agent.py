@@ -17,6 +17,8 @@ from ..schemas.agent import (
     ConversationCreate,
     ConversationResponse,
     ConversationWithMessagesResponse,
+    FrontendCapabilityResponse,
+    FrontendCapabilityUpdate,
     MessageResponse,
     UserRateLimitsResponse,
     UserRateLimitsUpdate,
@@ -34,6 +36,7 @@ from ..services.agent_service import (
     get_messages,
     list_conversations,
     save_message,
+    update_frontend_capability,
     update_user_rate_limits,
 )
 from ..services.agent_widget_security_service import (
@@ -168,7 +171,13 @@ async def chat_route(
 
         user_message = save_message(session, conversation_id, "user", payload.message)
 
-        executor = AgentExecutor(session, clerk_session.user_id, conversation_id=conversation_id)
+        agent = get_agent(session, clerk_session.user_id)
+        executor = AgentExecutor(
+            session,
+            clerk_session.user_id,
+            conversation_id=conversation_id,
+            frontend_capability_enabled=agent.frontend_capability_enabled if agent else True,
+        )
         response_content = await executor.run(payload.message, history)
         
         assistant_message = save_message(session, conversation_id, "assistant", response_content)
@@ -323,6 +332,39 @@ async def update_agent_widget_install_route(
     except Exception as error:
         log_error("AgentController", "update_widget_install", "Failed to update widget install preferences", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update widget install preferences")
+
+
+@router.get("/agent/frontend-capability", response_model=FrontendCapabilityResponse)
+async def get_frontend_capability_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> FrontendCapabilityResponse:
+    try:
+        agent = get_agent(session, clerk_session.user_id)
+        if not agent:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        return FrontendCapabilityResponse(enabled=agent.frontend_capability_enabled)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "get_frontend_capability", "Failed to fetch frontend capability", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch frontend capability")
+
+
+@router.put("/agent/frontend-capability", response_model=FrontendCapabilityResponse)
+async def update_frontend_capability_route(
+    payload: FrontendCapabilityUpdate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> FrontendCapabilityResponse:
+    try:
+        agent = update_frontend_capability(session, clerk_session.user_id, payload.enabled)
+        return FrontendCapabilityResponse(enabled=agent.frontend_capability_enabled)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("AgentController", "update_frontend_capability", "Failed to update frontend capability", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update frontend capability")
 
 
 @router.get("/agent/user-rate-limits", response_model=UserRateLimitsResponse)

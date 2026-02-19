@@ -228,3 +228,39 @@ def test_run_step_uses_history_for_user_input(monkeypatch):
     result = asyncio.run(executor.run_step(None, history))
     assert result.done is True
     assert checker.calls[0][0] == "previous message"
+
+
+def test_frontend_capability_disabled_excludes_tools(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker, frontend_capability_enabled=False)
+    result = asyncio.run(executor.run_step("hello", []))
+    assert result.response == "ok"
+    tools = checker.calls[0][3]
+    tool_names = {t["name"] for t in tools}
+    assert "find_actions" in tool_names
+    assert "frontend_context" not in tool_names
+    assert "frontend" not in tool_names
+
+
+def test_frontend_capability_disabled_excludes_prompt_section(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker, frontend_capability_enabled=False)
+    assert "Frontend Action Tips" not in executor._system_prompt
+    assert "frontend_context" not in executor._system_prompt
+
+
+def test_frontend_capability_enabled_includes_prompt_section(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker, frontend_capability_enabled=True)
+    assert "Frontend Action Tips" in executor._system_prompt
+    assert "frontend_context" in executor._system_prompt

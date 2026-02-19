@@ -224,6 +224,7 @@ class Agent(Base):
     widget_install_framework = Column(Text, nullable=False, server_default="react")
     widget_install_package_manager = Column(Text, nullable=False, server_default="npm")
     widget_security_disclosure_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    frontend_capability_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     user_rate_limit_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     user_rate_limit_daily = Column(Integer, nullable=True)
     user_rate_limit_monthly = Column(Integer, nullable=True)

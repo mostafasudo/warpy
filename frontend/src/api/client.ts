@@ -17,6 +17,8 @@ import type {
   FeaturePayload,
   FeatureTogglePayload,
   FeatureWithEndpoints,
+  FrontendCapabilityResponse,
+  FrontendCapabilityUpdate,
   PaginatedEndpoints,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -160,6 +162,8 @@ export type {
   FeaturePayload,
   FeatureTogglePayload,
   FeatureWithEndpoints,
+  FrontendCapabilityResponse,
+  FrontendCapabilityUpdate,
   PaginatedEndpoints,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -319,6 +323,12 @@ export const apiClient = {
       : `/activity/conversations/${encodeURIComponent(conversationId)}`
     return request<ActivityConversationDetailResponse>(path)
   },
+  getAgentFrontendCapability: () => request<FrontendCapabilityResponse>("/agent/frontend-capability"),
+  updateAgentFrontendCapability: (payload: FrontendCapabilityUpdate) =>
+    request<FrontendCapabilityResponse>("/agent/frontend-capability", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   getAgentUserRateLimits: () => request<UserRateLimitsResponse>("/agent/user-rate-limits"),
   updateAgentUserRateLimits: (payload: UserRateLimitsUpdate) =>
     request<UserRateLimitsResponse>("/agent/user-rate-limits", {

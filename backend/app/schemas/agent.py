@@ -123,6 +123,18 @@ class ChatResponse(BaseModel):
     response: MessageResponse
 
 
+class FrontendCapabilityResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool
+
+
+class FrontendCapabilityUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enabled: bool
+
+
 class UserRateLimitsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

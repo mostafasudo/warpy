@@ -41,7 +41,7 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
 
 
 class FakeExecutor:
-    def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+    def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
         self.calls = []
         self.responses = []
 
@@ -136,7 +136,7 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
     )
 
     class FakeExecutorWithToolCalls:
-        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
@@ -190,7 +190,7 @@ def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient
     )
 
     class FakeExecutorWithToolCalls:
-        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
@@ -296,7 +296,7 @@ def test_widget_chat_returns_tool_calls(client: TestClient, monkeypatch: pytest.
     )
 
     class FakeExecutorWithTools:
-        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
@@ -324,7 +324,7 @@ def test_widget_chat_accepts_tool_results(client: TestClient, monkeypatch: pytes
     call_count = {"count": 0}
 
     class FakeExecutorWithToolResults:
-        def __init__(self, session, user_id, conversation_id=None, redis_client=None):
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):

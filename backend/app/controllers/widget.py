@@ -308,7 +308,8 @@ async def widget_chat(
             session,
             agent.user_id,
             conversation_id=conversation.id,
-            redis_client=redis_client
+            redis_client=redis_client,
+            frontend_capability_enabled=agent.frontend_capability_enabled,
         )
         result = await executor.run_step(
             user_message=payload.message,

@@ -72,6 +72,22 @@ def get_messages(session: Session, conversation_id: UUID) -> list[Message]:
     ).all())
 
 
+def update_frontend_capability(
+    session: Session,
+    user_id: str,
+    enabled: bool,
+) -> Agent:
+    agent = get_agent(session, user_id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+    agent.frontend_capability_enabled = enabled
+    session.commit()
+    session.refresh(agent)
+    log_info("AgentService", "update_frontend_capability", "Frontend capability updated", user_id=user_id)
+    return agent
+
+
 def update_user_rate_limits(
     session: Session,
     user_id: str,

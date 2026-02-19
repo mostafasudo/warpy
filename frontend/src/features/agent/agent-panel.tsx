@@ -25,9 +25,11 @@ import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agen
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
+import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-frontend-capability"
 import { useUpdateAgentUserRateLimits } from "@/mutations/use-update-agent-user-rate-limits"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
+import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
@@ -672,6 +674,72 @@ const ConfigureWidgetPanel = () => {
   )
 }
 
+const FrontendCapabilityPanel = () => {
+  const { data, isPending } = useAgentFrontendCapabilityQuery()
+  const updateMutation = useUpdateAgentFrontendCapability()
+  const addToast = useToastStore(toastSelectors.addToast)
+
+  const enabled = data?.enabled ?? true
+
+  const handleToggle = async (checked: boolean) => {
+    try {
+      await updateMutation.mutateAsync({ enabled: checked })
+      addToast({
+        title: "Saved",
+        description: checked ? "Frontend capability enabled." : "Frontend capability disabled.",
+        variant: "success",
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update frontend capability"
+      addToast({ title: "Save failed", description: message, variant: "error" })
+    }
+  }
+
+  if (isPending) {
+    return (
+      <div
+        className="mt-6 rounded-xl border border-border bg-card/70 p-6 shadow-sm"
+        data-testid="frontend-capability-loading"
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <Skeleton className="h-6 w-10" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
+      <div className="p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold">Frontend Capability</h3>
+              <Badge variant={enabled ? "default" : "secondary"}>
+                {enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Allow the agent to read and interact with UI elements on the page.
+            </p>
+          </div>
+          <Switch
+            id="frontend-capability-toggle"
+            checked={enabled}
+            onCheckedChange={(checked) => void handleToggle(checked)}
+            disabled={updateMutation.isPending}
+            aria-label="Toggle frontend capability"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const UserRateLimitsPanel = () => {
   const { data, isPending } = useAgentUserRateLimitsQuery()
   const updateMutation = useUpdateAgentUserRateLimits()
@@ -1247,6 +1315,7 @@ export const AgentPanel = () => {
         <>
           <WidgetInstallDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
           <ConfigureWidgetPanel />
+          <FrontendCapabilityPanel />
           <AdvancedSecurityPanel />
           <UserRateLimitsPanel />
         </>

@@ -24,21 +24,29 @@ BLOCKED_RESPONSE = "I can only help with dashboard actions. Please ask me to per
 BLOCKED_SYSTEM_NOTE = "Your previous response was blocked because it did not align with your role as a dashboard assistant. Stay focused on discovering and executing dashboard actions only."
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
 
-SYSTEM_PROMPT = """Context: You are a dashboard assistant that can execute backend endpoints and frontend UI steps on the current page.
+SYSTEM_PROMPT_BASE = """Context: You are a dashboard assistant that can execute backend endpoints{frontend_context}.
 
 Task: Help the user achieve their dashboard goal.
 
 Constraints:
-- Discover backend actions with find_actions first.
-- If find_actions returns no suitable actions (empty list) or the returned actions don't match the user's goal, request frontend_context next.
-- If the task is a UI change or find_actions is not relevant, request frontend_context.
-- Ask for any required values; do not guess.
-- Execute frontend actions in small, ordered steps; include waits for dynamic UI.
-- If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user.
+- Discover backend actions with find_actions first.{frontend_constraints}
+- Ask for any required values; do not guess.{frontend_execution}
 - Use only available tools; stay within the current page.
 - Keep responses friendly and non-technical.
 - Keep responses minimal: 1-2 short sentences (max 40 words) or one short question.
+{frontend_tips}
+Output:
+- Either tool calls OR a concise response (<=2 sentences, <=40 words) that summarizes what you did or asks one clear question for missing info.
+- When listing capabilities, mention 2-3 examples and say you can do more if the user describes their goal."""
 
+FRONTEND_CONTEXT_FRAGMENT = " and frontend UI steps on the current page"
+FRONTEND_CONSTRAINTS_FRAGMENT = """
+- If find_actions returns no suitable actions (empty list) or the returned actions don't match the user's goal, request frontend_context next.
+- If the task is a UI change or find_actions is not relevant, request frontend_context."""
+FRONTEND_EXECUTION_FRAGMENT = """
+- Execute frontend actions in small, ordered steps; include waits for dynamic UI.
+- If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user."""
+FRONTEND_TIPS_FRAGMENT = """
 Frontend Action Tips:
 - If an action reports ELEMENT_NOT_FOUND, the selector didn't match anything - request fresh frontend_context with refined scope/hints
 - If an action succeeds but nothing changes, the element may be disabled or hidden - check the page state and try a different approach
@@ -47,10 +55,16 @@ Frontend Action Tips:
 - Use suggestedSelectors from context response to pick reliable selectors
 - After failures, always request fresh frontend_context - the DOM may have changed
 - frontend_context may include a screenshot field (base64 image) showing the actual page - use it to visually confirm element locations and page state
+"""
 
-Output:
-- Either tool calls OR a concise response (<=2 sentences, <=40 words) that summarizes what you did or asks one clear question for missing info.
-- When listing capabilities, mention 2-3 examples and say you can do more if the user describes their goal."""
+
+def build_system_prompt(frontend_capability_enabled: bool = True) -> str:
+    return SYSTEM_PROMPT_BASE.format(
+        frontend_context=FRONTEND_CONTEXT_FRAGMENT if frontend_capability_enabled else "",
+        frontend_constraints=FRONTEND_CONSTRAINTS_FRAGMENT if frontend_capability_enabled else "",
+        frontend_execution=FRONTEND_EXECUTION_FRAGMENT if frontend_capability_enabled else "",
+        frontend_tips=FRONTEND_TIPS_FRAGMENT if frontend_capability_enabled else "",
+    )
 
 
 @dataclass
@@ -71,12 +85,15 @@ class AgentExecutor:
         redis_client: Redis | None = None,
         llm_client: Any | None = None,
         schema_factory: SchemaFactory | None = None,
-        hallucination_checker: HallucinationChecker | None = None
+        hallucination_checker: HallucinationChecker | None = None,
+        frontend_capability_enabled: bool = True,
     ):
         self.session = session
         self.user_id = user_id
         self.conversation_id = conversation_id
+        self.frontend_capability_enabled = frontend_capability_enabled
         self.schema_factory = schema_factory or SchemaFactory()
+        self._system_prompt = build_system_prompt(frontend_capability_enabled)
         settings = get_settings()
         self.llm = llm_client or ChatOpenAI(
             model=llm_config.chat_model,
@@ -133,9 +150,10 @@ class AgentExecutor:
     def _get_tools(self):
         tools = [
             create_find_actions_tool(self.session, self.user_id),
-            create_frontend_context_tool(),
-            create_frontend_actions_tool(),
         ]
+        if self.frontend_capability_enabled:
+            tools.append(create_frontend_context_tool())
+            tools.append(create_frontend_actions_tool())
         tools.extend(get_endpoint_tools(
             self.session,
             self.user_id,
@@ -157,11 +175,11 @@ class AgentExecutor:
         return None
 
     def _build_messages_from_history(
-        self, 
-        user_message: str | None, 
+        self,
+        user_message: str | None,
         conversation_history: list[dict[str, str]]
     ) -> list[BaseMessage]:
-        messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        messages: list[BaseMessage] = [SystemMessage(content=self._system_prompt)]
         for msg in conversation_history:
             if msg["role"] == "user":
                 messages.append(HumanMessage(content=msg["content"]))
@@ -279,7 +297,7 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
         result = await self._hallucination_checker.check(
             user_input,
             response,
-            SYSTEM_PROMPT,
+            self._system_prompt,
             available_tools=available_tools,
             tool_trace=tool_trace
         )
@@ -460,7 +478,7 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
     async def run(self, user_message: str, conversation_history: list[dict[str, str]]):
         self._sync_cache()
 
-        messages = [SystemMessage(content=SYSTEM_PROMPT)]
+        messages = [SystemMessage(content=self._system_prompt)]
         for message in conversation_history:
             if message["role"] == "user":
                 messages.append(HumanMessage(content=message["content"]))

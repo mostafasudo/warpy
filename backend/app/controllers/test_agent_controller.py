@@ -37,7 +37,7 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
 
 
 class FakeExecutor:
-    def __init__(self, session, user_id, conversation_id=None):
+    def __init__(self, session, user_id, conversation_id=None, frontend_capability_enabled=True):
         self.calls = []
 
     async def run(self, message, history):
@@ -185,3 +185,32 @@ def test_agent_widget_install_preferences_get_and_update(client: TestClient):
     refetched_body = refetched.json()
     assert refetched_body["framework"] == "vue"
     assert refetched_body["packageManager"] == "pnpm"
+
+
+def test_agent_frontend_capability_get_and_update(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    fetched = client.get("/agent/frontend-capability", headers=auth_headers())
+    assert fetched.status_code == 200
+    assert fetched.json()["enabled"] is True
+
+    updated = client.put(
+        "/agent/frontend-capability",
+        headers=auth_headers(),
+        json={"enabled": False},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["enabled"] is False
+
+    refetched = client.get("/agent/frontend-capability", headers=auth_headers())
+    assert refetched.status_code == 200
+    assert refetched.json()["enabled"] is False
+
+    reenabled = client.put(
+        "/agent/frontend-capability",
+        headers=auth_headers(),
+        json={"enabled": True},
+    )
+    assert reenabled.status_code == 200
+    assert reenabled.json()["enabled"] is True

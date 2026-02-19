@@ -8,10 +8,12 @@ import { AgentPanel } from "./agent-panel"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-frontend-capability"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
@@ -85,6 +87,15 @@ jest.mock("@/mutations/use-deploy-agent-widget-security", () => ({
   useDeployAgentWidgetSecurity: jest.fn()
 }))
 
+jest.mock("@/queries/use-agent-frontend-capability", () => ({
+  useAgentFrontendCapabilityQuery: jest.fn(),
+  agentFrontendCapabilityQueryKey: ["agent", "frontend-capability"]
+}))
+
+jest.mock("@/mutations/use-update-agent-frontend-capability", () => ({
+  useUpdateAgentFrontendCapability: jest.fn()
+}))
+
 const mockedUseConfigQuery = useConfigQuery as unknown as jest.Mock
 const mockedUseAgentQuery = useAgentQuery as unknown as jest.Mock
 const mockedUseCreateAgent = useCreateAgent as unknown as jest.Mock
@@ -96,6 +107,8 @@ const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown a
 const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetConfig = useUpdateAgentWidgetConfig as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetInstall = useUpdateAgentWidgetInstall as unknown as jest.Mock
+const mockedUseAgentFrontendCapabilityQuery = useAgentFrontendCapabilityQuery as unknown as jest.Mock
+const mockedUseUpdateAgentFrontendCapability = useUpdateAgentFrontendCapability as unknown as jest.Mock
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -186,6 +199,14 @@ describe("AgentPanel", () => {
     })
     mockedUseUpdateAgentWidgetInstall.mockReturnValue({
       mutate: jest.fn(),
+      isPending: false
+    })
+    mockedUseAgentFrontendCapabilityQuery.mockReturnValue({
+      data: { enabled: true },
+      isPending: false
+    })
+    mockedUseUpdateAgentFrontendCapability.mockReturnValue({
+      mutateAsync: jest.fn(),
       isPending: false
     })
   })
@@ -852,6 +873,111 @@ describe("AgentPanel", () => {
     await user.tab()
 
     expect(mutateAsync).not.toHaveBeenCalled()
+  })
+
+  it("shows frontend capability panel with enabled toggle", () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    expect(screen.getByText("Frontend Capability")).not.toBeNull()
+    expect(screen.getByLabelText("Toggle frontend capability")).not.toBeNull()
+  })
+
+  it("toggles frontend capability off and shows toast", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => ({ enabled: false }))
+    mockedUseUpdateAgentFrontendCapability.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByLabelText("Toggle frontend capability"))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({ enabled: false })
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Saved",
+        description: "Frontend capability disabled.",
+        variant: "success"
+      })
+    })
+  })
+
+  it("shows error toast when frontend capability update fails", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => { throw new Error("nope") })
+    mockedUseUpdateAgentFrontendCapability.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByLabelText("Toggle frontend capability"))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalled()
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Save failed",
+        description: "nope",
+        variant: "error"
+      })
+    })
+  })
+
+  it("shows frontend capability loading state", () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+    mockedUseAgentFrontendCapabilityQuery.mockReturnValue({
+      data: null,
+      isPending: true
+    })
+
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    expect(screen.getByTestId("frontend-capability-loading")).not.toBeNull()
   })
 
   it("deploys staged changes when enabled", async () => {
