@@ -19,6 +19,7 @@
   const FRONTEND_WARNING_LEAD_MS = 450;
   const FRONTEND_WARNING_MIN_VISIBLE_MS = 2400;
   const FRONTEND_WARNING_HOLD_MS = 2200;
+  const SCREEN_SHARE_TIMEOUT_MS = 20000;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Utilities
@@ -616,6 +617,81 @@
     const raw = toolCall.type || toolCall.toolType;
     const normalized = raw ? String(raw) : "backend";
     return normalized === "frontend_actions" ? "frontend" : normalized;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Screen Capture
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let screenStream = null;
+  let screenShareEndedCallback = null;
+
+  function isScreenShareActive() {
+    return Boolean(screenStream && screenStream.active && screenStream.getVideoTracks().some((t) => t.readyState === "live"));
+  }
+
+  function stopScreenShare() {
+    if (!screenStream) return;
+    screenStream.getTracks().forEach((t) => t.stop());
+    screenStream = null;
+  }
+
+  async function requestScreenShare() {
+    if (isScreenShareActive()) return true;
+    stopScreenShare();
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "browser" },
+        preferCurrentTab: true,
+        selfBrowserSurface: "include",
+        monitorTypeSurface: "exclude",
+        surfaceSwitching: "exclude",
+        audio: false,
+      });
+      const track = screenStream.getVideoTracks()[0];
+      if (track) {
+        track.addEventListener("ended", () => {
+          screenStream = null;
+          if (typeof screenShareEndedCallback === "function") screenShareEndedCallback();
+        }, { once: true });
+      }
+      return true;
+    } catch {
+      screenStream = null;
+      return false;
+    }
+  }
+
+  function captureScreenFrame() {
+    if (!isScreenShareActive()) return null;
+    const track = screenStream.getVideoTracks()[0];
+    if (!track) return null;
+    const settings = track.getSettings();
+    const w = settings.width || 1280;
+    const h = settings.height || 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const video = document.createElement("video");
+    video.srcObject = new MediaStream([track]);
+    video.muted = true;
+    video.playsInline = true;
+    return new Promise((resolve) => {
+      video.onloadeddata = () => {
+        ctx.drawImage(video, 0, 0, w, h);
+        video.srcObject = null;
+        try {
+          const dataUrl = canvas.toDataURL("image/webp", 0.75);
+          resolve(dataUrl);
+        } catch {
+          resolve(null);
+        }
+      };
+      video.play().catch(() => resolve(null));
+      setTimeout(() => resolve(null), 3000);
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1809,8 +1885,15 @@
       ui.setActivity({ title, status: "running", steps: [] });
     }
     try {
+      let screenshot = null;
+      if (ui && typeof ui.captureScreenshot === "function") {
+        screenshot = await ui.captureScreenshot(signal);
+      }
       throwIfAborted(signal);
       const context = collectFrontendContext(request);
+      if (screenshot) {
+        context.screenshot = screenshot;
+      }
       if (ui && typeof ui.setActivity === "function") {
         ui.setActivity({ title, status: "done", steps: [] });
         if (typeof ui.scheduleClear === "function") {
@@ -2762,6 +2845,104 @@
         background: var(--cta-accent);
       }
 
+      .cta-widget-screen-prompt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: var(--cta-bubble-assistant);
+        border: 1px solid var(--cta-border);
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+
+      .cta-widget-screen-prompt-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--cta-border-strong);
+        flex-shrink: 0;
+      }
+
+      .cta-widget-screen-prompt.sharing .cta-widget-screen-prompt-dot {
+        background: var(--cta-accent);
+        animation: cta-widget-activity-pulse 1s ease-in-out infinite;
+      }
+
+      .cta-widget-screen-prompt-body {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-screen-prompt-countdown {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+
+      .cta-widget-screen-prompt-btn {
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+        color: var(--cta-fg);
+        font-size: 11px;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+
+      .cta-widget-screen-prompt-btn:hover {
+        opacity: 0.8;
+      }
+
+      .cta-widget-screen-prompt-btn:active {
+        transform: translateY(1px);
+      }
+
+      .cta-widget-screen-prompt-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .cta-widget-screen-prompt-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
+      .cta-widget-screen-prompt-btn.primary {
+        background: var(--cta-accent);
+        color: var(--cta-accent-contrast);
+        border-color: transparent;
+        font-weight: 600;
+      }
+
+      .cta-widget-screen-prompt-link {
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--cta-fg-muted);
+        font-size: 11px;
+        cursor: pointer;
+        flex-shrink: 0;
+        text-decoration: none;
+        transition: color 160ms ease;
+      }
+
+      .cta-widget-screen-prompt-link:hover {
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-screen-prompt-link:focus-visible {
+        outline: none;
+        text-decoration: underline;
+      }
+
       .cta-widget-message {
         max-width: 92%;
         padding: 10px 12px;
@@ -3320,6 +3501,10 @@
     let frontendWarningText = "";
     let frontendWarningVisibleSince = 0;
     let frontendWarningTimer = null;
+    let screenSharePromiseResolve = null;
+    let screenShareDismissed = false;
+    let screenShareCountdown = 0;
+    let screenShareCountdownInterval = null;
 
     // ─── DOM Construction ──────────────────────────────────────────────────
 
@@ -3334,6 +3519,12 @@
       closePanel({ restoreLauncherFocus: false });
       clearHighlight();
       clearFrontendWarning();
+      stopScreenShare();
+      clearScreenShareCountdown();
+      if (screenSharePromiseResolve) {
+        screenSharePromiseResolve(false);
+        screenSharePromiseResolve = null;
+      }
       root.style.display = "none";
       root.setAttribute("aria-hidden", "true");
     }
@@ -3736,21 +3927,92 @@
       state.messages.push(message);
     }
 
+    function renderScreenShareBar(container) {
+      const sharing = isScreenShareActive();
+      const asking = Boolean(screenSharePromiseResolve);
+      if (!sharing && !asking) return;
+      const prompt = document.createElement("div");
+      prompt.className = "cta-widget-screen-prompt" + (sharing ? " sharing" : "");
+      const dot = document.createElement("span");
+      dot.className = "cta-widget-screen-prompt-dot";
+      prompt.appendChild(dot);
+      const body = document.createElement("span");
+      body.className = "cta-widget-screen-prompt-body";
+      if (sharing) {
+        body.textContent = "Sharing this tab";
+      } else {
+        body.textContent = "Share this tab for a clearer view";
+        if (screenShareCountdown > 0) {
+          body.appendChild(document.createElement("br"));
+          const countdown = document.createElement("span");
+          countdown.className = "cta-widget-screen-prompt-countdown";
+          countdown.textContent = "Continuing in " + screenShareCountdown + "s";
+          body.appendChild(countdown);
+        }
+      }
+      prompt.appendChild(body);
+      if (sharing) {
+        const stopBtn = document.createElement("button");
+        stopBtn.type = "button";
+        stopBtn.className = "cta-widget-screen-prompt-link";
+        stopBtn.textContent = "Stop";
+        stopBtn.addEventListener("click", () => {
+          stopScreenShare();
+          renderMessages();
+        });
+        prompt.appendChild(stopBtn);
+      } else {
+        const shareBtn = document.createElement("button");
+        shareBtn.type = "button";
+        shareBtn.className = "cta-widget-screen-prompt-btn primary";
+        shareBtn.textContent = "Share";
+        shareBtn.addEventListener("click", async () => {
+          shareBtn.disabled = true;
+          clearScreenShareCountdown();
+          const ok = await requestScreenShare();
+          if (screenSharePromiseResolve) {
+            screenSharePromiseResolve(ok);
+            screenSharePromiseResolve = null;
+          }
+          renderMessages();
+        });
+        prompt.appendChild(shareBtn);
+        const skipBtn = document.createElement("button");
+        skipBtn.type = "button";
+        skipBtn.className = "cta-widget-screen-prompt-link";
+        skipBtn.textContent = "Skip";
+        skipBtn.addEventListener("click", () => {
+          clearScreenShareCountdown();
+          screenShareDismissed = true;
+          if (screenSharePromiseResolve) {
+            screenSharePromiseResolve(false);
+            screenSharePromiseResolve = null;
+          }
+          renderMessages();
+        });
+        prompt.appendChild(skipBtn);
+      }
+      container.appendChild(prompt);
+    }
+
     function renderMessages() {
       if (state.messages.length === 0 && !frontendActivity) {
-        messagesEl.innerHTML = `
-          <div class="cta-widget-empty">
-            <div class="cta-widget-empty-icon">
-              ${getIconMarkup()}
-            </div>
-            <h3>${escapeHtml(widgetEmptyTitle)}</h3>
-            <p>${escapeHtml(widgetEmptyDescription)}</p>
-          </div>
+        messagesEl.innerHTML = "";
+        renderScreenShareBar(messagesEl);
+        const empty = document.createElement("div");
+        empty.className = "cta-widget-empty";
+        empty.innerHTML = `
+          <div class="cta-widget-empty-icon">${getIconMarkup()}</div>
+          <h3>${escapeHtml(widgetEmptyTitle)}</h3>
+          <p>${escapeHtml(widgetEmptyDescription)}</p>
         `;
+        messagesEl.appendChild(empty);
         return;
       }
 
       messagesEl.innerHTML = "";
+
+      renderScreenShareBar(messagesEl);
 
       state.messages.forEach((msg, index) => {
         const bubble = document.createElement("div");
@@ -3818,12 +4080,73 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function clearScreenShareCountdown() {
+      if (screenShareCountdownInterval) {
+        clearInterval(screenShareCountdownInterval);
+        screenShareCountdownInterval = null;
+      }
+      screenShareCountdown = 0;
+    }
+
+    async function ensureScreenShare(signal) {
+      if (isScreenShareActive()) return true;
+      if (screenShareDismissed) return false;
+      if (screenSharePromiseResolve) return false;
+      return new Promise((resolve) => {
+        screenSharePromiseResolve = resolve;
+        clearScreenShareCountdown();
+        screenShareCountdown = Math.ceil(SCREEN_SHARE_TIMEOUT_MS / 1000);
+        screenShareCountdownInterval = setInterval(() => {
+          screenShareCountdown = Math.max(0, screenShareCountdown - 1);
+          renderMessages();
+        }, 1000);
+        renderMessages();
+        const timeout = setTimeout(() => {
+          clearScreenShareCountdown();
+          if (screenSharePromiseResolve === resolve) {
+            screenSharePromiseResolve = null;
+            renderMessages();
+            resolve(false);
+          }
+        }, SCREEN_SHARE_TIMEOUT_MS);
+        const onAbort = () => {
+          clearTimeout(timeout);
+          clearScreenShareCountdown();
+          if (screenSharePromiseResolve === resolve) {
+            screenSharePromiseResolve = null;
+            renderMessages();
+          }
+          resolve(false);
+        };
+        if (signal) {
+          if (signal.aborted) {
+            clearTimeout(timeout);
+            clearScreenShareCountdown();
+            screenSharePromiseResolve = null;
+            renderMessages();
+            resolve(false);
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
+      });
+    }
+
+    async function captureScreenshot(signal) {
+      const shared = await ensureScreenShare(signal);
+      if (!shared || !isScreenShareActive()) return null;
+      return captureScreenFrame();
+    }
+
     const frontendUi = {
       setActivity: setFrontendActivity,
       scheduleClear: scheduleFrontendActivityClear,
       primeWarning: primeFrontendWarning,
       clearWarningSoon: () => scheduleFrontendWarningClear(FRONTEND_WARNING_HOLD_MS),
+      captureScreenshot,
     };
+
+    screenShareEndedCallback = () => renderMessages();
 
     function setLoading(loading) {
       isLoading = loading;
@@ -4392,6 +4715,12 @@
       setUnread(false);
       clearFrontendActivity();
       clearFrontendWarning();
+      screenShareDismissed = false;
+      clearScreenShareCountdown();
+      if (screenSharePromiseResolve) {
+        screenSharePromiseResolve(false);
+        screenSharePromiseResolve = null;
+      }
       renderMessages();
     }
 

@@ -202,9 +202,9 @@ def create_frontend_context_tool() -> StructuredTool:
         func=frontend_context,
         name="frontend_context",
         description=(
-            "Task: Request a focused UI snapshot of the current page. "
+            "Task: Request a focused UI snapshot of the current page, including interactive elements and a pixel-perfect screenshot of the user's tab when available. "
             "Provide goal and optional scope/selector hints. "
-            "Output: Structured context with relevant elements."
+            "Output: Structured context with relevant elements, headings, suggested selectors, and a base64 screenshot image of the page when screen sharing is active."
         ),
         args_schema=FrontendContextInput
     )

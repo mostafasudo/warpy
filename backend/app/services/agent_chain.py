@@ -46,6 +46,7 @@ Frontend Action Tips:
 - When context returns fewer elements than expected, increase maxElements to 100-160
 - Use suggestedSelectors from context response to pick reliable selectors
 - After failures, always request fresh frontend_context - the DOM may have changed
+- frontend_context may include a screenshot field (base64 image) showing the actual page - use it to visually confirm element locations and page state
 
 Output:
 - Either tool calls OR a concise response (<=2 sentences, <=40 words) that summarizes what you did or asks one clear question for missing info.
