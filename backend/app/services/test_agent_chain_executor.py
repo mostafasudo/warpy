@@ -2,24 +2,27 @@ import asyncio
 import json
 from uuid import UUID
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from app.services.agent_chain import AgentExecutor, BLOCKED_SYSTEM_NOTE
+from app.services.agent_chain import AgentExecutor, BLOCKED_RESPONSE, BLOCKED_SYSTEM_NOTE
 from app.services.hallucination_checker import CheckResult
+from app.schemas.widget import ToolResultPayload
 
 
 class DummyLLM:
     def __init__(self, responses):
         self.responses = responses
         self.bound_tools = []
+        self.invocations = []
 
     def bind_tools(self, tools):
         self.bound_tools = tools
         return self
 
     async def ainvoke(self, _messages, **_kwargs):
+        self.invocations.append(_messages)
         return self.responses.pop(0)
 
 
@@ -200,7 +203,6 @@ def test_checker_allows_valid_response(monkeypatch):
 
 
 def test_run_step_with_checker_block(monkeypatch):
-    from langchain_core.messages import SystemMessage
     responses = [
         AIMessage(content="bad response", tool_calls=[]),
         AIMessage(content="Solo puedo ayudar con acciones del dashboard.", tool_calls=[])
@@ -215,6 +217,21 @@ def test_run_step_with_checker_block(monkeypatch):
     assert result.response == "Solo puedo ayudar con acciones del dashboard."
     system_notes = [m for m in result.messages if isinstance(m, SystemMessage) and BLOCKED_SYSTEM_NOTE in m.content]
     assert len(system_notes) == 1
+
+
+def test_sanitize_localized_reply_strips_language_name_prefix():
+    checker = MockChecker([])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), hallucination_checker=checker)
+    cleaned = executor._sanitize_localized_reply(
+        "English.\nI can only help with dashboard actions. Please ask me to perform a specific action available in your dashboard.",
+        BLOCKED_RESPONSE,
+    )
+    assert cleaned == "I can only help with dashboard actions. Please ask me to perform a specific action available in your dashboard."
+    cleaned_inline = executor._sanitize_localized_reply(
+        "English. I can only help with dashboard actions.",
+        BLOCKED_RESPONSE,
+    )
+    assert cleaned_inline == "I can only help with dashboard actions."
 
 
 def test_run_step_uses_history_for_user_input(monkeypatch):
@@ -264,3 +281,88 @@ def test_frontend_capability_enabled_includes_prompt_section(monkeypatch):
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker, frontend_capability_enabled=True)
     assert "Frontend Action Tips" in executor._system_prompt
     assert "frontend_context" in executor._system_prompt
+    assert "layered UIs" in executor._system_prompt
+    assert "scope/scopeAlternatives" in executor._system_prompt
+    assert "Never ask the user to send a screenshot" in executor._system_prompt
+
+
+def test_build_frontend_recovery_note_when_element_not_found():
+    checker = MockChecker([])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), hallucination_checker=checker)
+    payload = ToolResultPayload(
+        id="call-1",
+        statusCode=207,
+        body={
+            "kind": "frontend_actions",
+            "results": [
+                {
+                    "status": "error",
+                    "selector": "text=Email",
+                    "errorCode": "ELEMENT_NOT_FOUND",
+                    "recoveryHint": "RESCAN_WITH_SCOPE",
+                }
+            ],
+        },
+    )
+    note = executor._build_frontend_recovery_note(payload)
+    assert note is not None
+    assert "Frontend retry directive" in note
+    assert "text=Email" in note
+
+
+def test_run_step_injects_frontend_recovery_system_note(monkeypatch):
+    responses = [AIMessage(content="retrying now", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    tool_results = [
+        ToolResultPayload(
+            id="frontend-call",
+            statusCode=207,
+            body={
+                "kind": "frontend_actions",
+                "goal": "Create sequence steps",
+                "results": [
+                    {
+                        "status": "error",
+                        "selector": "text=Email",
+                        "errorCode": "ELEMENT_NOT_FOUND",
+                        "recoveryHint": "RESCAN_WITH_SCOPE",
+                    }
+                ],
+            },
+        )
+    ]
+    result = asyncio.run(executor.run_step(None, [], tool_results=tool_results))
+    assert result.response == "retrying now"
+    messages = llm.invocations[0]
+    recovery_messages = [
+        message for message in messages
+        if isinstance(message, SystemMessage) and "Frontend retry directive" in (message.content or "")
+    ]
+    assert len(recovery_messages) == 1
+
+
+def test_build_frontend_recovery_note_for_suspicious_text_click_success():
+    checker = MockChecker([])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), hallucination_checker=checker)
+    payload = ToolResultPayload(
+        id="call-2",
+        statusCode=200,
+        body={
+            "kind": "frontend_actions",
+            "results": [
+                {
+                    "status": "ok",
+                    "selector": "text=Option",
+                    "targetContext": {"inOverlay": False, "role": "tab"},
+                }
+            ],
+        },
+    )
+    note = executor._build_frontend_recovery_note(payload)
+    assert note is not None
+    assert "Frontend verification directive" in note
+    assert "scope/scopeAlternatives" in note

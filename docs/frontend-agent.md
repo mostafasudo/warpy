@@ -12,6 +12,7 @@ Tool calls use a `type` discriminator (`backend`, `frontend_context`, `frontend`
 - DOM context collection with relevance scoring and strict size limits.
 - Tab screen sharing via `getDisplayMedia` to enrich context with a real screenshot (inline prompt with 20s countdown auto-skip).
 - Client-side action engine that simulates real user interactions across frameworks (React, Vue, Angular).
+- Built-in selector recovery: primary selector + alternatives, text fallback matching, and menu-trigger reopening for transient popovers.
 - UI feedback for page actions: status panel, element highlight, frontend-interaction warning lifecycle.
 - User stop control while runs are in progress (Send becomes Stop).
 - Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
@@ -87,8 +88,8 @@ Example: frontend actions tool call
   "name": "frontend",
   "goal": "Apply last 30 days filter",
   "actions": [
-    { "action": "click", "selector": "[data-testid=filter-button]" },
-    { "action": "click", "selector": "text=Last 30 days" },
+    { "action": "click", "selector": "[data-testid=filter-button]", "selectorAlternatives": ["text=Filters"] },
+    { "action": "click", "selector": "text=Last 30 days", "scope": "menu", "selectorAlternatives": ["role=option", "[data-testid=last-30-days]"] },
     { "action": "click", "selector": "text=Apply" }
   ]
 }
@@ -106,7 +107,15 @@ Tool results contain the execution outcome:
     "url": "https://example.com/dashboard",
     "results": [
       { "index": 0, "action": "click", "selector": "[data-testid=filter-button]", "status": "ok", "durationMs": 42 },
-      { "index": 1, "action": "click", "selector": "text=Last 30 days", "status": "ok", "durationMs": 38 }
+      {
+        "index": 1,
+        "action": "click",
+        "selector": "text=Last 30 days",
+        "scope": "menu",
+        "targetContext": { "tag": "div", "role": "option", "inOverlay": true },
+        "status": "ok",
+        "durationMs": 38
+      }
     ]
   }
 }
@@ -187,9 +196,20 @@ Supported action families:
 
 Actions accept:
 - `selector` (CSS) or `text=` / `label=` / `role=` query shortcuts
+- `selectorAlternatives` (ordered fallback selectors tried automatically; max 3 unique values)
+- `scope` / `scopeAlternatives` to constrain matching to a container (menu/popover/modal) for ambiguous labels (scope alternatives max 3 unique values)
 - `value` / `text` / `key` / `keys`
 - `timeoutMs`, `delayMs`, `continueOnError`
 - Optional coordinates `x`, `y` (relative 0-1 or px)
+
+Execution reliability:
+- If a selector misses, the runtime retries with `selectorAlternatives`.
+- If an explicit scope resolves to a real container, matching stays scoped there before any global fallback.
+- If a transient menu/popover opens, the runtime constrains text matching to that transient root before global fallback.
+- `text=` lookup now falls back to clickable ancestor matching (useful for popover/list items rendered as `li/div` wrappers).
+- For missing text targets, the runtime can reopen likely menu triggers (`+`, Add/New/Menu controls) before retrying selection.
+- For text-based clicks that first resolve outside overlay context, the runtime performs one scoped re-resolve before executing the click.
+- Action results include `targetContext` (tag/role/overlay metadata) so the agent can detect likely wrong-target clicks.
 
 ## UI/UX feedback
 - Status panel at the top of the conversation shows in-flight steps.
@@ -212,6 +232,7 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 - Frontend context is only requested when needed.
 - Context is DOM-only, capped, and scored to limit payload size.
 - Frontend actions are sequential and retryable with rescans.
+- On `ELEMENT_NOT_FOUND`, the expected recovery path is automated rescan (`frontend_context`) and selector fallback retries, not asking the user for a manual screenshot.
 - Sensitive field sanitization: text typed into password/secret/token fields is redacted (`***`) before storage.
 - The `goal` parameter is required for frontend actions to ensure meaningful activity labels.
 - Tab screen sharing requires explicit user consent via the browser's native permission dialog.

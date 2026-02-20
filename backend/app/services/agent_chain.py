@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -23,13 +24,48 @@ from .tool_cache import ToolCache
 BLOCKED_RESPONSE = "I can only help with dashboard actions. Please ask me to perform a specific action available in your dashboard."
 BLOCKED_SYSTEM_NOTE = "Your previous response was blocked because it did not align with your role as a dashboard assistant. Stay focused on discovering and executing dashboard actions only."
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
+LANGUAGE_LABELS = {
+    "arabic",
+    "chinese",
+    "czech",
+    "danish",
+    "dutch",
+    "english",
+    "finnish",
+    "french",
+    "german",
+    "greek",
+    "hebrew",
+    "hindi",
+    "hungarian",
+    "indonesian",
+    "italian",
+    "japanese",
+    "korean",
+    "norwegian",
+    "polish",
+    "portuguese",
+    "romanian",
+    "russian",
+    "spanish",
+    "swedish",
+    "thai",
+    "turkish",
+    "ukrainian",
+    "vietnamese",
+}
+LANGUAGE_LABEL_PREFIX_PATTERN = re.compile(
+    r"^(arabic|chinese|czech|danish|dutch|english|finnish|french|german|greek|hebrew|hindi|hungarian|indonesian|italian|japanese|korean|norwegian|polish|portuguese|romanian|russian|spanish|swedish|thai|turkish|ukrainian|vietnamese)\s*[\.:;,-]\s*",
+    re.IGNORECASE,
+)
+LANGUAGE_TAG_PREFIX_PATTERN = re.compile(r"^(language|idioma|langue|sprache)\s*:\s*[^\s]+\s*", re.IGNORECASE)
 
 SYSTEM_PROMPT_BASE = """Context: You are a dashboard assistant that can execute backend endpoints{frontend_context}.
 
 Task: Help the user achieve their dashboard goal.
 
 Constraints:
-- Discover backend actions with find_actions first.{frontend_constraints}
+- Discover backend actions with find_actions first unless the task is clearly a frontend-only UI interaction.{frontend_constraints}
 - Ask for values the user hasn't provided; do not guess those. But take obvious next steps (navigation, opening menus, clicking tabs) without asking.{frontend_execution}
 - Use only available tools; stay within the current page.
 - Keep responses friendly and non-technical.
@@ -46,16 +82,22 @@ FRONTEND_CONSTRAINTS_FRAGMENT = """
 FRONTEND_EXECUTION_FRAGMENT = """
 - Execute frontend actions in small, ordered steps; include waits for dynamic UI.
 - If the target element isn't visible but a navigation link or tab would reveal it, click that first — don't ask the user.
+- For layered UIs (menus, popovers, dialogs, comboboxes), open the trigger control first, then select within that surfaced container.
+- For unstable targets, send selectorAlternatives (1-3) alongside the primary selector.
+- For ambiguous labels, set scope/scopeAlternatives so matching stays inside the intended container, not global page navigation.
 - If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user."""
 FRONTEND_TIPS_FRAGMENT = """
 Frontend Action Tips:
 - If an action reports ELEMENT_NOT_FOUND, the selector didn't match anything - request fresh frontend_context with refined scope/hints
 - If an action succeeds but nothing changes, the element may be disabled or hidden - check the page state and try a different approach
+- For ELEMENT_NOT_FOUND in layered UI containers, retry after opening the right trigger and using selector alternatives (`text=`, role/data-testid, then CSS)
+- Avoid bare global `text=` clicks for labels that exist in multiple regions; use scoped selectors first
 - For dynamic UIs, use wait_for_stable or add wait actions between steps
 - When context returns fewer elements than expected, increase maxElements to 100-160
 - Use suggestedSelectors from context response to pick reliable selectors
 - After failures, always request fresh frontend_context - the DOM may have changed
 - frontend_context may include a screenshot field (base64 image) showing the actual page - use it to visually confirm element locations and page state
+- Never ask the user to send a screenshot; use frontend_context to capture a fresh one automatically
 """
 
 
@@ -193,24 +235,41 @@ class AgentExecutor:
     async def _generate_blocked_response(self, user_input: str) -> str:
         prompt = f"""User message: "{user_input}"
 
-Detect the language of the user message above. Then respond in THAT EXACT LANGUAGE (if the user wrote in English, respond in English; if French, respond in French; etc.).
+Write ONLY one short user-facing reply in the same language as the user message.
+Do not mention or label the language.
+Do not include prefixes like "English.", "Spanish.", or "Language:".
 
-Your response: Politely tell the user you can only help with dashboard actions and ask them to request a specific action available in their dashboard. Keep it brief and friendly.
-
-IMPORTANT: Your response language MUST match the user's language exactly."""
+Reply goal: Politely say you can only help with dashboard actions and ask them to request a specific action available in their dashboard.
+Keep it brief and friendly."""
         response = await self.llm.ainvoke([HumanMessage(content=prompt)], config={"tags": ["blocked-response"]})
-        return response.content or BLOCKED_RESPONSE
+        return self._sanitize_localized_reply(response.content or "", BLOCKED_RESPONSE)
 
     async def _generate_max_iterations_response(self, user_input: str) -> str:
         prompt = f"""User message: "{user_input}"
 
-Detect the language of the user message above. Then respond in THAT EXACT LANGUAGE (if the user wrote in English, respond in English; if French, respond in French; etc.).
+Write ONLY one short user-facing reply in the same language as the user message.
+Do not mention or label the language.
+Do not include prefixes like "English.", "Spanish.", or "Language:".
 
-Your response: Apologize that you've reached the maximum number of steps and briefly summarize that you tried to help based on their conversation. Keep it brief and friendly.
-
-IMPORTANT: Your response language MUST match the user's language exactly."""
+Reply goal: Apologize that you've reached the maximum number of steps and briefly summarize that you tried to help based on their conversation.
+Keep it brief and friendly."""
         response = await self.llm.ainvoke([HumanMessage(content=prompt)], config={"tags": ["max-iterations-response"]})
-        return response.content or MAX_ITERATIONS_RESPONSE
+        return self._sanitize_localized_reply(response.content or "", MAX_ITERATIONS_RESPONSE)
+
+    def _sanitize_localized_reply(self, content: str, fallback: str) -> str:
+        text = str(content or "").strip()
+        if not text:
+            return fallback
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return fallback
+        first_line = lines[0].rstrip(" .:;,-").lower()
+        if first_line in LANGUAGE_LABELS:
+            lines = lines[1:]
+        text = " ".join(lines).strip()
+        text = LANGUAGE_LABEL_PREFIX_PATTERN.sub("", text).strip()
+        text = LANGUAGE_TAG_PREFIX_PATTERN.sub("", text).strip()
+        return text or fallback
 
     async def _check_and_refine_response(
         self,
@@ -308,6 +367,63 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
             return await self._generate_blocked_response(user_input)
         return response
 
+    def _build_frontend_recovery_note(self, result: ToolResultPayload) -> str | None:
+        if result.status_code not in (207, 400, 404, 422, 500):
+            if result.status_code not in (200, 201, 204):
+                return None
+        body = result.body
+        if not isinstance(body, dict) or body.get("kind") != "frontend_actions":
+            return None
+        raw_results = body.get("results")
+        if not isinstance(raw_results, list):
+            return None
+        failed_step = next(
+            (
+                step for step in raw_results
+                if isinstance(step, dict) and step.get("status") == "error"
+            ),
+            None
+        )
+        if failed_step:
+            error_code = str(failed_step.get("errorCode") or "")
+            recovery_hint = str(failed_step.get("recoveryHint") or "")
+            if error_code != "ELEMENT_NOT_FOUND" and recovery_hint != "RESCAN_WITH_SCOPE":
+                failed_step = None
+        if failed_step:
+            selector = str(failed_step.get("selector") or "").strip()
+            selector_hint_line = (
+                f'- Include selectorHints with "{selector}" plus likely trigger/container hints (e.g., role=menuitem, role=option, role=dialog).'
+                if selector else
+                "- Include selectorHints for the missing target plus likely trigger/container hints (e.g., role=menuitem, role=option, role=dialog)."
+            )
+            return (
+                "Frontend retry directive:\n"
+                "- Do not ask the user for a screenshot.\n"
+                "- Request frontend_context now with includeOffscreen=true and maxElements=140.\n"
+                f"{selector_hint_line}\n"
+                "- Retry frontend actions in order, opening the relevant menu/popover trigger before selecting the item."
+            )
+        suspicious_success = next(
+            (
+                step for step in raw_results
+                if isinstance(step, dict)
+                and step.get("status") == "ok"
+                and str(step.get("selector") or "").strip().lower().startswith("text=")
+                and isinstance(step.get("targetContext"), dict)
+                and step.get("targetContext", {}).get("inOverlay") is False
+            ),
+            None
+        )
+        if suspicious_success:
+            selector = str(suspicious_success.get("selector") or "").strip()
+            return (
+                "Frontend verification directive:\n"
+                "- A text-based click succeeded but matched outside overlay/menu context, so treat it as potentially wrong-target.\n"
+                "- Request frontend_context with menu/popover scope hints and retry with scope/scopeAlternatives.\n"
+                f'- Re-validate the intended UI state after retry before confirming success (selector: "{selector}").'
+            )
+        return None
+
     async def run_step(
         self,
         user_message: str | None,
@@ -339,6 +455,11 @@ IMPORTANT: Your response language MUST match the user's language exactly."""
                 tool_message = ToolMessage(content=content, tool_call_id=result.id)
                 messages.append(tool_message)
                 runtime_messages.append(tool_message)
+                recovery_note = self._build_frontend_recovery_note(result)
+                if recovery_note:
+                    system_note = SystemMessage(content=recovery_note)
+                    messages.append(system_note)
+                    runtime_messages.append(system_note)
 
         max_iterations = llm_config.max_iterations
         iteration = 0

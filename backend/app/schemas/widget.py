@@ -49,6 +49,9 @@ class FrontendActionPayload(BaseModel):
 
     action: str
     selector: str | None = None
+    selector_alternatives: list[str] = Field(default_factory=list, alias="selectorAlternatives", max_length=3)
+    scope: str | None = None
+    scope_alternatives: list[str] = Field(default_factory=list, alias="scopeAlternatives", max_length=3)
     text: str | None = None
     value: Any | None = None
     key: str | None = None

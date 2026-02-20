@@ -13,6 +13,8 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.
+- Operate with **extreme selectiveness, high taste, and high standards**. Every addition must be clearly justified and materially improve correctness, reliability, performance, or maintainability.
+- Prefer the **minimum viable change** that delivers meaningful, measurable impact.
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
 - If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
 - **pnpm** for all JS tasks.
@@ -41,6 +43,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 
 ## Don't
 - Don’t introduce new patterns, abstractions, or heavy deps.
+- Don’t add code “just in case” or for completeness alone.
 - Don’t mock components; mock **HTTP layer only**: `apiDashboardMock`, `apiV1Mock`.
 - Don’t use `document.querySelectorAll` in tests.
 

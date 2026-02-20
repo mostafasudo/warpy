@@ -732,6 +732,57 @@
     "[onclick]",
   ].join(", ");
 
+  const CLICKABLE_ROLE_SET = new Set(["button", "link", "menuitem", "option", "tab", "checkbox", "switch", "radio", "treeitem", "listitem"]);
+  const TEXT_FALLBACK_SELECTOR = [
+    '[role="menuitem"]',
+    '[role="option"]',
+    '[role="listitem"]',
+    '[role="treeitem"]',
+    "li",
+    '[class*="menu"]',
+    '[class*="dropdown"]',
+    '[class*="option"]',
+    '[class*="item"]',
+  ].join(", ");
+  const MENU_TRIGGER_SELECTOR = [
+    "button",
+    '[role="button"]',
+    '[aria-haspopup]',
+    '[aria-expanded]',
+    '[data-testid]',
+    '[data-test]',
+    '[data-cy]',
+    '[class*="menu"]',
+    '[class*="dropdown"]',
+  ].join(", ");
+  const OVERLAY_ROOT_SELECTOR = [
+    '[role="menu"]',
+    '[role="listbox"]',
+    '[role="dialog"]',
+    '[role="tree"]',
+    '[role="grid"]',
+    '[role="tooltip"]',
+    '[aria-modal="true"]',
+    '[aria-live]',
+    '[data-state="open"]',
+    '[data-radix-popper-content-wrapper]',
+    '[data-floating-ui-portal]',
+    '[popover]',
+    '[open]',
+    '[class*="popover"]',
+    '[class*="dropdown"]',
+    '[class*="dropdown-menu"]',
+    '[class*="overlay"]',
+    '[class*="flyout"]',
+    '[class*="panel"]',
+    '[class*="menu-content"]',
+    '[class*="menu"]',
+    '[class*="modal"]',
+  ].join(", ");
+  const actionRuntimeState = {
+    transientRoot: null,
+  };
+
   function isRectInViewport(rect, margin) {
     const m = typeof margin === "number" ? margin : 0;
     return rect.bottom >= -m && rect.top <= window.innerHeight + m && rect.right >= -m && rect.left <= window.innerWidth + m;
@@ -747,6 +798,95 @@
     const rect = el.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) return false;
     return true;
+  }
+
+  function isElementConnected(el) {
+    return !!(el && el.nodeType === 1 && el.isConnected);
+  }
+
+  function getNumericZIndex(el) {
+    if (!el || el.nodeType !== 1) return 0;
+    const value = parseInt((getComputedStyle(el).zIndex || "0").trim(), 10);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function getElementArea(el) {
+    if (!el || el.nodeType !== 1) return 0;
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return 0;
+    return rect.width * rect.height;
+  }
+
+  function hasVisibleInteractiveDescendant(el) {
+    if (!isElementConnected(el)) return false;
+    const first = el.querySelector(INTERACTIVE_SELECTOR);
+    if (!first) return false;
+    if (isElementVisible(first)) return true;
+    const sample = Array.from(el.querySelectorAll(INTERACTIVE_SELECTOR)).slice(0, 8);
+    return sample.some((node) => isElementVisible(node));
+  }
+
+  function isLikelyTransientContainer(el) {
+    if (!isElementConnected(el) || !isElementVisible(el)) return false;
+    if (el.closest && el.closest(`#${WIDGET_CONTAINER_ID}`)) return false;
+    const role = normalizeText(el.getAttribute ? el.getAttribute("role") || "" : "");
+    const style = getComputedStyle(el);
+    const position = style ? style.position : "";
+    const area = getElementArea(el);
+    const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+    const areaRatio = area / viewportArea;
+    const z = getNumericZIndex(el);
+    const isOverlayRole = role === "menu" || role === "listbox" || role === "dialog" || role === "tree" || role === "grid" || role === "tooltip";
+    const hasOverlayAttrs = Boolean(
+      (el.getAttribute && el.getAttribute("aria-modal") === "true") ||
+      (el.getAttribute && el.getAttribute("aria-live")) ||
+      (el.getAttribute && el.getAttribute("popover") !== null) ||
+      (el.getAttribute && el.getAttribute("open") !== null)
+    );
+    const positionedLayer = position === "fixed" || position === "absolute" || position === "sticky";
+    if (!isOverlayRole && !hasOverlayAttrs && !positionedLayer) return false;
+    if (areaRatio > 0.98 && role !== "dialog") return false;
+    if (z < 1 && !hasOverlayAttrs && !isOverlayRole && !positionedLayer) return false;
+    return hasVisibleInteractiveDescendant(el);
+  }
+
+  function collectVisibleOverlayRoots(limit) {
+    const nodes = Array.from(document.querySelectorAll(OVERLAY_ROOT_SELECTOR));
+    const sorted = nodes
+      .filter((node) => isLikelyTransientContainer(node))
+      .sort((a, b) => getNumericZIndex(b) - getNumericZIndex(a) || getElementArea(a) - getElementArea(b));
+    if (typeof limit === "number" && limit > 0) {
+      return sorted.slice(0, limit);
+    }
+    return sorted;
+  }
+
+  function getClosestOverlayRoot(el) {
+    if (!el || el.nodeType !== 1 || !el.closest) return null;
+    return el.closest(OVERLAY_ROOT_SELECTOR);
+  }
+
+  function getTransientRoot() {
+    const root = actionRuntimeState.transientRoot;
+    if (!isElementConnected(root) || !isElementVisible(root)) {
+      actionRuntimeState.transientRoot = null;
+      return null;
+    }
+    return root;
+  }
+
+  function setTransientRoot(root) {
+    if (isElementConnected(root) && isElementVisible(root)) {
+      actionRuntimeState.transientRoot = root;
+      return;
+    }
+    actionRuntimeState.transientRoot = null;
+  }
+
+  function clearTransientRootIfStale() {
+    if (!getTransientRoot()) {
+      actionRuntimeState.transientRoot = null;
+    }
   }
 
   function getAriaLabel(el) {
@@ -785,6 +925,105 @@
     const tag = el.tagName ? el.tagName.toLowerCase() : "";
     if (tag === "input" || tag === "select" || tag === "textarea") return "";
     return (el.innerText || el.textContent || "").trim();
+  }
+
+  function isElementDisabled(el) {
+    if (!el || el.nodeType !== 1) return true;
+    if (Boolean(el.disabled)) return true;
+    if (!el.getAttribute) return false;
+    if (el.hasAttribute("disabled")) return true;
+    return el.getAttribute("aria-disabled") === "true";
+  }
+
+  function isPotentialClickTarget(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (["button", "a", "input", "select", "textarea", "summary", "option"].includes(tag)) return true;
+    const role = normalizeText(el.getAttribute ? el.getAttribute("role") || "" : "");
+    if (CLICKABLE_ROLE_SET.has(role)) return true;
+    if (typeof el.onclick === "function" || (el.getAttribute && el.getAttribute("onclick"))) return true;
+    const tabIndex = el.getAttribute ? el.getAttribute("tabindex") : null;
+    if (tabIndex !== null && Number(tabIndex) >= 0) return true;
+    const ariaHasPopup = el.getAttribute ? el.getAttribute("aria-haspopup") : null;
+    if (ariaHasPopup && ariaHasPopup !== "false") return true;
+    const style = getComputedStyle(el);
+    if (style && style.cursor === "pointer") return true;
+    const meta = normalizeText(
+      [
+        String(el.className || ""),
+        el.id || "",
+        el.getAttribute ? el.getAttribute("data-testid") || "" : "",
+        el.getAttribute ? el.getAttribute("data-test") || "" : "",
+        el.getAttribute ? el.getAttribute("data-cy") || "" : "",
+        el.getAttribute ? el.getAttribute("name") || "" : "",
+      ].join(" ")
+    );
+    return (
+      meta.includes("button") ||
+      meta.includes("menu") ||
+      meta.includes("dropdown") ||
+      meta.includes("option") ||
+      meta.includes("item") ||
+      meta.includes("add")
+    );
+  }
+
+  function findClickableAncestor(el, maxDepth) {
+    let current = el;
+    let depth = 0;
+    const limit = typeof maxDepth === "number" ? maxDepth : 6;
+    while (current && current.nodeType === 1 && depth <= limit) {
+      if (isElementVisible(current) && !isElementDisabled(current) && isPotentialClickTarget(current)) {
+        return current;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return null;
+  }
+
+  function scoreTextMatch(haystack, target) {
+    if (!haystack || !target) return -1;
+    if (haystack === target) return 140;
+    if (haystack.startsWith(target)) return 120 - Math.max(0, haystack.length - target.length);
+    if (haystack.includes(target)) return 90 - Math.max(0, haystack.length - target.length);
+    return -1;
+  }
+
+  function chooseBestTextMatch(elements, target, allowAncestor) {
+    let best = null;
+    let bestScore = -Infinity;
+    let inspected = 0;
+    for (const el of elements) {
+      inspected += 1;
+      if (inspected > 1600) break;
+      if (!isElementVisible(el)) continue;
+      const label = normalizeText(getAssociatedLabelText(el));
+      const content = normalizeText(getElementText(el));
+      const aria = normalizeText(getAriaLabel(el));
+      const haystack = [label, content, aria].filter(Boolean).join(" ");
+      const baseScore = scoreTextMatch(haystack, target);
+      if (baseScore < 0) continue;
+      const resolved = allowAncestor ? findClickableAncestor(el) || el : el;
+      if (!resolved || !isElementVisible(resolved) || isElementDisabled(resolved)) continue;
+      const role = normalizeText(resolved.getAttribute ? resolved.getAttribute("role") || "" : "");
+      const tag = resolved.tagName ? resolved.tagName.toLowerCase() : "";
+      let score = baseScore;
+      if (resolved === el) score += 10;
+      if (role === "menuitem" || role === "option") score += 16;
+      if (tag === "button" || tag === "a") score += 12;
+      if (isPotentialClickTarget(resolved)) score += 6;
+      const rect = resolved.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        const area = rect.width * rect.height;
+        if (area <= 64000) score += 4;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = resolved;
+      }
+    }
+    return best;
   }
 
   function getSelectOptions(el) {
@@ -955,6 +1194,10 @@
     const trimmed = String(scope).trim();
     if (!trimmed) return document;
     const lower = trimmed.toLowerCase();
+    if (lower.startsWith("text=") || lower.startsWith("label=") || lower.startsWith("role=")) {
+      const target = resolveSelectorTarget(trimmed, document, { allowGlobalFallback: true });
+      if (target) return target;
+    }
     const scopeSelector = SCOPE_SELECTORS[lower];
     if (scopeSelector) {
       const el = document.querySelector(scopeSelector);
@@ -974,14 +1217,14 @@
       .filter((item) => item.text);
   }
 
-  function resolveSelectorTarget(selector, root) {
+  function resolveSelectorTarget(selector, root, options) {
     if (!selector) return null;
     const trimmed = String(selector).trim();
     if (!trimmed) return null;
     const lower = trimmed.toLowerCase();
     const base = root || document;
     if (lower.startsWith("text=")) {
-      return findElementByText(trimmed.slice(5), base);
+      return findElementByText(trimmed.slice(5), base, options);
     }
     if (lower.startsWith("label=")) {
       return findElementByLabel(trimmed.slice(6), base);
@@ -1207,30 +1450,30 @@
     }, 900);
   }
 
-  function findElementByText(text, root) {
+  function findElementByText(text, root, options) {
     const target = normalizeText(text);
     if (!target) return null;
     const base = root || document;
-    const elements = Array.from(base.querySelectorAll(INTERACTIVE_SELECTOR));
-    let best = null;
-    let bestScore = Infinity;
-    for (const el of elements) {
-      if (!isElementVisible(el)) continue;
-      const label = normalizeText(getAssociatedLabelText(el));
-      const content = normalizeText(getElementText(el));
-      const aria = normalizeText(getAriaLabel(el));
-      const haystack = [label, content, aria].filter(Boolean).join(" ");
-      if (!haystack) continue;
-      if (haystack === target) return el;
-      if (haystack.includes(target)) {
-        const score = Math.abs(haystack.length - target.length);
-        if (score < bestScore) {
-          bestScore = score;
-          best = el;
-        }
+    const allowGlobalFallback = !options || options.allowGlobalFallback !== false;
+    const roots = base === document || !allowGlobalFallback ? [base] : [base, document];
+    for (const lookupRoot of roots) {
+      const interactive = Array.from(lookupRoot.querySelectorAll(INTERACTIVE_SELECTOR));
+      const direct = chooseBestTextMatch(interactive, target, false);
+      if (direct) return direct;
+      const fallbackCandidates = Array.from(lookupRoot.querySelectorAll(TEXT_FALLBACK_SELECTOR)).slice(0, 2400);
+      const fallback = chooseBestTextMatch(fallbackCandidates, target, true);
+      if (fallback) return fallback;
+      const isScopedOverlayRoot =
+        lookupRoot !== document &&
+        lookupRoot.nodeType === 1 &&
+        ((lookupRoot.matches && lookupRoot.matches(OVERLAY_ROOT_SELECTOR)) || isLikelyTransientContainer(lookupRoot));
+      if (isScopedOverlayRoot) {
+        const universalCandidates = Array.from(lookupRoot.querySelectorAll("*")).slice(0, 500);
+        const universal = chooseBestTextMatch(universalCandidates, target, true);
+        if (universal) return universal;
       }
     }
-    return best;
+    return null;
   }
 
   function findElementByLabel(text, root) {
@@ -1259,7 +1502,9 @@
     const target = normalizeText(role);
     if (!target) return null;
     const base = root || document;
-    return safeQuerySelector(base, `[role="${cssEscape(target)}"]`);
+    const matches = Array.from(base.querySelectorAll(`[role="${cssEscape(target)}"]`));
+    const visible = matches.find((el) => isElementVisible(el));
+    return visible || matches[0] || null;
   }
 
   async function waitForElement(selector, options, signal) {
@@ -1275,6 +1520,376 @@
       await sleep(200, signal);
     }
     return null;
+  }
+
+  function normalizeSelectorValue(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).trim();
+  }
+
+  function normalizeUniqueStringList(values, maxItems) {
+    const input = Array.isArray(values) ? values : [];
+    const seen = new Set();
+    const normalized = [];
+    for (const value of input) {
+      const item = normalizeSelectorValue(value);
+      if (!item || seen.has(item)) continue;
+      seen.add(item);
+      normalized.push(item);
+      if (normalized.length >= maxItems) break;
+    }
+    return normalized;
+  }
+
+  function pushUniqueSelector(selectors, value) {
+    const normalized = normalizeSelectorValue(value);
+    if (!normalized) return;
+    if (!selectors.includes(normalized)) {
+      selectors.push(normalized);
+    }
+  }
+
+  function pushUniqueRoot(roots, root) {
+    if (!isElementConnected(root) || !isElementVisible(root)) return;
+    if (!roots.includes(root)) {
+      roots.push(root);
+    }
+  }
+
+  function getActionSelectorCandidates(action) {
+    const selectors = [];
+    pushUniqueSelector(selectors, action.selector || action.target || "");
+    const alternatives = Array.isArray(action.selectorAlternatives)
+      ? action.selectorAlternatives
+      : Array.isArray(action.selector_alternatives)
+      ? action.selector_alternatives
+      : [];
+    for (const alt of alternatives) {
+      pushUniqueSelector(selectors, alt);
+    }
+    if (action.text !== null && action.text !== undefined) {
+      pushUniqueSelector(selectors, `text=${String(action.text)}`);
+    }
+    if (action.role) {
+      pushUniqueSelector(selectors, `role=${String(action.role)}`);
+    }
+    return selectors;
+  }
+
+  function getActionScopeCandidates(action) {
+    const scopes = [];
+    pushUniqueSelector(scopes, action.scope || action.contextScope || "");
+    const alternatives = Array.isArray(action.scopeAlternatives)
+      ? action.scopeAlternatives
+      : Array.isArray(action.scope_alternatives)
+      ? action.scope_alternatives
+      : [];
+    for (const alt of alternatives) {
+      pushUniqueSelector(scopes, alt);
+    }
+    return scopes;
+  }
+
+  function hasTextShortcutSelector(selectors) {
+    const list = Array.isArray(selectors) ? selectors : [selectors];
+    return list.some((selector) => normalizeSelectorValue(selector).toLowerCase().startsWith("text="));
+  }
+
+  function resolveFirstSelectorTarget(selectors, root, options) {
+    const list = Array.isArray(selectors) ? selectors : [selectors];
+    const base = root || document;
+    const allowGlobalFallback = !options || options.allowGlobalFallback !== false;
+    for (const selector of list) {
+      const normalized = normalizeSelectorValue(selector);
+      if (!normalized) continue;
+      const element = resolveSelectorTarget(normalized, base, { allowGlobalFallback });
+      if (element) {
+        return { element, selector: normalized };
+      }
+    }
+    return null;
+  }
+
+  function resolveSelectorAcrossRoots(selectors, roots, options) {
+    const useDocumentFallback = !options || options.useDocumentFallback !== false;
+    const list = Array.isArray(roots) && roots.length ? roots : useDocumentFallback ? [document] : [];
+    for (const root of list) {
+      const allowGlobalFallback = root === document;
+      const match = resolveFirstSelectorTarget(selectors, root, { allowGlobalFallback });
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  function getActionSearchRoots(action, selectors, options) {
+    const includeDocument = !options || options.includeDocument !== false;
+    const allowDocumentFallbackWhenEmpty = !options || options.allowDocumentFallbackWhenEmpty !== false;
+    const roots = [];
+    const scopeCandidates = getActionScopeCandidates(action);
+    for (const scope of scopeCandidates) {
+      const scopeRoot = resolveScopeRoot(scope);
+      if (scopeRoot && scopeRoot !== document) {
+        pushUniqueRoot(roots, scopeRoot);
+      }
+    }
+    const transientRoot = getTransientRoot();
+    if (transientRoot) {
+      pushUniqueRoot(roots, transientRoot);
+    }
+    const overlays = collectVisibleOverlayRoots(6);
+    for (const overlay of overlays) {
+      pushUniqueRoot(roots, overlay);
+    }
+    const shouldConstrainToTransientRoot = !!(transientRoot && hasTextShortcutSelector(selectors));
+    const shouldIncludeDocument = includeDocument && !shouldConstrainToTransientRoot;
+    if (shouldIncludeDocument) {
+      roots.push(document);
+    }
+    if (!roots.length && includeDocument && allowDocumentFallbackWhenEmpty) {
+      roots.push(document);
+    }
+    return roots;
+  }
+
+  async function waitForAnyElement(selectors, options, signal) {
+    const list = Array.isArray(selectors) ? selectors.map(normalizeSelectorValue).filter(Boolean) : [normalizeSelectorValue(selectors)].filter(Boolean);
+    if (!list.length) return null;
+    const timeoutMs = clampInt(options && options.timeoutMs ? options.timeoutMs : 8000, 400, 20000);
+    const requireVisible = options && options.visible !== false;
+    const getRoots = options && typeof options.getRoots === "function" ? options.getRoots : () => (Array.isArray(options && options.roots) && options.roots.length ? options.roots : [document]);
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      throwIfAborted(signal);
+      const roots = getRoots();
+      for (const root of roots) {
+        const allowGlobalFallback = root === document;
+        const match = resolveFirstSelectorTarget(list, root, { allowGlobalFallback });
+        if (match && (!requireVisible || isElementVisible(match.element))) {
+          return match;
+        }
+      }
+      await sleep(200, signal);
+    }
+    return null;
+  }
+
+  function extractTextShortcutValue(selectors, action) {
+    const list = Array.isArray(selectors) ? selectors : [selectors];
+    for (const selector of list) {
+      const normalized = normalizeSelectorValue(selector);
+      if (normalized.toLowerCase().startsWith("text=")) {
+        const value = normalized.slice(5).trim();
+        if (value) return value;
+      }
+    }
+    if (action && action.text !== null && action.text !== undefined) {
+      const text = String(action.text).trim();
+      if (text) return text;
+    }
+    return "";
+  }
+
+  function performSyntheticClick(target, action) {
+    const point = getActionPoint(target, action || {});
+    dispatchPointerEvent(target, "pointerdown", point);
+    dispatchMouseEvent(target, "mousedown", point);
+    focusElement(target);
+    dispatchPointerEvent(target, "pointerup", point);
+    dispatchMouseEvent(target, "mouseup", point);
+    dispatchMouseEvent(target, "click", point);
+  }
+
+  function isLikelyMenuOpener(el) {
+    if (!isElementConnected(el) || !isElementVisible(el) || isElementDisabled(el)) return false;
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    const role = normalizeText(el.getAttribute ? el.getAttribute("role") || "" : "");
+    const text = normalizeText(getElementText(el));
+    const label = normalizeText(getAssociatedLabelText(el));
+    const aria = normalizeText(getAriaLabel(el));
+    const attrs = normalizeText(
+      [
+        String(el.className || ""),
+        el.id || "",
+        el.getAttribute ? el.getAttribute("name") || "" : "",
+        el.getAttribute ? el.getAttribute("data-testid") || "" : "",
+      ].join(" ")
+    );
+    if (el.getAttribute && el.getAttribute("aria-haspopup")) return true;
+    if (el.getAttribute && el.getAttribute("aria-expanded") !== null) return true;
+    if (tag === "button" || role === "button") {
+      const openerWords = ["add", "new", "create", "open", "menu", "options", "more", "plus", "toggle", "choose", "select", "insert", "+"];
+      const haystack = [text, label, aria, attrs].filter(Boolean).join(" ");
+      return openerWords.some((word) => haystack.includes(word));
+    }
+    return false;
+  }
+
+  function distancePointToRect(point, rect) {
+    const dx = point.x < rect.left ? rect.left - point.x : point.x > rect.right ? point.x - rect.right : 0;
+    const dy = point.y < rect.top ? rect.top - point.y : point.y > rect.bottom ? point.y - rect.bottom : 0;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function pickBestOverlayRootForClick(overlays, point) {
+    if (!Array.isArray(overlays) || !overlays.length) return null;
+    let best = null;
+    let bestScore = -Infinity;
+    for (const overlay of overlays) {
+      if (!isElementVisible(overlay)) continue;
+      const rect = overlay.getBoundingClientRect();
+      const distance = rect ? distancePointToRect(point, rect) : 10000;
+      const z = getNumericZIndex(overlay);
+      const area = getElementArea(overlay);
+      const score = z * 1000 - distance - Math.min(area, 120000) * 0.001;
+      if (score > bestScore) {
+        bestScore = score;
+        best = overlay;
+      }
+    }
+    return best;
+  }
+
+  async function performClickAndTrackTransientRoot(target, action, signal) {
+    const point = getActionPoint(target, action || {});
+    const shouldTrack = isLikelyMenuOpener(target);
+    const before = shouldTrack ? collectVisibleOverlayRoots(10) : [];
+    performSyntheticClick(target, action);
+    if (!shouldTrack) {
+      clearTransientRootIfStale();
+      return;
+    }
+    const maxWaitMs = 300;
+    const pollIntervalMs = 50;
+    let waited = 0;
+    let candidate = null;
+    while (waited < maxWaitMs && !candidate) {
+      await sleep(pollIntervalMs, signal);
+      waited += pollIntervalMs;
+      const after = collectVisibleOverlayRoots(10);
+      candidate = after.find((overlay) => !before.includes(overlay));
+    }
+    if (!candidate) {
+      const after = collectVisibleOverlayRoots(10);
+      candidate = pickBestOverlayRootForClick(after, point);
+    }
+    setTransientRoot(candidate || null);
+  }
+
+  function scoreMenuTrigger(el, textTarget) {
+    if (!isElementVisible(el) || isElementDisabled(el)) return -1;
+    const role = normalizeText(el.getAttribute ? el.getAttribute("role") || "" : "");
+    const text = normalizeText(getElementText(el));
+    const label = normalizeText(getAssociatedLabelText(el));
+    const aria = normalizeText(getAriaLabel(el));
+    const attrs = normalizeText(
+      [
+        String(el.className || ""),
+        el.id || "",
+        el.getAttribute ? el.getAttribute("name") || "" : "",
+        el.getAttribute ? el.getAttribute("data-testid") || "" : "",
+        el.getAttribute ? el.getAttribute("data-test") || "" : "",
+        el.getAttribute ? el.getAttribute("data-cy") || "" : "",
+      ].join(" ")
+    );
+    const haystack = [text, label, aria, attrs].filter(Boolean).join(" ");
+    let score = 0;
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "button") score += 10;
+    if (role === "button") score += 8;
+    const hasPopup = el.getAttribute ? el.getAttribute("aria-haspopup") : "";
+    if (hasPopup && hasPopup !== "false") score += 12;
+    if (el.getAttribute && el.getAttribute("aria-expanded") !== null) score += 4;
+    const triggerWords = ["add", "new", "create", "open", "menu", "options", "more", "plus", "toggle", "choose", "select", "insert", "+"];
+    for (const word of triggerWords) {
+      if (haystack.includes(word)) score += 3;
+    }
+    if (text === "+" || aria === "+" || label === "+") score += 12;
+    if (textTarget) {
+      const target = normalizeText(textTarget);
+      if (target && haystack.includes(target)) {
+        score -= 12;
+      }
+    }
+    if (!isPotentialClickTarget(el)) score -= 8;
+    return score;
+  }
+
+  function findMenuTriggerCandidates(textTarget) {
+    const nodes = Array.from(document.querySelectorAll(MENU_TRIGGER_SELECTOR));
+    const scored = [];
+    for (const node of nodes) {
+      const score = scoreMenuTrigger(node, textTarget);
+      if (score > 0) {
+        scored.push({ node, score });
+      }
+    }
+    scored.sort((a, b) => b.score - a.score);
+    const unique = [];
+    const seen = new Set();
+    for (const item of scored) {
+      if (seen.has(item.node)) continue;
+      seen.add(item.node);
+      unique.push(item.node);
+      if (unique.length >= 4) break;
+    }
+    return unique;
+  }
+
+  async function attemptRevealAndResolveActionTarget(action, selectors, signal) {
+    const textTarget = extractTextShortcutValue(selectors, action);
+    if (!textTarget) return null;
+    const triggers = findMenuTriggerCandidates(textTarget);
+    for (const trigger of triggers) {
+      throwIfAborted(signal);
+      await performClickAndTrackTransientRoot(trigger, null, signal);
+      await sleep(120, signal);
+      const match = resolveSelectorAcrossRoots(selectors, getActionSearchRoots(action, selectors, { includeDocument: true }));
+      if (match && isElementVisible(match.element) && !isElementDisabled(match.element)) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  async function resolveActionTarget(action, signal) {
+    const selectors = getActionSelectorCandidates(action);
+    let match = resolveSelectorAcrossRoots(selectors, getActionSearchRoots(action, selectors, { includeDocument: true }));
+    if (!match && selectors.length && action.timeoutMs) {
+      match = await waitForAnyElement(
+        selectors,
+        {
+          timeoutMs: action.timeoutMs,
+          getRoots: () => getActionSearchRoots(action, selectors, { includeDocument: true }),
+        },
+        signal
+      );
+    }
+    if (!match && (action.action === "click" || action.action === "tap")) {
+      match = await attemptRevealAndResolveActionTarget(action, selectors, signal);
+    }
+    if (match) {
+      action._resolvedSelector = match.selector;
+      return match.element;
+    }
+    return null;
+  }
+
+  function getElementTargetContext(el) {
+    if (!isElementConnected(el)) return null;
+    const overlayRoot = getClosestOverlayRoot(el);
+    const role = el.getAttribute ? el.getAttribute("role") || "" : "";
+    const text = truncateText(getElementText(el), 80);
+    const ariaLabel = truncateText(getAriaLabel(el), 80);
+    return {
+      tag: el.tagName ? el.tagName.toLowerCase() : "",
+      role,
+      text,
+      ariaLabel,
+      inOverlay: Boolean(overlayRoot && isElementVisible(overlayRoot)),
+      overlayRole: overlayRoot && overlayRoot.getAttribute ? overlayRoot.getAttribute("role") || "" : "",
+    };
   }
 
   async function waitForText(text, options, signal) {
@@ -1438,7 +2053,28 @@
       return { action: "" };
     }
     const name = action.action || action.type || "";
-    return { ...action, action: String(name).trim().toLowerCase() };
+    const rawAlternatives = Array.isArray(action.selectorAlternatives)
+      ? action.selectorAlternatives
+      : Array.isArray(action.selector_alternatives)
+      ? action.selector_alternatives
+      : [];
+    const rawScopeAlternatives = Array.isArray(action.scopeAlternatives)
+      ? action.scopeAlternatives
+      : Array.isArray(action.scope_alternatives)
+      ? action.scope_alternatives
+      : [];
+    const selectorAlternatives = normalizeUniqueStringList(rawAlternatives, 3);
+    const scopeAlternatives = normalizeUniqueStringList(rawScopeAlternatives, 3);
+    const scope = action.scope != null ? String(action.scope).trim() : "";
+    return {
+      ...action,
+      action: String(name).trim().toLowerCase(),
+      scope,
+      scopeAlternatives,
+      selectorAlternatives,
+      _resolvedSelector: null,
+      _targetContext: null,
+    };
   }
 
   function getActionLabel(name) {
@@ -1627,15 +2263,26 @@
     if (!name) {
       throw new Error("Missing action");
     }
+    clearTransientRootIfStale();
     if (name === "wait") {
       const delay = clampInt(action.delayMs || action.ms || 500, 0, 10000);
       await sleep(delay, signal);
       return;
     }
     if (name === "waitfor" || name === "wait_for") {
-      const selector = action.selector || (action.text ? `text=${action.text}` : action.value ? String(action.value) : "");
-      const el = selector ? await waitForElement(selector, { timeoutMs: action.timeoutMs }, signal) : null;
-      if (!el) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      const selectors = getActionSelectorCandidates(action);
+      const match = selectors.length
+        ? await waitForAnyElement(
+            selectors,
+            {
+              timeoutMs: action.timeoutMs,
+              getRoots: () => getActionSearchRoots(action, selectors, { includeDocument: true }),
+            },
+            signal
+          )
+        : null;
+      if (!match) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      action._resolvedSelector = match.selector;
       return;
     }
     if (name === "waitfortext" || name === "wait_for_text") {
@@ -1644,27 +2291,60 @@
       return;
     }
     if (name === "wait_for_stable" || name === "waitforstable") {
-      const selector = action.selector || action.target || "";
-      await waitForStable(selector || null, {
+      const selectors = getActionSelectorCandidates(action);
+      let selector = null;
+      if (selectors.length) {
+        const match =
+          resolveSelectorAcrossRoots(selectors, getActionSearchRoots(action, selectors, { includeDocument: true })) ||
+          (action.timeoutMs
+            ? await waitForAnyElement(
+                selectors,
+                {
+                  timeoutMs: action.timeoutMs,
+                  getRoots: () => getActionSearchRoots(action, selectors, { includeDocument: true }),
+                },
+                signal
+              )
+            : null);
+        if (!match) throw createError("Element not found for stability check", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+        selector = match.selector;
+      }
+      await waitForStable(selector, {
         timeoutMs: action.timeoutMs,
         stabilityMs: action.stabilityMs || 300,
       }, signal);
+      action._resolvedSelector = selector;
       return;
     }
     if (name === "navigate") {
       const url = action.url || action.value;
       if (!url) throw createError("Missing url", "SELECTOR_INVALID", null);
+      actionRuntimeState.transientRoot = null;
       window.location.assign(String(url));
       return;
     }
     if (name === "scroll") {
-      const selector = action.selector || action.target || "";
       const behavior = action.behavior || "auto";
       const x = Number(action.x || 0);
       const y = Number(action.y || action.deltaY || 0);
-      if (selector) {
-        const target = resolveSelectorTarget(selector, document);
+      const selectors = getActionSelectorCandidates(action);
+      if (selectors.length) {
+        const match =
+          resolveSelectorAcrossRoots(selectors, getActionSearchRoots(action, selectors, { includeDocument: true })) ||
+          (action.timeoutMs
+            ? await waitForAnyElement(
+                selectors,
+                {
+                  timeoutMs: action.timeoutMs,
+                  getRoots: () => getActionSearchRoots(action, selectors, { includeDocument: true }),
+                },
+                signal
+              )
+            : null);
+        const target = match ? match.element : null;
         if (!target) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+        action._resolvedSelector = match.selector;
+        action._targetContext = getElementTargetContext(target);
         target.scrollBy({ left: x, top: y, behavior });
       } else {
         window.scrollBy({ left: x, top: y, behavior });
@@ -1672,25 +2352,55 @@
       return;
     }
     if (name === "scroll_into_view" || name === "scrollintoview") {
-      const selector = action.selector || action.target || "";
-      const target = resolveSelectorTarget(selector, document);
+      const selectors = getActionSelectorCandidates(action);
+      const match =
+        resolveSelectorAcrossRoots(selectors, getActionSearchRoots(action, selectors, { includeDocument: true })) ||
+        (action.timeoutMs
+          ? await waitForAnyElement(
+              selectors,
+              {
+                timeoutMs: action.timeoutMs,
+                getRoots: () => getActionSearchRoots(action, selectors, { includeDocument: true }),
+              },
+              signal
+            )
+          : null);
+      const target = match ? match.element : null;
       if (!target) throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+      action._resolvedSelector = match.selector;
+      action._targetContext = getElementTargetContext(target);
       target.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
       return;
     }
 
-    const selector = action.selector || action.target || (action.text ? `text=${action.text}` : action.role ? `role=${action.role}` : "");
-    const timeoutMs = action.timeoutMs;
-    let el = selector ? resolveSelectorTarget(selector, document) : null;
-    if (!el && selector && timeoutMs) {
-      el = await waitForElement(selector, { timeoutMs }, signal);
-    }
-    if (!el && !selector && (name === "press" || name === "type" || name === "input" || name === "clear")) {
+    const selectors = getActionSelectorCandidates(action);
+    let el = await resolveActionTarget(action, signal);
+    const hasSelector = selectors.length > 0;
+    if (!el && !hasSelector && (name === "press" || name === "type" || name === "input" || name === "clear")) {
       el = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
     }
     if (!el) {
       // This is the only hard blocker - we genuinely can't proceed without an element
       throw createError("Element not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
+    }
+    action._targetContext = getElementTargetContext(el);
+    if ((name === "click" || name === "tap") && hasTextShortcutSelector(selectors) && action._targetContext && action._targetContext.inOverlay === false) {
+      const scopedRoots = [];
+      const scopeCandidates = getActionScopeCandidates(action);
+      for (const scope of scopeCandidates) {
+        const scopeRoot = resolveScopeRoot(scope);
+        if (scopeRoot && scopeRoot !== document) {
+          pushUniqueRoot(scopedRoots, scopeRoot);
+        }
+      }
+      if (scopedRoots.length) {
+        const scopedMatch = resolveSelectorAcrossRoots(selectors, scopedRoots, { useDocumentFallback: false });
+        if (scopedMatch && scopedMatch.element && scopedMatch.element !== el && isElementVisible(scopedMatch.element) && !isElementDisabled(scopedMatch.element)) {
+          el = scopedMatch.element;
+          action._resolvedSelector = scopedMatch.selector;
+          action._targetContext = getElementTargetContext(el);
+        }
+      }
     }
     // Philosophy: Always try to execute. Don't pre-emptively block based on visibility,
     // disabled state, or overlay detection. The browser/framework handles these cases,
@@ -1720,12 +2430,7 @@
       return;
     }
     if (name === "click" || name === "tap") {
-      dispatchPointerEvent(el, "pointerdown", point);
-      dispatchMouseEvent(el, "mousedown", point);
-      focusElement(el);
-      dispatchPointerEvent(el, "pointerup", point);
-      dispatchMouseEvent(el, "mouseup", point);
-      dispatchMouseEvent(el, "click", point);
+      await performClickAndTrackTransientRoot(el, action, signal);
       return;
     }
     if (name === "double_click" || name === "dblclick" || name === "doubleclick") {
@@ -1804,8 +2509,12 @@
     if (name === "drag_and_drop" || name === "drag") {
       const fromSelector = action.from || action.selector;
       const toSelector = action.to || action.target;
-      const source = fromSelector ? resolveSelectorTarget(fromSelector, document) : el;
-      const target = toSelector ? resolveSelectorTarget(toSelector, document) : null;
+      const source = fromSelector
+        ? (resolveSelectorAcrossRoots([fromSelector], getActionSearchRoots(action, [fromSelector], { includeDocument: true })) || {}).element
+        : el;
+      const target = toSelector
+        ? (resolveSelectorAcrossRoots([toSelector], getActionSearchRoots(action, [toSelector], { includeDocument: true })) || {}).element
+        : null;
       if (!source || !target) throw createError("Drag target not found", "ELEMENT_NOT_FOUND", "RESCAN_WITH_SCOPE");
       const start = getActionPoint(source, action);
       const end = getActionPoint(target, action);
@@ -1925,6 +2634,7 @@
     throwIfAborted(signal);
     const actions = Array.isArray(toolCall.actions) ? toolCall.actions : [];
     const goal = toolCall.goal || "Applying changes";
+    actionRuntimeState.transientRoot = null;
     if (!actions.length) {
       return {
         id: toolCall.id,
@@ -1959,12 +2669,16 @@
       const startedAt = Date.now();
       const retryCount = clampInt(normalized.retryCount || 0, 0, 3);
       const retryDelayMs = clampInt(normalized.retryDelayMs || 500, 100, 2000);
+      normalized._resolvedSelector = null;
+      normalized._targetContext = null;
       try {
         await executeWithRetry(() => runFrontendAction(normalized, signal), retryCount, retryDelayMs, signal);
         results.push({
           index: i,
           action: normalized.action,
-          selector: normalized.selector || normalized.target || null,
+          selector: normalized._resolvedSelector || normalized.selector || normalized.target || null,
+          scope: normalized.scope || null,
+          targetContext: normalized._targetContext,
           status: "ok",
           durationMs: Date.now() - startedAt,
         });
@@ -1991,7 +2705,9 @@
         const result = {
           index: i,
           action: normalized.action,
-          selector: normalized.selector || normalized.target || null,
+          selector: normalized._resolvedSelector || normalized.selector || normalized.target || null,
+          scope: normalized.scope || null,
+          targetContext: normalized._targetContext,
           status: "error",
           error: error.message || "Action failed",
           durationMs: Date.now() - startedAt,

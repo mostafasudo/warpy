@@ -52,6 +52,22 @@ class FrontendActionInput(BaseModel):
         default=None,
         description="Primary target selector (CSS or `text=`, `label=`, `role=` shortcut); include when the action targets a specific element, omit for wait/navigate or when using the focused element."
     )
+    selector_alternatives: list[str] = Field(
+        default_factory=list,
+        alias="selectorAlternatives",
+        max_length=3,
+        description="Optional fallback selectors to try in order when the primary selector is unstable (max 3; mix `text=`, `role=`, and stable CSS/data-testid selectors)."
+    )
+    scope: str | None = Field(
+        default=None,
+        description="Optional scope root to constrain selector matching (e.g., 'modal', '#menu-root', '[role=\"menu\"]'). Use for ambiguous labels that appear in multiple page regions."
+    )
+    scope_alternatives: list[str] = Field(
+        default_factory=list,
+        alias="scopeAlternatives",
+        max_length=3,
+        description="Optional fallback scope roots to try when the primary scope is unstable."
+    )
     role: str | None = Field(
         default=None,
         description="Role name to target when no selector or text-based selector is available (e.g., 'button', 'checkbox')."
