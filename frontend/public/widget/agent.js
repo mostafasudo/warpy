@@ -467,7 +467,7 @@
           const fePort = parseInt(srcUrl.port, 10);
           if (fePort) return srcUrl.protocol + "//" + srcUrl.hostname + ":" + (fePort + LOCAL_PORT_OFFSET);
         }
-      } catch {}
+      } catch { }
       return API_URL.replace(/\/$/, "");
     } catch {
       return PROD_API_URL;
@@ -3449,6 +3449,21 @@
       saveUiState(state.ui);
       saveState(state);
     }
+
+    // Auto-resume state tracking
+    let isNavigatingAway = false;
+    window.addEventListener("pagehide", () => {
+      isNavigatingAway = true;
+      if (isLoading && state.activeQuery) {
+        state.interruptedByNavigation = true;
+        saveState(state);
+      }
+    });
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) {
+        isNavigatingAway = false;
+      }
+    });
     let headerConfig = {};
     let widgetAuthToken = state.auth.token || null;
     let widgetRefreshEndpointPath = "/widget-token";
@@ -4562,6 +4577,10 @@
 
       let didReceiveAssistant = false;
       let shouldHide = false;
+
+      state.activeQuery = messageText;
+      saveState(state);
+
       try {
         const payload = {
           agentId: config.agentId,
@@ -4631,20 +4650,24 @@
       } catch (error) {
         if (!shouldHide && !isRunStale()) {
           const isStopped = isAbortError(error);
-          upsertResumeErrorMessage(
-            messageText,
-            isStopped
-              ? "Execution stopped before it finished. Resume to continue from your previous request."
-              : "Something went wrong while executing this request. Resume to try your previous request again."
-          );
-          didReceiveAssistant = true;
-          saveState(state);
+          if (!isNavigatingAway) {
+            upsertResumeErrorMessage(
+              messageText,
+              isStopped
+                ? "Execution stopped before it finished. Resume to continue from your previous request."
+                : "Something went wrong while executing this request. Resume to try your previous request again."
+            );
+            didReceiveAssistant = true;
+            saveState(state);
+          }
         }
       } finally {
         if (activeRunAbortController === runAbortController) {
           activeRunAbortController = null;
         }
         setLoading(false);
+        state.activeQuery = null;
+        if (!isNavigatingAway) saveState(state);
       }
       if (isRunStale()) return;
 
@@ -4824,6 +4847,19 @@
     refreshDevices(false);
     updateMicState();
     applyWidgetUiConfig();
+
+    if (state.interruptedByNavigation && state.activeQuery) {
+      state.interruptedByNavigation = false;
+      saveState(state);
+      setTimeout(() => {
+        openPanel();
+        sendMessage(state.activeQuery, { skipUserEcho: true });
+      }, 500);
+    } else {
+      state.interruptedByNavigation = false;
+      state.activeQuery = null;
+      saveState(state);
+    }
 
     return root;
   }
