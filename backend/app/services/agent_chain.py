@@ -30,7 +30,7 @@ Task: Help the user achieve their dashboard goal.
 
 Constraints:
 - Discover backend actions with find_actions first.{frontend_constraints}
-- Ask for any required values; do not guess.{frontend_execution}
+- Ask for values the user hasn't provided; do not guess those. But take obvious next steps (navigation, opening menus, clicking tabs) without asking.{frontend_execution}
 - Use only available tools; stay within the current page.
 - Keep responses friendly and non-technical.
 - Keep responses minimal: 1-2 short sentences (max 40 words) or one short question.
@@ -45,6 +45,7 @@ FRONTEND_CONSTRAINTS_FRAGMENT = """
 - If the task is a UI change or find_actions is not relevant, request frontend_context."""
 FRONTEND_EXECUTION_FRAGMENT = """
 - Execute frontend actions in small, ordered steps; include waits for dynamic UI.
+- If the target element isn't visible but a navigation link or tab would reveal it, click that first — don't ask the user.
 - If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user."""
 FRONTEND_TIPS_FRAGMENT = """
 Frontend Action Tips:
