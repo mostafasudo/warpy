@@ -215,7 +215,7 @@ async def widget_chat(
             tool_call_type_map = {tc.id: tc.tool_type for tc in pending_tool_calls}
             billable_ids = [
                 result.id for result in payload.tool_results
-                if tool_call_type_map.get(result.id) in ("backend", "frontend")
+                if tool_call_type_map.get(result.id) in ("backend", "frontend", "js_exec")
                 and result.consume_action
             ]
 
@@ -239,18 +239,18 @@ async def widget_chat(
                 )
                 for result in tool_results:
                     tool_call = tool_call_type_map.get(result.id)
-                    if tool_call == "frontend" and result.body:
+                    if tool_call in ("frontend", "js_exec") and result.body:
                         body = result.body if isinstance(result.body, dict) else {}
                         record_frontend_action(
                             session,
                             agent.user_id,
                             conversation.id,
                             tool_call_id=result.id,
-                            goal=body.get("goal", ""),
+                            goal=body.get("goal", "") if tool_call == "frontend" else "JavaScript execution",
                             url=body.get("url", ""),
                             actions=body.get("results", []),
                             status_code=result.status_code,
-                            error=result.error,
+                            error=result.error or body.get("error"),
                         )
         else:
             summary = get_billing_actions_summary(session, agent.user_id)
@@ -353,7 +353,7 @@ async def widget_chat(
                         body=call.body or {},
                     )
                     for call in result.tool_calls
-                    if call.id and call.tool_type in ("backend", "frontend")
+                    if call.id and call.tool_type in ("backend", "frontend", "js_exec")
                 ],
             )
             save_widget_message(session, conversation.id, "pending_state", state)

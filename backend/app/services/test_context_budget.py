@@ -4,10 +4,13 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from app.services.context_budget import (
     DEFAULT_CONTEXT_LIMIT,
+    IMAGE_TOKEN_COST_HIGH,
+    IMAGE_TOKEN_COST_LOW,
     MAX_TOOL_RESULT_TOKENS,
     MIN_RESPONSE_HEADROOM,
     MODEL_CONTEXT_LIMITS,
     RESPONSE_HEADROOM_RATIO,
+    _count_content_tokens,
     _get_encoder,
     _get_tool_call_id,
     _hard_truncate,
@@ -95,6 +98,56 @@ def test_count_message_tokens_tool():
     msg = ToolMessage(content='{"status": "ok"}', tool_call_id="call-1")
     tokens = count_message_tokens(msg, "gpt-4o")
     assert tokens > 4
+
+
+def test_count_content_tokens_string():
+    tokens = _count_content_tokens("hello world", "gpt-4o")
+    assert tokens == count_tokens("hello world", "gpt-4o")
+
+
+def test_count_content_tokens_empty_string():
+    assert _count_content_tokens("", "gpt-4o") == 0
+
+
+def test_count_content_tokens_image_low_detail():
+    content = [
+        {"type": "text", "text": "page tree"},
+        {"type": "image_url", "image_url": {"url": "data:image/webp;base64,abc", "detail": "low"}},
+    ]
+    tokens = _count_content_tokens(content, "gpt-4o")
+    assert tokens == count_tokens("page tree", "gpt-4o") + IMAGE_TOKEN_COST_LOW
+
+
+def test_count_content_tokens_image_high_detail():
+    content = [
+        {"type": "text", "text": "desc"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc", "detail": "high"}},
+    ]
+    tokens = _count_content_tokens(content, "gpt-4o")
+    assert tokens == count_tokens("desc", "gpt-4o") + IMAGE_TOKEN_COST_HIGH
+
+
+def test_count_content_tokens_image_default_detail():
+    content = [
+        {"type": "image_url", "image_url": {"url": "data:image/webp;base64,abc"}},
+    ]
+    tokens = _count_content_tokens(content, "gpt-4o")
+    assert tokens == IMAGE_TOKEN_COST_HIGH
+
+
+def test_count_content_tokens_none():
+    assert _count_content_tokens(None, "gpt-4o") == 0
+
+
+def test_count_message_tokens_multimodal_tool():
+    content = [
+        {"type": "text", "text": '{"tree": "..."}'},
+        {"type": "image_url", "image_url": {"url": "data:image/webp;base64,abc", "detail": "low"}},
+    ]
+    msg = ToolMessage(content=content, tool_call_id="call-1")
+    tokens = count_message_tokens(msg, "gpt-4o")
+    expected = 4 + count_tokens('{"tree": "..."}', "gpt-4o") + IMAGE_TOKEN_COST_LOW
+    assert tokens == expected
 
 
 def test_count_message_tokens_empty_content():

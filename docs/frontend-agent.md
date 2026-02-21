@@ -1,22 +1,26 @@
 # Frontend Agent Capability (Widget)
 
 ## Overview
-The Warpy agent can observe and act on the host dashboard directly. Two always-available tools give it this ability:
+The Warpy agent can observe and act on the host dashboard directly. Four always-available frontend tools give it this ability:
 
-- **`frontend_context`** — requests a focused DOM snapshot of the current page. When the user has granted tab screen sharing, it also captures a pixel-perfect screenshot.
-- **`frontend`** — executes ordered UI actions (click, type, select, scroll, drag, etc.) on the current page by simulating real user interactions.
+- **`read_page`** — returns a hierarchical accessibility tree of the current page with stable ref IDs for each element. Includes a screenshot when tab screen sharing is active.
+- **`find_elements`** — searches for elements by natural language description, returning matching elements with ref IDs.
+- **`frontend`** — executes ordered UI actions (click, type, select, scroll, drag, etc.) targeting elements by ref ID or CSS selector.
+- **`js_exec`** — executes arbitrary JavaScript in the page context as an escape hatch.
 
-Tool calls use a `type` discriminator (`backend`, `frontend_context`, `frontend`) so the widget knows how to execute each one. Billing is backend-controlled based on `tool_type`.
+In addition, `backend` tool calls invoke customer-configured API endpoints. Tool calls use a `type` discriminator (`backend`, `read_page`, `find_elements`, `frontend`, `js_exec`) so the widget knows how to execute each one. Billing is backend-controlled based on `tool_type`.
 
 ## Capabilities
-- DOM context collection with relevance scoring and strict size limits.
+- Accessibility tree extraction with ref-based element targeting.
+- Natural language element search via `find_elements`.
 - Tab screen sharing via `getDisplayMedia` to enrich context with a real screenshot (inline prompt with 20s countdown auto-skip).
 - Client-side action engine that simulates real user interactions across frameworks (React, Vue, Angular).
-- Built-in selector recovery: primary selector + alternatives, text fallback matching, and menu-trigger reopening for transient popovers.
+- Ref-based targeting: elements discovered via `read_page`/`find_elements` get stable `ref_N` IDs that persist across tool calls within a conversation turn.
+- Selector fallback: actions fall back to CSS selectors when ref IDs are unavailable or stale.
 - UI feedback for page actions: status panel, element highlight, frontend-interaction warning lifecycle.
 - User stop control while runs are in progress (Send becomes Stop).
 - Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
-- System prompt encourages proactive frontend retries and context rescans.
+- System prompt encourages proactive retries and page rescans via `read_page`.
 - Frontend actions tracked in the Activity panel alongside backend actions.
 
 ## High-level flow
@@ -30,16 +34,16 @@ sequenceDiagram
   U->>W: "Change filters to last 30 days"
   W->>B: /widget/chat (message)
   B->>L: find_actions + frontend tools
-  L-->>B: frontend_context(goal="filters")
-  B-->>W: toolCalls[type=frontend_context]
+  L-->>B: read_page(filter="interactive")
+  B-->>W: toolCalls[type=read_page]
   W->>U: Screen share prompt (if not already sharing)
   U-->>W: Share / Skip / auto-skip after 20s
-  W->>W: Collect DOM subset + capture screenshot (if sharing)
-  W->>B: toolResults (frontend_context + screenshot)
-  B->>L: ToolMessage (context)
-  L-->>B: frontend(goal="Apply filter", actions=[...])
+  W->>W: Build accessibility tree + capture screenshot (if sharing)
+  W->>B: toolResults (tree with ref IDs + screenshot)
+  B->>L: ToolMessage (tree context)
+  L-->>B: frontend(goal="Apply filter", actions=[{action:"click", ref:"ref_7"}, ...])
   B-->>W: toolCalls[type=frontend]
-  W->>W: Execute actions sequentially (real events)
+  W->>W: Resolve refs, execute actions sequentially
   W->>B: toolResults (frontend actions)
   B->>L: ToolMessage (results)
   L-->>B: Final response
@@ -51,8 +55,8 @@ sequenceDiagram
 flowchart TD
   A[User request] --> B[find_actions]
   B -->|Backend tool found| C[Execute backend tool]
-  B -->|No match or UI task| D[frontend_context]
-  D --> E[LLM plans UI steps]
+  B -->|No match or UI task| D[read_page]
+  D --> E[LLM plans UI steps using ref IDs]
   E --> F[frontend]
   F --> G[Execute actions in widget]
   G --> H[LLM summary]
@@ -62,82 +66,123 @@ flowchart TD
 ### Tool call schema (widget response)
 All tool calls returned to the widget include a `type` discriminator:
 - `backend` (API endpoint calls)
-- `frontend_context` (DOM snapshot, read-only)
+- `read_page` (accessibility tree, read-only)
+- `find_elements` (element search, read-only)
 - `frontend` (UI actions, billable)
+- `js_exec` (JavaScript execution, billable)
 
-Example: frontend context tool call
+Example: read_page tool call
 ```json
 {
   "id": "call_1",
-  "type": "frontend_context",
-  "name": "frontend_context",
-  "goal": "filters date range",
-  "context": {
-    "goal": "filters date range",
-    "maxElements": 60,
-    "selectorHints": ["text=Date range"]
+  "type": "read_page",
+  "name": "read_page",
+  "readPageOptions": {
+    "depth": 15,
+    "filter": "interactive",
+    "maxChars": 50000
   }
 }
 ```
 
-Example: frontend actions tool call
+Example: find_elements tool call
 ```json
 {
   "id": "call_2",
+  "type": "find_elements",
+  "name": "find_elements",
+  "findQuery": "date range filter"
+}
+```
+
+Example: frontend actions tool call with ref IDs
+```json
+{
+  "id": "call_3",
   "type": "frontend",
   "name": "frontend",
   "goal": "Apply last 30 days filter",
   "actions": [
-    { "action": "click", "selector": "[data-testid=filter-button]", "selectorAlternatives": ["text=Filters"] },
-    { "action": "click", "selector": "text=Last 30 days", "scope": "menu", "selectorAlternatives": ["role=option", "[data-testid=last-30-days]"] },
-    { "action": "click", "selector": "text=Apply" }
+    { "action": "click", "ref": "ref_7" },
+    { "action": "click", "ref": "ref_12" },
+    { "action": "click", "ref": "ref_15" }
   ]
 }
 ```
 
+Example: js_exec tool call
+```json
+{
+  "id": "call_4",
+  "type": "js_exec",
+  "name": "js_exec",
+  "jsCode": "document.querySelector('#app').__vue__.$store.state.filters"
+}
+```
+
 ### Tool results (widget -> backend)
-Tool results contain the execution outcome:
+
+read_page result (accessibility tree):
+```json
+{
+  "id": "call_1",
+  "statusCode": 200,
+  "body": {
+    "kind": "read_page",
+    "tree": "[ref_1] navigation \"Main Menu\"\n  [ref_2] link \"Dashboard\"\n  [ref_3] link \"Settings\"\n[ref_4] main\n  [ref_5] heading \"Analytics\"\n  [ref_6] region \"Filters\"\n    [ref_7] combobox \"Date Range\" (value=\"Last 7 days\")\n    [ref_8] button \"Apply\" (disabled)\n",
+    "truncated": false,
+    "url": "https://example.com/dashboard",
+    "title": "Dashboard",
+    "viewport": { "width": 1920, "height": 1080 },
+    "screenshot": "data:image/webp;base64,..."
+  }
+}
+```
+
+find_elements result:
 ```json
 {
   "id": "call_2",
+  "statusCode": 200,
+  "body": {
+    "kind": "find_elements",
+    "query": "date range filter",
+    "matches": [
+      { "ref": "ref_7", "role": "combobox", "name": "Date Range", "states": ["value=\"Last 7 days\""] },
+      { "ref": "ref_8", "role": "button", "name": "Apply", "states": ["disabled"] }
+    ]
+  }
+}
+```
+
+frontend actions result:
+```json
+{
+  "id": "call_3",
   "statusCode": 200,
   "body": {
     "kind": "frontend_actions",
     "goal": "Apply last 30 days filter",
     "url": "https://example.com/dashboard",
     "results": [
-      { "index": 0, "action": "click", "selector": "[data-testid=filter-button]", "status": "ok", "durationMs": 42 },
-      {
-        "index": 1,
-        "action": "click",
-        "selector": "text=Last 30 days",
-        "scope": "menu",
-        "targetContext": { "tag": "div", "role": "option", "inOverlay": true },
-        "status": "ok",
-        "durationMs": 38
-      }
+      { "index": 0, "action": "click", "selector": "ref_7", "status": "ok", "durationMs": 42 },
+      { "index": 1, "action": "click", "selector": "ref_12", "status": "ok", "durationMs": 38 }
     ]
   }
 }
 ```
 
-Frontend context results:
-```json
-{
-  "id": "call_1",
-  "statusCode": 200,
-  "body": {
-    "kind": "frontend_context",
-    "goal": "filters date range",
-    "url": "https://example.com/dashboard",
-    "elements": [
-      { "selector": "#date-range", "label": "Date range" }
-    ],
-    "screenshot": "data:image/webp;base64,..."
-  }
-}
-```
 The `screenshot` field is present only when the user has granted tab screen sharing. It contains a base64-encoded WebP image of the current tab captured via `getDisplayMedia`.
+
+## Ref system
+Elements discovered via `read_page` or `find_elements` are assigned stable ref IDs (`ref_1`, `ref_2`, etc.). These IDs map to live DOM elements and can be used to target actions.
+
+Lifecycle:
+- Refs are cleared at the start of each new user message (new agent run).
+- Refs persist across multiple tool call round-trips within the same agent run.
+- New `read_page`/`find_elements` calls add refs without clearing existing ones.
+- If a ref becomes stale (element removed from DOM), the action engine falls back to the `selector` field.
+- A `WeakMap` is used for element-to-ref mapping to prevent memory leaks.
 
 ## Billing
 Billing is controlled entirely by the backend based on `tool_type`:
@@ -146,38 +191,39 @@ Billing is controlled entirely by the backend based on `tool_type`:
 |-----------|----------|--------|
 | `backend` | Yes | API call executed |
 | `frontend` | Yes | DOM actions performed |
-| `frontend_context` | No | Read-only DOM snapshot |
+| `js_exec` | Yes | JavaScript executed in page |
+| `read_page` | No | Read-only observation |
+| `find_elements` | No | Read-only search |
 
 The backend determines billability by checking the `tool_type` stored in pending state when processing tool results. This prevents clients from bypassing billing.
 
-## DOM context collection
-The widget generates a small, relevant snapshot instead of sending the full DOM.
+## Accessibility tree
+The `read_page` tool returns a compact hierarchical text representation of the page DOM, inspired by screen reader accessibility trees. Each semantic node includes:
+- A ref ID (e.g., `[ref_5]`)
+- An ARIA role (explicit or inferred from HTML semantics)
+- An accessible name (aria-label > text content > title > alt > placeholder)
+- State annotations (disabled, checked, expanded, selected, value)
 
-Selection strategy:
-- Collect interactive elements only (buttons, inputs, selects, links, ARIA roles, contenteditable).
-- Filter by visibility and viewport.
-- Score elements using goal tokens against label/text/attributes.
-- Limit results (default 60 elements; capped at 160).
+Parameters:
+- `depth` (1-30, default 15): maximum tree depth
+- `filter` ("all" or "interactive"): "interactive" limits to buttons, inputs, links, etc.
+- `refId`: scope to a subtree rooted at an existing ref
+- `maxChars` (5000-80000, default 50000): output character limit
 
-Each element includes:
-- `selector` and `selectors` (best-effort CSS selectors)
-- `label`, `text`, `ariaLabel`, `placeholder`, `name`, `id`
-- `tag`, `role`, `type`, `disabled`, `checked`, `required`
-- `rect` and `inViewport`
-- `options` for select elements (when small)
+Token efficiency: ~60-70% fewer tokens than the previous flat JSON element list for equivalent page coverage.
 
 ## Tab screenshot capture
-When `frontend_context` is called, the widget attempts to capture a screenshot of the current tab via the browser `getDisplayMedia` API. This gives the agent a pixel-perfect view of the page alongside the structured DOM context.
+When `read_page` is called, the widget attempts to capture a screenshot of the current tab via the browser `getDisplayMedia` API. This gives the agent a pixel-perfect view of the page alongside the structured accessibility tree.
 
 Flow:
-1. On the first `frontend_context` call, the widget shows an inline prompt asking the user to share the current tab.
+1. On the first `read_page` call, the widget shows an inline prompt asking the user to share the current tab.
 2. The prompt includes a 20-second countdown. If the user doesn't act, it auto-skips and continues without a screenshot.
 3. The user can click **Share** (triggers the browser's tab-sharing picker) or **Skip**.
-4. `getDisplayMedia` is configured with `preferCurrentTab: true`, `selfBrowserSurface: "include"`, `monitorTypeSurface: "exclude"`, and `surfaceSwitching: "exclude"` to restrict sharing to the current tab only.
-5. Once sharing is active, every subsequent `frontend_context` call captures a frame without re-prompting.
+4. `getDisplayMedia` is configured with `preferCurrentTab: true`, `selfBrowserSurface: "include"`, `monitorTypeSurfaces: "exclude"`, and `surfaceSwitching: "exclude"` to restrict sharing to the current tab only.
+5. Once sharing is active, every subsequent `read_page` call captures a frame without re-prompting.
 6. The frame is drawn to an offscreen canvas and exported as `image/webp` at 0.75 quality, then included in the tool result as a base64 data URL in the `screenshot` field.
 
-The sharing bar persists across messages (including empty/new-chat state) so the user always has a visible **Stop** control. Sharing is fully optional — the agent receives structured DOM context regardless.
+The sharing bar persists across messages (including empty/new-chat state) so the user always has a visible **Stop** control. Sharing is fully optional — the agent receives the accessibility tree regardless.
 
 ## Action execution engine
 The widget executes actions sequentially to preserve correct UI state. It simulates user events to trigger framework handlers (React/Vue/Angular):
@@ -195,20 +241,16 @@ Supported action families:
 - Custom: `dispatch` (arbitrary events)
 
 Actions accept:
-- `selector` (CSS) or `text=` / `label=` / `role=` query shortcuts
-- `selectorAlternatives` (ordered fallback selectors tried automatically; max 3 unique values)
-- `scope` / `scopeAlternatives` to constrain matching to a container (menu/popover/modal) for ambiguous labels (scope alternatives max 3 unique values)
+- `ref` — ref ID from `read_page`/`find_elements` (preferred targeting method)
+- `selector` (CSS) or `text=` / `label=` / `role=` query shortcuts (fallback)
 - `value` / `text` / `key` / `keys`
-- `timeoutMs`, `delayMs`, `continueOnError`
-- Optional coordinates `x`, `y` (relative 0-1 or px)
+- `delayMs`
 
 Execution reliability:
-- If a selector misses, the runtime retries with `selectorAlternatives`.
-- If an explicit scope resolves to a real container, matching stays scoped there before any global fallback.
+- Ref-based targeting resolves directly to the live DOM element, avoiding selector fragility.
+- If a ref is stale, the runtime falls back to `selector` and its alternatives.
 - If a transient menu/popover opens, the runtime constrains text matching to that transient root before global fallback.
-- `text=` lookup now falls back to clickable ancestor matching (useful for popover/list items rendered as `li/div` wrappers).
-- For missing text targets, the runtime can reopen likely menu triggers (`+`, Add/New/Menu controls) before retrying selection.
-- For text-based clicks that first resolve outside overlay context, the runtime performs one scoped re-resolve before executing the click.
+- `text=` lookup falls back to clickable ancestor matching (useful for popover/list items rendered as `li/div` wrappers).
 - Action results include `targetContext` (tag/role/overlay metadata) so the agent can detect likely wrong-target clicks.
 
 ## UI/UX feedback
@@ -225,21 +267,22 @@ Execution reliability:
 ## Activity panel
 Frontend actions are recorded and displayed in the Activity panel alongside backend actions:
 - Each frontend action shows the goal, URL, and individual DOM actions performed.
-- Actions are stored with `tool_type="frontend"` in the `conversation_actions` table.
+- Actions are stored with `tool_type="frontend"` or `tool_type="js_exec"` in the `conversation_actions` table.
 - The panel displays action status, timing, and any errors.
 
 ## Safety and privacy
-- Frontend context is only requested when needed.
-- Context is DOM-only, capped, and scored to limit payload size.
+- Observation tools (`read_page`, `find_elements`) are non-billable and read-only.
+- The accessibility tree excludes the widget's own DOM elements.
 - Frontend actions are sequential and retryable with rescans.
-- For order-sensitive/state-sensitive edits (for example step order), the agent should verify resulting UI state with `frontend_context` before claiming completion.
+- For order-sensitive/state-sensitive edits, the agent should verify resulting UI state with `read_page` before claiming completion.
 - If a user disputes a previous completion claim, the agent should trust the report enough to re-check the UI state first, then repair if needed.
-- On `ELEMENT_NOT_FOUND`, the expected recovery path is automated rescan (`frontend_context`) and selector fallback retries, not asking the user for a manual screenshot.
+- On `ELEMENT_NOT_FOUND`, the expected recovery path is `read_page` rescan and ref-based retries, not asking the user for a manual screenshot.
 - Sensitive field sanitization: text typed into password/secret/token fields is redacted (`***`) before storage.
 - The `goal` parameter is required for frontend actions to ensure meaningful activity labels.
+- `js_exec` is billable and recorded in the activity panel. It should only be used as a last resort.
 - Tab screen sharing requires explicit user consent via the browser's native permission dialog.
 - The `getDisplayMedia` call is restricted to the current tab only — users cannot share other tabs, windows, or their entire screen.
-- Screen sharing is fully optional; the user can skip or ignore the prompt and the agent continues with DOM context only.
+- Screen sharing is fully optional; the user can skip or ignore the prompt and the agent continues with the accessibility tree only.
 - The user can stop sharing at any time via the widget's "Stop" control or the browser's built-in stop-sharing UI.
 - Screenshots are captured client-side, encoded as base64, and sent inline with the tool result — no images are uploaded to external storage.
 - Screen share state is cleaned up on widget hide, new chat, and abort to prevent hidden ongoing capture.
@@ -247,18 +290,19 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 ## Architecture
 
 ### Backend
-- Tool schemas: `FrontendContextRequest`, `FrontendActionPayload`.
-- `ToolCallPayload` includes `type`, `goal`, `context`, `actions`.
-- `AgentExecutor` routes `frontend_context` and `frontend` tool calls to the widget for client-side execution.
+- Tool schemas: `ReadPageInput`, `FindElementsInput`, `FrontendActionInput`, `JsExecInput`.
+- `ToolCallPayload` includes `type`, `goal`, `readPageOptions`, `findQuery`, `actions`, `jsCode`.
+- `AgentExecutor` routes `read_page`, `find_elements`, `frontend`, and `js_exec` tool calls to the widget for client-side execution.
 - `ConversationAction` model stores `tool_type`, `frontend_goal`, `frontend_url`, `frontend_actions`.
 - Billing determined by `tool_type` on the backend (not client flags).
 
 ### Widget
-- DOM context capture with relevance scoring.
-- Action engine for UI interactions (user-like events dispatched to framework handlers).
+- Ref map: bidirectional mapping between `ref_N` IDs and live DOM elements (`Map` + `WeakMap`).
+- Accessibility tree builder: recursive DOM walk producing compact text with ref IDs.
+- Find engine: natural language element search using token scoring.
+- Action engine: ref-based element resolution with CSS selector fallback, simulating user events.
 - Activity UI and element highlighting.
 - Host-token theming: widget colors and typography resolve from host design tokens first (`background`, `foreground`, `muted`, `card/popover`, `border`, `primary/accent`, `ring`) with safe computed-style fallbacks.
-- Border tuning: launcher/icon borders use a slightly stronger subtle border token; other widget borders stay softer.
 - Tab screenshot capture via `getDisplayMedia` with current-tab-only constraints.
 - Screen share prompt UI: minimal sticky bar with countdown, share/skip actions, and active-sharing status with stop control.
 - `screenShareEndedCallback` hook re-renders the widget when the user stops sharing from the browser chrome.

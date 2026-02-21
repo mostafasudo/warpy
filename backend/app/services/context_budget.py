@@ -35,10 +35,37 @@ def count_tokens(text: str, model: str = "gpt-4o") -> int:
     return len(_get_encoder(model).encode(text))
 
 
+IMAGE_TOKEN_COST_LOW = 85
+IMAGE_TOKEN_COST_HIGH = 765
+
+
+def _count_content_tokens(content: object, model: str) -> int:
+    if isinstance(content, str):
+        return count_tokens(content, model)
+    if isinstance(content, list):
+        total = 0
+        for block in content:
+            if not isinstance(block, dict):
+                total += count_tokens(str(block), model)
+                continue
+            block_type = block.get("type", "")
+            if block_type == "text":
+                total += count_tokens(block.get("text", ""), model)
+            elif block_type == "image_url":
+                detail = "auto"
+                img = block.get("image_url")
+                if isinstance(img, dict):
+                    detail = img.get("detail", "auto")
+                total += IMAGE_TOKEN_COST_LOW if detail == "low" else IMAGE_TOKEN_COST_HIGH
+            else:
+                total += count_tokens(str(block), model)
+        return total
+    return count_tokens(str(content), model) if content else 0
+
+
 def count_message_tokens(message: BaseMessage, model: str = "gpt-4o") -> int:
     overhead = 4
-    content = message.content or ""
-    tokens = overhead + count_tokens(str(content), model)
+    tokens = overhead + _count_content_tokens(message.content or "", model)
     if isinstance(message, AIMessage) and message.tool_calls:
         try:
             tokens += count_tokens(json.dumps(message.tool_calls), model)

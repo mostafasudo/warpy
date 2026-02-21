@@ -172,6 +172,54 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
     assert second.json()["actionsRemaining"] == 0
 
 
+def test_widget_js_exec_consumes_billing_action(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.core.database import session_scope
+    from app.schemas.widget import ToolCallPayload
+
+    tool_call = ToolCallPayload(
+        id="tc_js",
+        name="js_exec",
+        tool_type="js_exec",
+        jsCode="document.title",
+    )
+
+    class FakeExecutorWithJsExec:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+            if tool_results:
+                return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithJsExec)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 1
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    first = client.post("/widget/chat", json={"agentId": agent_id, "message": "exec js"})
+    convo_id = first.json()["conversationId"]
+    assert first.json()["done"] is False
+    assert len(first.json()["toolCalls"]) == 1
+
+    second = client.post("/widget/chat", json={
+        "agentId": agent_id,
+        "conversationId": convo_id,
+        "toolResults": [{"id": "tc_js", "statusCode": 200, "body": {"result": "My Page"}}]
+    })
+    assert second.status_code == 200
+    assert second.json()["isWidgetHidden"] is True
+    assert second.json()["actionsRemaining"] == 0
+
+
 def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
     from app.schemas.widget import ToolCallPayload

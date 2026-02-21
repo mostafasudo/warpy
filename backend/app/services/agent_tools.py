@@ -19,66 +19,56 @@ class FindActionsInput(BaseModel):
     )
 
 
-class FrontendContextInput(BaseModel):
-    goal: str = Field(
-        description="Concrete UI outcome to capture context for (e.g., 'open date range picker')."
+class ReadPageInput(BaseModel):
+    depth: int = Field(
+        default=15,
+        ge=1,
+        le=30,
+        description="Maximum tree depth to traverse (default 15). Reduce if output is too large."
     )
-    scope: str | None = Field(
+    filter: str = Field(
+        default="all",
+        description='Element filter: "interactive" for buttons/links/inputs only, "all" for all semantic elements (default).'
+    )
+    ref_id: str | None = Field(
         default=None,
-        description="Optional CSS selector to limit the scan to a known container; use only when confident (e.g., '#filters', '.modal')."
+        alias="refId",
+        description="Scope to subtree of this ref ID (e.g., 'ref_5'). Use to drill into a specific component."
     )
-    include_offscreen: bool = Field(
-        default=False,
-        alias="includeOffscreen",
-        description="Include offscreen elements in the context when the target is not visible in the viewport."
+    max_chars: int = Field(
+        default=50000,
+        alias="maxChars",
+        ge=5000,
+        le=80000,
+        description="Maximum output characters (default 50000). Reduce if context is too large."
     )
-    max_elements: int = Field(
-        default=60,
-        alias="maxElements",
-        description="Raise only when the UI is dense and key controls are missing (e.g., large tables/filters); keep 60 by default and never exceed 160."
-    )
-    selector_hints: list[str] = Field(
-        default_factory=list,
-        alias="selectorHints",
-        description="Optional short list of selector hints to bias matching (1-5 items); use `text=`, `label=`, or `role=` shortcuts when possible."
+
+
+class FindElementsInput(BaseModel):
+    query: str = Field(
+        description='Natural language description of what to find (e.g., "save button", "date filter", "search input").'
     )
 
 
 class FrontendActionInput(BaseModel):
     action: str = Field(
-        description="Required action verb; determines which fields to include (e.g., click, type, select, scroll, wait, hover, press, drag)."
+        description="Action verb: click, type, select, scroll, wait, hover, press, drag, navigate, etc."
+    )
+    ref: str | None = Field(
+        default=None,
+        description="Target element ref ID from read_page or find (e.g., 'ref_5'). Preferred over selector."
     )
     selector: str | None = Field(
         default=None,
-        description="Primary target selector (CSS or `text=`, `label=`, `role=` shortcut); include when the action targets a specific element, omit for wait/navigate or when using the focused element."
-    )
-    selector_alternatives: list[str] = Field(
-        default_factory=list,
-        alias="selectorAlternatives",
-        max_length=3,
-        description="Optional fallback selectors to try in order when the primary selector is unstable (max 3; mix `text=`, `role=`, and stable CSS/data-testid selectors)."
-    )
-    scope: str | None = Field(
-        default=None,
-        description="Optional scope root to constrain selector matching (e.g., 'modal', '#menu-root', '[role=\"menu\"]'). Use for ambiguous labels that appear in multiple page regions."
-    )
-    scope_alternatives: list[str] = Field(
-        default_factory=list,
-        alias="scopeAlternatives",
-        max_length=3,
-        description="Optional fallback scope roots to try when the primary scope is unstable."
-    )
-    role: str | None = Field(
-        default=None,
-        description="Role name to target when no selector or text-based selector is available (e.g., 'button', 'checkbox')."
+        description="CSS selector or text=/label=/role= shortcut. Fallback when ref is unavailable."
     )
     text: str | None = Field(
         default=None,
-        description="Text to type (type/input/set_value) or text to match for text-based selectors and wait_for_text."
+        description="Text to type (type/input) or text to match."
     )
     value: Any | None = Field(
         default=None,
-        description="Value to set/select; for select use option value/label, for navigate pass the URL here."
+        description="Value to set/select; for navigate pass the URL here."
     )
     key: str | None = Field(
         default=None,
@@ -88,72 +78,10 @@ class FrontendActionInput(BaseModel):
         default=None,
         description="Ordered list of keys for multi-key press actions (e.g., ['Control', 'K'])."
     )
-    index: int | None = Field(
-        default=None,
-        description="Zero-based index for select options when value/label is unreliable."
-    )
-    x: float | None = Field(
-        default=None,
-        description="Optional X coordinate (px or 0-1 relative) for pointer/drag/scroll precision."
-    )
-    y: float | None = Field(
-        default=None,
-        description="Optional Y coordinate (px or 0-1 relative) for pointer/drag/scroll precision."
-    )
-    mode: str | None = Field(
-        default=None,
-        description="Typing mode for type/input/set_value: 'replace' (default) or 'append'."
-    )
-    behavior: str | None = Field(
-        default=None,
-        description="Scroll behavior for scroll actions: 'auto' (default) or 'smooth'."
-    )
-    from_: str | None = Field(
-        default=None,
-        alias="from",
-        description="Drag source selector for drag/drag_and_drop when different from the target."
-    )
-    to: str | None = Field(
-        default=None,
-        description="Drag target selector for drag_and_drop actions."
-    )
-    events: list[str] | None = Field(
-        default=None,
-        description="DOM event names to dispatch for dispatch actions (e.g., ['keydown'])."
-    )
     delay_ms: int | None = Field(
         default=None,
         alias="delayMs",
         description="Milliseconds to wait after this action (0-10000) to let the UI settle."
-    )
-    timeout_ms: int | None = Field(
-        default=None,
-        alias="timeoutMs",
-        description="Max time in milliseconds to wait for elements/text during this action."
-    )
-    continue_on_error: bool = Field(
-        default=False,
-        alias="continueOnError",
-        description="If true, keep executing later actions after a failure; otherwise stop at first error."
-    )
-    retry_count: int = Field(
-        default=0,
-        alias="retryCount",
-        ge=0,
-        le=3,
-        description="Number of retry attempts for transient failures (0-3); uses exponential backoff."
-    )
-    retry_delay_ms: int = Field(
-        default=500,
-        alias="retryDelayMs",
-        ge=100,
-        le=2000,
-        description="Base delay in milliseconds between retries (100-2000); doubles with each attempt."
-    )
-    stability_ms: int | None = Field(
-        default=None,
-        alias="stabilityMs",
-        description="For wait_for_stable: milliseconds of DOM stability required before proceeding (default 300)."
     )
 
 
@@ -163,7 +91,13 @@ class FrontendActionsInput(BaseModel):
     )
     actions: list[FrontendActionInput] = Field(
         default_factory=list,
-        description="Ordered list of UI actions to execute; each entry is a FrontendActionInput."
+        description="Ordered list of UI actions. Use ref IDs from read_page/find for targeting."
+    )
+
+
+class JsExecInput(BaseModel):
+    code: str = Field(
+        description="JavaScript code to execute in the page context. The result of the last expression is returned."
     )
 
 
@@ -204,25 +138,45 @@ def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
             "Task: Find relevant backend actions for the user's request. "
             "Use when you need available endpoints or are unsure what to call. "
             "Output: JSON list of actions with id, method, path, name, description, feature. "
-            "If the list is empty, no backend action fits—switch to frontend_context."
+            "If the list is empty, no backend action fits—use read_page to observe the page."
         ),
         args_schema=FindActionsInput
     )
 
 
-def create_frontend_context_tool() -> StructuredTool:
-    def frontend_context(**_kwargs: Any) -> str:
+def create_read_page_tool() -> StructuredTool:
+    def read_page(**_kwargs: Any) -> str:
         return json.dumps({"status": "queued"})
 
     return StructuredTool.from_function(
-        func=frontend_context,
-        name="frontend_context",
+        func=read_page,
+        name="read_page",
         description=(
-            "Task: Request a focused UI snapshot of the current page, including interactive elements and a pixel-perfect screenshot of the user's tab when available. "
-            "Provide goal and optional scope/selector hints. "
-            "Output: Structured context with relevant elements, headings, suggested selectors, and a base64 screenshot image of the page when screen sharing is active."
+            "Task: Get an accessibility tree of the current page with ref IDs for each element. "
+            "Returns a hierarchical text representation showing role, name, state, and ref ID for each node. "
+            "Use filter='interactive' for just buttons/links/inputs. "
+            "Use refId to scope to a subtree of a known element. "
+            "Includes a screenshot when screen sharing is active. "
+            "Output: Compact text tree with ref IDs that can be used in frontend actions."
         ),
-        args_schema=FrontendContextInput
+        args_schema=ReadPageInput
+    )
+
+
+def create_find_elements_tool() -> StructuredTool:
+    def find_elements(**_kwargs: Any) -> str:
+        return json.dumps({"status": "queued"})
+
+    return StructuredTool.from_function(
+        func=find_elements,
+        name="find_elements",
+        description=(
+            "Task: Search for elements by natural language description. "
+            "Returns up to 20 matching elements with ref IDs. "
+            "Faster and more focused than read_page for targeted searches. "
+            "Output: List of matching elements with ref, role, name, states."
+        ),
+        args_schema=FindElementsInput
     )
 
 
@@ -235,10 +189,26 @@ def create_frontend_actions_tool() -> StructuredTool:
         name="frontend",
         description=(
             "Task: Execute frontend UI actions in order. "
-            "Use selectors from frontend_context and include waits for dynamic UI. "
+            "Use ref IDs from read_page/find to target elements. Falls back to CSS selectors. "
             "Output: Per-action results with status."
         ),
         args_schema=FrontendActionsInput
+    )
+
+
+def create_js_exec_tool() -> StructuredTool:
+    def js_exec(**_kwargs: Any) -> str:
+        return json.dumps({"status": "queued"})
+
+    return StructuredTool.from_function(
+        func=js_exec,
+        name="js_exec",
+        description=(
+            "Task: Execute JavaScript in the page context. "
+            "Use as escape hatch for interactions that standard actions cannot handle. "
+            "Output: Result of the last expression."
+        ),
+        args_schema=JsExecInput
     )
 
 

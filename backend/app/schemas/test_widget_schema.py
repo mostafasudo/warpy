@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.widget import FrontendActionPayload
+from app.schemas.widget import FrontendActionPayload, ToolCallPayload
 
 
 def test_frontend_action_payload_allows_up_to_three_alternatives():
@@ -31,3 +31,63 @@ def test_frontend_action_payload_rejects_more_than_three_alternatives():
                 "scopeAlternatives": ["a", "b", "c", "d"],
             }
         )
+
+
+def test_frontend_action_payload_accepts_ref_field():
+    payload = FrontendActionPayload.model_validate(
+        {"action": "click", "ref": "ref_5"}
+    )
+    assert payload.ref == "ref_5"
+    assert payload.selector is None
+
+
+def test_tool_call_payload_read_page_options():
+    payload = ToolCallPayload.model_validate(
+        {
+            "id": "tc_1",
+            "type": "read_page",
+            "name": "read_page",
+            "readPageOptions": {"filter": "interactive", "depth": 10},
+        }
+    )
+    assert payload.tool_type == "read_page"
+    assert payload.read_page_options == {"filter": "interactive", "depth": 10}
+
+
+def test_tool_call_payload_find_query():
+    payload = ToolCallPayload.model_validate(
+        {
+            "id": "tc_2",
+            "type": "find_elements",
+            "name": "find_elements",
+            "findQuery": "save button",
+        }
+    )
+    assert payload.tool_type == "find_elements"
+    assert payload.find_query == "save button"
+
+
+def test_tool_call_payload_js_code():
+    payload = ToolCallPayload.model_validate(
+        {
+            "id": "tc_3",
+            "type": "js_exec",
+            "name": "js_exec",
+            "jsCode": "document.title",
+        }
+    )
+    assert payload.tool_type == "js_exec"
+    assert payload.js_code == "document.title"
+
+
+def test_tool_call_payload_defaults_new_fields_to_none():
+    payload = ToolCallPayload.model_validate(
+        {
+            "id": "tc_4",
+            "type": "backend",
+            "name": "get_user",
+        }
+    )
+    assert payload.read_page_options is None
+    assert payload.find_query is None
+    assert payload.js_code is None

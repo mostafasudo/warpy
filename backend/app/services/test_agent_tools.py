@@ -5,7 +5,13 @@ import pytest
 
 from app.models import HttpMethod
 from app.services import agent_tools
-from app.services.agent_tools import create_endpoint_tool, create_find_actions_tool
+from app.services.agent_tools import (
+    create_endpoint_tool,
+    create_find_actions_tool,
+    create_find_elements_tool,
+    create_js_exec_tool,
+    create_read_page_tool,
+)
 
 
 class DummyFeature:
@@ -193,6 +199,27 @@ def test_get_endpoint_tools_skips_disabled():
     tools = agent_tools.get_endpoint_tools(session, "user", [enabled.id, disabled.id], None)
     assert len(tools) == 1
     assert tools[0].name == "enabledTool"
+
+
+def test_create_read_page_tool_returns_queued():
+    tool = create_read_page_tool()
+    assert tool.name == "read_page"
+    result = json.loads(tool.invoke({}))
+    assert result == {"status": "queued"}
+
+
+def test_create_find_elements_tool_returns_queued():
+    tool = create_find_elements_tool()
+    assert tool.name == "find_elements"
+    result = json.loads(tool.invoke({"query": "save button"}))
+    assert result == {"status": "queued"}
+
+
+def test_create_js_exec_tool_returns_queued():
+    tool = create_js_exec_tool()
+    assert tool.name == "js_exec"
+    result = json.loads(tool.invoke({"code": "document.title"}))
+    assert result == {"status": "queued"}
 
 
 def test_dummy_session_iterates():

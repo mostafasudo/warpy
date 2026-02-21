@@ -48,6 +48,7 @@ class FrontendActionPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     action: str
+    ref: str | None = None
     selector: str | None = None
     selector_alternatives: list[str] = Field(default_factory=list, alias="selectorAlternatives", max_length=3)
     scope: str | None = None
@@ -77,6 +78,9 @@ class ToolCallPayload(BaseModel):
     goal: str | None = None
     context: FrontendContextRequest | None = None
     actions: list[FrontendActionPayload] = Field(default_factory=list)
+    read_page_options: dict[str, Any] | None = Field(default=None, alias="readPageOptions")
+    find_query: str | None = Field(default=None, alias="findQuery")
+    js_code: str | None = Field(default=None, alias="jsCode")
 
 
 class ToolResultPayload(BaseModel):

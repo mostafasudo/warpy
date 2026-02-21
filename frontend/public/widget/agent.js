@@ -616,7 +616,8 @@
     if (!toolCall) return "backend";
     const raw = toolCall.type || toolCall.toolType;
     const normalized = raw ? String(raw) : "backend";
-    return normalized === "frontend_actions" ? "frontend" : normalized;
+    if (normalized === "frontend_actions") return "frontend";
+    return normalized;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -644,7 +645,7 @@
         video: { displaySurface: "browser" },
         preferCurrentTab: true,
         selfBrowserSurface: "include",
-        monitorTypeSurface: "exclude",
+        monitorTypeSurfaces: "exclude",
         surfaceSwitching: "exclude",
         audio: false,
       });
@@ -781,6 +782,41 @@
   ].join(", ");
   const actionRuntimeState = {
     transientRoot: null,
+  };
+
+  const refMap = {
+    _counter: 0,
+    _refToElement: new Map(),
+    _elementToRef: new WeakMap(),
+
+    clear() {
+      this._counter = 0;
+      this._refToElement.clear();
+      this._elementToRef = new WeakMap();
+    },
+
+    assign(el) {
+      const existing = this._elementToRef.get(el);
+      if (existing) return existing;
+      this._counter += 1;
+      const id = "ref_" + this._counter;
+      this._refToElement.set(id, el);
+      this._elementToRef.set(el, id);
+      return id;
+    },
+
+    resolve(refId) {
+      const el = this._refToElement.get(refId);
+      if (!el || !isElementConnected(el)) {
+        this._refToElement.delete(refId);
+        return null;
+      }
+      return el;
+    },
+
+    has(refId) {
+      return this._refToElement.has(refId);
+    },
   };
 
   function isRectInViewport(rect, margin) {
@@ -1252,153 +1288,215 @@
     return elements;
   }
 
-  function collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) {
-    const elements = collectAllInteractiveElements(root, INTERACTIVE_SELECTOR);
-    const descriptors = [];
-    for (const el of elements) {
-      if (!isElementVisible(el)) continue;
-      const rect = el.getBoundingClientRect();
-      if (!includeOffscreen && !isRectInViewport(rect, 120)) continue;
-      const descriptor = getElementDescriptor(el, true);
-      const haystack = normalizeText(
-        [
-          descriptor.text,
-          descriptor.label,
-          descriptor.ariaLabel,
-          descriptor.placeholder,
-          descriptor.name,
-          descriptor.id,
-          descriptor.role,
-          descriptor.tag,
-        ].join(" ")
-      );
-      descriptor._score = scoreText(haystack, tokens);
-      descriptor._rank = isRectInViewport(rect, 0) ? 1 : 0;
-      descriptors.push(descriptor);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Accessibility Tree Builder & Find Engine
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const IMPLICIT_ROLES = {
+    button: "button", a: "link", input: "textbox", select: "combobox",
+    textarea: "textbox", nav: "navigation", main: "main", header: "banner",
+    footer: "contentinfo", aside: "complementary", h1: "heading", h2: "heading",
+    h3: "heading", h4: "heading", h5: "heading", h6: "heading",
+    dialog: "dialog", table: "table", tr: "row", td: "cell", th: "columnheader",
+    ul: "list", ol: "list", li: "listitem", img: "img", form: "form",
+    section: "region", article: "article", summary: "button", details: "group",
+    option: "option", fieldset: "group", legend: "legend",
+  };
+
+  const SEMANTIC_ROLES = new Set([
+    "button", "link", "textbox", "combobox", "checkbox", "radio", "switch",
+    "slider", "tab", "tablist", "tabpanel", "menu", "menuitem",
+    "menuitemcheckbox", "menuitemradio", "option", "listbox", "tree",
+    "treeitem", "grid", "row", "cell", "dialog", "alertdialog", "alert",
+    "status", "tooltip", "heading", "navigation", "main", "banner",
+    "contentinfo", "complementary", "region", "article", "form", "search",
+    "list", "listitem", "img", "table", "columnheader", "group", "legend",
+  ]);
+
+  function getImplicitRole(el) {
+    const explicit = el.getAttribute && el.getAttribute("role");
+    if (explicit) return explicit;
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "input") {
+      const type = (el.getAttribute("type") || "text").toLowerCase();
+      if (type === "checkbox") return "checkbox";
+      if (type === "radio") return "radio";
+      if (type === "range") return "slider";
+      if (type === "submit" || type === "button" || type === "reset") return "button";
+      if (type === "search") return "searchbox";
+      return "textbox";
     }
-    const hints = Array.isArray(selectorHints) ? selectorHints : [];
-    for (const hint of hints) {
-      const target = resolveSelectorTarget(String(hint), root);
-      if (target && isElementVisible(target)) {
-        const descriptor = getElementDescriptor(target, true);
-        descriptor._score = Math.max(descriptor._score || 0, tokens.length ? tokens.length + 1 : 1);
-        descriptor._rank = 2;
-        descriptors.push(descriptor);
-      }
+    return IMPLICIT_ROLES[tag] || "";
+  }
+
+  function getAccessibleName(el) {
+    const ariaLabel = getAriaLabel(el);
+    if (ariaLabel) return truncateText(ariaLabel, 60);
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "select" || tag === "textarea") {
+      const label = getAssociatedLabelText(el);
+      if (label) return truncateText(label, 60);
+      const placeholder = el.getAttribute && el.getAttribute("placeholder");
+      if (placeholder) return truncateText(placeholder, 60);
+      return "";
     }
-    const unique = new Map();
-    for (const item of descriptors) {
-      const key = item.selector || `${item.tag}-${item.id}-${item.name}-${item.text}`;
-      if (!unique.has(key)) {
-        unique.set(key, item);
-      }
+    if (tag === "img") {
+      const alt = el.getAttribute && el.getAttribute("alt");
+      if (alt) return truncateText(alt, 60);
+      return "";
     }
-    const list = Array.from(unique.values());
-    list.sort((a, b) => (b._score || 0) - (a._score || 0) || (b._rank || 0) - (a._rank || 0));
-    const preferred = tokens.length ? list.filter((item) => (item._score || 0) > 0) : list;
-    const selected = preferred.slice(0, maxElements);
-    if (selected.length < maxElements) {
-      for (const item of list) {
-        if (selected.length >= maxElements) break;
-        if (!selected.includes(item)) {
-          selected.push(item);
+    const text = getElementText(el);
+    if (text && text.length <= 60) return text;
+    if (text) return truncateText(text, 60);
+    const title = el.getAttribute && el.getAttribute("title");
+    if (title) return truncateText(title, 60);
+    return "";
+  }
+
+  function getElementStates(el) {
+    const states = [];
+    if (isElementDisabled(el)) states.push("disabled");
+    const checked = getCheckedState(el);
+    if (checked === true) states.push("checked");
+    const role = getImplicitRole(el);
+    if (checked === false && (role === "checkbox" || role === "radio" || role === "switch")) {
+      states.push("unchecked");
+    }
+    if (el.required) states.push("required");
+    const expanded = el.getAttribute && el.getAttribute("aria-expanded");
+    if (expanded === "true") states.push("expanded");
+    if (expanded === "false") states.push("collapsed");
+    if (el.getAttribute && el.getAttribute("aria-selected") === "true") states.push("selected");
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (el.value && (tag === "input" || tag === "textarea" || tag === "select")) {
+      states.push("value=\"" + truncateText(String(el.value), 30) + "\"");
+    }
+    return states;
+  }
+
+  function isSemanticNode(el, role, filterMode) {
+    if (filterMode === "interactive") {
+      return el.matches && el.matches(INTERACTIVE_SELECTOR);
+    }
+    if (SEMANTIC_ROLES.has(role)) return true;
+    if (getAccessibleName(el)) return true;
+    return false;
+  }
+
+  function buildAccessibilityTree(options) {
+    const depth = clampInt(options && options.depth || 15, 1, 30);
+    const filterMode = options && options.filter === "interactive" ? "interactive" : "all";
+    const maxChars = clampInt(options && options.maxChars || 50000, 5000, 80000);
+    let startNode = document.body;
+    if (options && options.refId) {
+      const scoped = refMap.resolve(options.refId);
+      if (scoped) startNode = scoped;
+    }
+
+    const lines = [];
+    let charCount = 0;
+    let truncated = false;
+
+    function walk(el, currentDepth, indent) {
+      if (truncated) return;
+      if (currentDepth > depth) return;
+      if (!el || el.nodeType !== 1) return;
+      if (!isElementConnected(el)) return;
+      if (el.getAttribute && el.getAttribute("data-warpy-ui") === "true") return;
+      if (el.closest && el.closest("#" + WIDGET_CONTAINER_ID)) return;
+      const style = getComputedStyle(el);
+      if (!style || style.display === "none" || style.visibility === "hidden") return;
+      if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true") return;
+
+      const role = getImplicitRole(el);
+      const interesting = isSemanticNode(el, role, filterMode);
+
+      if (interesting) {
+        const ref = refMap.assign(el);
+        const name = getAccessibleName(el);
+        const states = getElementStates(el);
+
+        let line = indent + "[" + ref + "] " + (role || el.tagName.toLowerCase());
+        if (name) line += " \"" + name + "\"";
+        if (states.length) line += " (" + states.join(", ") + ")";
+        line += "\n";
+
+        if (charCount + line.length > maxChars) {
+          lines.push(indent + "... (truncated)\n");
+          truncated = true;
+          return;
         }
+        charCount += line.length;
+        lines.push(line);
+      }
+
+      const children = el.children;
+      if (!children) return;
+      const childIndent = interesting ? indent + "  " : indent;
+      const childDepth = interesting ? currentDepth + 1 : currentDepth;
+      for (let i = 0; i < children.length; i++) {
+        if (truncated) break;
+        walk(children[i], childDepth, childIndent);
       }
     }
-    return selected.map(({ _score, _rank, ...rest }) => rest);
-  }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Frontend Context Collection
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // Infer element purpose from attributes and content
-  function inferElementPurpose(el) {
-    const tag = el.tag || "";
-    const type = el.type || "";
-    const text = (el.text || "").toLowerCase();
-    const label = (el.label || "").toLowerCase();
-    const name = (el.name || "").toLowerCase();
-    const id = (el.id || "").toLowerCase();
-    const role = el.role || "";
-
-    // Check common patterns
-    if (type === "submit" || text.includes("submit") || label.includes("submit")) return "submit button";
-    if (type === "search" || name.includes("search") || id.includes("search")) return "search input";
-    if (type === "password" || name.includes("password")) return "password input";
-    if (type === "email" || name.includes("email")) return "email input";
-    if (text.includes("login") || text.includes("sign in")) return "login button";
-    if (text.includes("logout") || text.includes("sign out")) return "logout button";
-    if (text.includes("save") || label.includes("save")) return "save button";
-    if (text.includes("cancel") || label.includes("cancel")) return "cancel button";
-    if (text.includes("close") || label.includes("close")) return "close button";
-    if (text.includes("delete") || text.includes("remove")) return "delete button";
-    if (text.includes("add") || text.includes("create") || text.includes("new")) return "add button";
-    if (text.includes("edit") || text.includes("modify")) return "edit button";
-    if (text.includes("filter") || label.includes("filter")) return "filter control";
-    if (text.includes("sort") || label.includes("sort")) return "sort control";
-    if (role === "checkbox" || type === "checkbox") return "checkbox";
-    if (role === "switch") return "toggle switch";
-    if (tag === "select") return "dropdown";
-    if (tag === "textarea") return "text area";
-    if (tag === "a") return "link";
-    if (tag === "button" || role === "button") return "button";
-    if (tag === "input") return type ? `${type} input` : "input";
-    return tag || "element";
-  }
-
-  // Generate selector recommendations for top elements
-  function generateSelectorRecommendations(elements) {
-    return elements.slice(0, 10).map((el) => {
-      const purpose = inferElementPurpose(el);
-      const recommendation = {
-        purpose,
-        preferred: el.selector || el.selectors?.[0] || "",
-        alternatives: (el.selectors || []).slice(1, 3),
-      };
-      // Add text/label shortcuts if available
-      if (el.text && el.text.length <= 30 && !el.text.includes("\n")) {
-        recommendation.textShortcut = `text=${el.text}`;
-      }
-      if (el.label && el.label.length <= 30) {
-        recommendation.labelShortcut = `label=${el.label}`;
-      }
-      if (el.role) {
-        recommendation.roleShortcut = `role=${el.role}`;
-      }
-      return recommendation;
-    });
-  }
-
-  function collectFrontendContext(request) {
-    const goal = typeof request.goal === "string" ? request.goal : "";
-    const scope = typeof request.scope === "string" ? request.scope : null;
-    const includeDom = request.includeDom !== false;
-    const includeOffscreen = request.includeOffscreen === true;
-    const maxElements = clampInt(request.maxElements || 60, 20, 160);
-    const selectorHints = Array.isArray(request.selectorHints) ? request.selectorHints : [];
-    const root = resolveScopeRoot(scope);
-    const tokens = tokenizeGoal(goal, selectorHints);
-    const elements = includeDom ? collectCandidateElements(root, tokens, maxElements, includeOffscreen, selectorHints) : [];
-    const headings = includeDom ? collectHeadings(root) : [];
-    const active = document.activeElement && document.activeElement !== document.body ? getElementDescriptor(document.activeElement, false) : null;
-    const suggestedSelectors = includeDom ? generateSelectorRecommendations(elements) : [];
+    walk(startNode, 0, "");
     return {
-      kind: "frontend_context",
-      goal,
-      scope,
+      kind: "read_page",
+      tree: lines.join(""),
+      truncated,
       url: window.location.href,
       title: document.title,
-      viewport: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        scrollX: window.scrollX,
-        scrollY: window.scrollY,
-      },
-      elements,
-      headings,
-      activeElement: active,
-      suggestedSelectors,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    };
+  }
+
+  function findElements(query, maxResults) {
+    const limit = clampInt(maxResults || 20, 1, 20);
+    const target = normalizeText(query);
+    if (!target) return { kind: "find_elements", query: query, matches: [] };
+
+    const tokens = target.split(/\s+/).filter(function (t) { return t.length > 1; });
+    const candidates = [];
+    const allElements = document.querySelectorAll("*");
+    let inspected = 0;
+
+    for (const el of allElements) {
+      if (++inspected > 5000) break;
+      if (!isElementVisible(el)) continue;
+      if (el.closest && el.closest("#" + WIDGET_CONTAINER_ID)) continue;
+
+      const role = getImplicitRole(el);
+      const name = getAccessibleName(el);
+      if (!name && !SEMANTIC_ROLES.has(role)) continue;
+
+      const haystack = normalizeText([
+        name,
+        getAssociatedLabelText(el),
+        el.getAttribute && el.getAttribute("placeholder") || "",
+        el.id || "",
+        role,
+      ].join(" "));
+
+      const score = scoreText(haystack, tokens);
+      if (score <= 0) continue;
+
+      candidates.push({ el: el, score: score, role: role, name: name });
+    }
+
+    candidates.sort(function (a, b) { return b.score - a.score; });
+    var results = candidates.slice(0, limit);
+
+    return {
+      kind: "find_elements",
+      query: query,
+      matches: results.map(function (item) {
+        var ref = refMap.assign(item.el);
+        var states = getElementStates(item.el);
+        var match = { ref: ref, role: item.role, name: item.name };
+        if (states.length) match.states = states;
+        return match;
+      }),
     };
   }
 
@@ -1854,6 +1952,13 @@
   }
 
   async function resolveActionTarget(action, signal) {
+    if (action.ref) {
+      const el = refMap.resolve(action.ref);
+      if (el && isElementConnected(el) && isElementVisible(el)) {
+        action._resolvedSelector = action.ref;
+        return el;
+      }
+    }
     const selectors = getActionSelectorCandidates(action);
     let match = resolveSelectorAcrossRoots(selectors, getActionSearchRoots(action, selectors, { includeDocument: true }));
     if (!match && selectors.length && action.timeoutMs) {
@@ -2586,10 +2691,10 @@
     }
   }
 
-  async function executeFrontendContext(toolCall, ui, signal) {
+  async function executeReadPage(toolCall, ui, signal) {
     throwIfAborted(signal);
-    const request = toolCall && toolCall.context && typeof toolCall.context === "object" ? toolCall.context : toolCall || {};
-    const title = toolCall.goal || request.goal || "Reviewing the page";
+    const options = toolCall.readPageOptions || toolCall.context || {};
+    const title = toolCall.goal || "Reading page structure";
     if (ui && typeof ui.setActivity === "function") {
       ui.setActivity({ title, status: "running", steps: [] });
     }
@@ -2599,9 +2704,14 @@
         screenshot = await ui.captureScreenshot(signal);
       }
       throwIfAborted(signal);
-      const context = collectFrontendContext(request);
+      const result = buildAccessibilityTree({
+        depth: options.depth || 15,
+        filter: options.filter || "all",
+        refId: options.refId || null,
+        maxChars: options.maxChars || 50000,
+      });
       if (screenshot) {
-        context.screenshot = screenshot;
+        result.screenshot = screenshot;
       }
       if (ui && typeof ui.setActivity === "function") {
         ui.setActivity({ title, status: "done", steps: [] });
@@ -2609,7 +2719,7 @@
           ui.scheduleClear(900);
         }
       }
-      return { id: toolCall.id, statusCode: 200, body: context };
+      return { id: toolCall.id, statusCode: 200, body: result };
     } catch (error) {
       if (isAbortError(error)) {
         if (ui && typeof ui.setActivity === "function") {
@@ -2626,7 +2736,33 @@
           ui.scheduleClear(1400);
         }
       }
-      return { id: toolCall.id, statusCode: 500, body: null, error: error.message || "Frontend context failed" };
+      return { id: toolCall.id, statusCode: 500, body: null, error: error.message || "read_page failed" };
+    }
+  }
+
+  async function executeFindElements(toolCall, ui, signal) {
+    throwIfAborted(signal);
+    try {
+      const result = findElements(toolCall.findQuery || "");
+      return { id: toolCall.id, statusCode: 200, body: result };
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      return { id: toolCall.id, statusCode: 500, body: null, error: error.message || "find failed" };
+    }
+  }
+
+  async function executeJsExec(toolCall, ui, signal) {
+    throwIfAborted(signal);
+    var code = toolCall.jsCode || "";
+    try {
+      var fn = new Function("return (" + code + "\n)");
+      var result = fn();
+      var serialized = result === undefined ? "undefined" :
+        typeof result === "object" ? JSON.stringify(result) : String(result);
+      return { id: toolCall.id, statusCode: 200, body: { kind: "js_exec", result: serialized } };
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      return { id: toolCall.id, statusCode: 500, body: null, error: error.message || "js_exec failed" };
     }
   }
 
@@ -2762,11 +2898,17 @@
     if (type === "backend") {
       return executeEndpointToolCall(toolCall, baseUrl, headerConfig, signal);
     }
-    if (type === "frontend_context") {
-      return executeFrontendContext(toolCall, ui, signal);
+    if (type === "read_page") {
+      return executeReadPage(toolCall, ui, signal);
+    }
+    if (type === "find_elements") {
+      return executeFindElements(toolCall, ui, signal);
     }
     if (type === "frontend") {
       return executeFrontendActions(toolCall, ui, signal);
+    }
+    if (type === "js_exec") {
+      return executeJsExec(toolCall, ui, signal);
     }
     return { id: toolCall.id, statusCode: 400, body: null, error: "Unknown tool type" };
   }
@@ -5250,18 +5392,25 @@
       toggle.classList.add("unread-pulse");
     }
 
+    function isActionToolType(type) {
+      return type === "frontend" || type === "js_exec";
+    }
+
     async function runToolCalls(toolCalls, signal) {
       throwIfAborted(signal);
-      const hasFrontendActions = toolCalls.some((call) => resolveToolType(call) === "frontend");
+      const hasFrontendActions = toolCalls.some(function (call) { return isActionToolType(resolveToolType(call)); });
       let didPrimeWarning = false;
       try {
-        const hasOnlyBackend = toolCalls.every((call) => resolveToolType(call) === "backend");
-        if (hasOnlyBackend) {
+        const hasOnlyNonFrontend = toolCalls.every(function (call) {
+          var t = resolveToolType(call);
+          return t === "backend" || t === "read_page" || t === "find_elements";
+        });
+        if (hasOnlyNonFrontend) {
           return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig, frontendUi, signal)));
         }
         const results = [];
         for (const call of toolCalls) {
-          if (!didPrimeWarning && resolveToolType(call) === "frontend" && typeof frontendUi.primeWarning === "function") {
+          if (!didPrimeWarning && isActionToolType(resolveToolType(call)) && typeof frontendUi.primeWarning === "function") {
             await frontendUi.primeWarning(signal);
             didPrimeWarning = true;
           }
@@ -5278,6 +5427,7 @@
     async function sendMessage(text, options = {}) {
       const messageText = String(text || "").trim();
       if (!messageText || isLoading || widgetHidden) return;
+      refMap.clear();
       const runEpoch = chatEpoch;
       const isRunStale = () => runEpoch !== chatEpoch;
 
