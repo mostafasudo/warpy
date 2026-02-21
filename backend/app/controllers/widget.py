@@ -19,6 +19,7 @@ from ..schemas.widget import (
     WidgetMessagePayload,
 )
 from ..services.agent_chain import AgentExecutor
+from ..services.context_budget import prune_messages
 from ..services.billing_service import consume_actions_for_tool_results, get_billing_actions_summary
 from ..services.transcription_service import transcribe_audio
 from ..workers.queue import get_redis_connection
@@ -324,7 +325,8 @@ async def widget_chat(
         if result.done and result.response:
             save_widget_message(session, conversation.id, "assistant", result.response)
             response_messages.append(WidgetMessagePayload(role="assistant", content=result.response))
-            save_tool_context(session, conversation.id, serialize_messages(result.messages))
+            capped = prune_messages(result.messages, model=llm_config.chat_model)
+            save_tool_context(session, conversation.id, serialize_messages(capped))
             session.commit()
             log_info("WidgetController", "widget_chat", "Chat completed", conversation_id=str(conversation.id))
             return WidgetChatResponse(
@@ -337,8 +339,9 @@ async def widget_chat(
             )
 
         if result.tool_calls:
+            capped_for_state = prune_messages(result.messages, model=llm_config.chat_model)
             state = serialize_state(
-                result.messages,
+                capped_for_state,
                 result.active_endpoint_ids,
                 [
                     ToolCallForLog(
@@ -366,7 +369,8 @@ async def widget_chat(
             )
 
         if result.messages:
-            save_tool_context(session, conversation.id, serialize_messages(result.messages))
+            capped_fallback = prune_messages(result.messages, model=llm_config.chat_model)
+            save_tool_context(session, conversation.id, serialize_messages(capped_fallback))
         session.commit()
         return WidgetChatResponse(
             conversationId=conversation.id,

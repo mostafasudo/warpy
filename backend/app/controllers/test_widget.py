@@ -470,3 +470,108 @@ def test_widget_transcribe_stream_limit(client: TestClient, monkeypatch: pytest.
     )
     assert response.status_code == 413
     assert called["count"] == 0
+
+
+def test_widget_chat_caps_tool_context_on_done(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+
+    large_messages = [
+        SystemMessage(content="sys"),
+        HumanMessage(content="q"),
+        ToolMessage(content="x" * 500_000, tool_call_id="c1"),
+    ]
+
+    class FakeExecutorWithLargeMessages:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+            return StepResult(response="done", done=True, messages=large_messages, active_endpoint_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeMessages)
+
+    saved_content: list[str] = []
+    original_save = None
+
+    import app.controllers.widget as widget_mod
+    original_save = widget_mod.save_tool_context
+
+    def capture_save(session, conversation_id, content):
+        saved_content.append(content)
+        return original_save(session, conversation_id, content)
+
+    monkeypatch.setattr("app.controllers.widget.save_tool_context", capture_save)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "hello"})
+    assert response.status_code == 200
+    assert response.json()["done"] is True
+    assert len(saved_content) == 1
+    from app.services.context_budget import count_tokens, get_token_budget
+    from langchain_core.messages import messages_from_dict
+    import json
+    msgs = messages_from_dict(json.loads(saved_content[0]))
+    total_tokens = sum(count_tokens(str(m.content or ""), "gpt-4o") for m in msgs)
+    assert total_tokens < 500_000
+
+
+def test_widget_chat_caps_pending_state_on_tool_calls(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+    from app.schemas.widget import ToolCallPayload
+
+    large_messages = [
+        SystemMessage(content="sys"),
+        HumanMessage(content="q"),
+        ToolMessage(content="y" * 500_000, tool_call_id="c1"),
+    ]
+    tool_call = ToolCallPayload(
+        id="tc_1",
+        endpoint_id=uuid4(),
+        name="do_thing",
+        tool_type="backend",
+        method="GET",
+        path="/items",
+        params={},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeExecutorWithLargeState:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+            return StepResult(tool_calls=[tool_call], done=False, messages=large_messages, active_endpoint_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeState)
+
+    saved_messages: list[str] = []
+    original_save_msg = None
+
+    import app.controllers.widget as widget_mod
+    original_save_msg = widget_mod.save_widget_message
+
+    def capture_save_msg(session, conversation_id, role, content):
+        if role == "pending_state":
+            saved_messages.append(content)
+        return original_save_msg(session, conversation_id, role, content)
+
+    monkeypatch.setattr("app.controllers.widget.save_widget_message", capture_save_msg)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
+    assert response.status_code == 200
+    assert response.json()["done"] is False
+    assert len(saved_messages) == 1
+    import json
+    state_data = json.loads(saved_messages[0])
+    from langchain_core.messages import messages_from_dict
+    msgs = messages_from_dict(state_data["messages"])
+    from app.services.context_budget import count_tokens
+    total_tokens = sum(count_tokens(str(m.content or ""), "gpt-4o") for m in msgs)
+    assert total_tokens < 500_000

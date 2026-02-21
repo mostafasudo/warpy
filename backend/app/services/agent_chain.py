@@ -18,6 +18,7 @@ from ..schemas.widget import ToolCallPayload, ToolResultPayload
 from .agent_execution import execute_endpoint
 from .agent_schema import SchemaFactory, serialize_args
 from .agent_tools import create_find_actions_tool, create_frontend_actions_tool, create_frontend_context_tool, get_endpoint_tools
+from .context_budget import MAX_HISTORY_PAIRS, prune_messages, truncate_tool_result
 from .hallucination_checker import HallucinationChecker
 from .tool_cache import ToolCache
 
@@ -146,6 +147,7 @@ class AgentExecutor:
             temperature=llm_config.temperature,
             api_key=settings.openai_api_key
         )
+        self._model = llm_config.chat_model
         self.active_endpoint_ids: list[UUID] = []
         self._tool_cache: ToolCache | None = None
         self._hallucination_checker = hallucination_checker or HallucinationChecker()
@@ -226,7 +228,8 @@ class AgentExecutor:
         conversation_history: list[dict[str, str]]
     ) -> list[BaseMessage]:
         messages: list[BaseMessage] = [SystemMessage(content=self._system_prompt)]
-        for msg in conversation_history:
+        recent_history = conversation_history[-(MAX_HISTORY_PAIRS * 2):]
+        for msg in recent_history:
             if msg["role"] == "user":
                 messages.append(HumanMessage(content=msg["content"]))
             elif msg["role"] == "assistant":
@@ -234,6 +237,12 @@ class AgentExecutor:
         if user_message:
             messages.append(HumanMessage(content=user_message))
         return messages
+
+    def _truncate_tool_content(self, content: str) -> str:
+        return truncate_tool_result(content, model=self._model)
+
+    def _ensure_budget(self, messages: list[BaseMessage]) -> list[BaseMessage]:
+        return prune_messages(messages, model=self._model)
 
     async def _generate_blocked_response(self, user_input: str) -> str:
         prompt = f"""User message: "{user_input}"
@@ -452,9 +461,10 @@ Keep it brief and friendly."""
             for result in tool_results:
                 body = result.body
                 if result.error:
-                    content = json.dumps({"error": result.error})
+                    raw_content = json.dumps({"error": result.error})
                 else:
-                    content = json.dumps({"status_code": result.status_code, "body": body})
+                    raw_content = json.dumps({"status_code": result.status_code, "body": body})
+                content = self._truncate_tool_content(raw_content)
                 tool_message = ToolMessage(content=content, tool_call_id=result.id)
                 messages.append(tool_message)
                 runtime_messages.append(tool_message)
@@ -471,6 +481,7 @@ Keep it brief and friendly."""
             iteration += 1
             tools = self._get_tools()
             llm_with_tools = self.llm.bind_tools(tools)
+            runtime_messages = self._ensure_budget(runtime_messages)
             response = await llm_with_tools.ainvoke(runtime_messages, config={"tags": ["main-agent"]})
             messages.append(response)
             runtime_messages.append(response)
@@ -515,7 +526,7 @@ Keep it brief and friendly."""
                             tool_result = f"Error: {str(error)}"
                     else:
                         tool_result = "Tool not found"
-                    tool_message = ToolMessage(content=tool_result, tool_call_id=tool_call["id"])
+                    tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
                     messages.append(tool_message)
                     runtime_messages.append(tool_message)
                 elif tool_name == "frontend_context":
@@ -604,7 +615,8 @@ Keep it brief and friendly."""
         self._sync_cache()
 
         messages = [SystemMessage(content=self._system_prompt)]
-        for message in conversation_history:
+        recent_history = conversation_history[-(MAX_HISTORY_PAIRS * 2):]
+        for message in recent_history:
             if message["role"] == "user":
                 messages.append(HumanMessage(content=message["content"]))
             elif message["role"] == "assistant":
@@ -617,6 +629,7 @@ Keep it brief and friendly."""
             iteration += 1
             tools = self._get_tools()
             llm_with_tools = self.llm.bind_tools(tools)
+            messages = self._ensure_budget(messages)
             response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
             messages.append(response)
             if not response.tool_calls:
@@ -640,7 +653,7 @@ Keep it brief and friendly."""
                             added_ids.append(endpoint_id)
                     if added_ids:
                         self._update_cache_after_discovery(added_ids)
-                    messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
+                    messages.append(ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"]))
                     continue
                 if tool_name in ("frontend_context", "frontend"):
                     messages.append(ToolMessage(
@@ -661,7 +674,7 @@ Keep it brief and friendly."""
                         conversation_id=self.conversation_id,
                         tool_call_id=tool_call.get("id"),
                     )
-                    tool_result = json.dumps(result, indent=2)
+                    tool_result = self._truncate_tool_content(json.dumps(result, indent=2))
                     messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
                     continue
 
@@ -673,6 +686,6 @@ Keep it brief and friendly."""
                     except Exception as error:
                         log_error("AgentExecutor", "run", f"Tool execution failed: {tool_name}", exc=error)
                         tool_result = f"Error executing tool: {str(error)}"
-                messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
+                messages.append(ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"]))
         log_info("AgentExecutor", "run", "Max iterations reached")
         return await self._generate_max_iterations_response(user_message)

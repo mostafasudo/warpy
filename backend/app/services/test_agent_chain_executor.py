@@ -2,7 +2,7 @@ import asyncio
 import json
 from uuid import UUID
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
@@ -368,3 +368,78 @@ def test_build_frontend_recovery_note_for_suspicious_text_click_success():
     assert note is not None
     assert "Frontend verification directive" in note
     assert "scope/scopeAlternatives" in note
+
+
+def test_run_step_truncates_large_tool_results(monkeypatch):
+    responses = [AIMessage(content="processed", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    large_body = {"kind": "frontend_context", "elements": [{"id": i} for i in range(500)], "screenshot": "A" * 200_000}
+    tool_results = [
+        ToolResultPayload(id="fc-1", statusCode=200, body=large_body)
+    ]
+    result = asyncio.run(executor.run_step(None, [], tool_results=tool_results))
+    assert result.done is True
+    tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+    assert len(tool_msgs) == 1
+    from app.services.context_budget import MAX_TOOL_RESULT_TOKENS, count_tokens
+    assert count_tokens(tool_msgs[0].content, "gpt-4o") <= MAX_TOOL_RESULT_TOKENS
+
+
+def test_run_step_prunes_messages_before_invoke(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    result = asyncio.run(executor.run_step("hello", []))
+    assert result.done is True
+    invoked_messages = llm.invocations[0]
+    from app.services.context_budget import count_messages_tokens, get_token_budget
+    total = count_messages_tokens(invoked_messages, "gpt-4o")
+    assert total <= get_token_budget("gpt-4o")
+
+
+def test_run_truncates_endpoint_tool_results(monkeypatch):
+    large_result = {"data": [{"id": i, "name": f"item_{i}" * 100} for i in range(1000)]}
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_actions", "args": {"query": "test"}}]),
+        AIMessage(content="done", tool_calls=[])
+    ]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    tool = build_tool("find_actions", json.dumps(large_result))
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: tool)
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    result = asyncio.run(executor.run("hello", []))
+    assert result == "done"
+    from app.services.context_budget import MAX_TOOL_RESULT_TOKENS, count_tokens
+    invoked_msgs = llm.invocations[1]
+    tool_msgs = [m for m in invoked_msgs if isinstance(m, ToolMessage)]
+    for tm in tool_msgs:
+        assert count_tokens(tm.content, "gpt-4o") <= MAX_TOOL_RESULT_TOKENS
+
+
+def test_build_messages_limits_history(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    checker = MockChecker([CheckResult(mode="ALLOW")])
+    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, hallucination_checker=checker)
+    from app.services.context_budget import MAX_HISTORY_PAIRS
+    history = []
+    for i in range(MAX_HISTORY_PAIRS + 20):
+        history.append({"role": "user", "content": f"msg {i}"})
+        history.append({"role": "assistant", "content": f"resp {i}"})
+    result = asyncio.run(executor.run_step("latest", history))
+    assert result.done is True
+    from langchain_core.messages import HumanMessage as HM
+    invoked_messages = llm.invocations[0]
+    human_msgs = [m for m in invoked_messages if isinstance(m, HM)]
+    assert len(human_msgs) <= MAX_HISTORY_PAIRS + 1
