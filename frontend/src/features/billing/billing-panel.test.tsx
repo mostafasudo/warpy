@@ -37,7 +37,7 @@ describe("BillingPanel", () => {
         monthlyActionsRemaining: 1200,
         monthlyActionQuota: 15000,
         topupActionsRemaining: 0,
-        lifetimeActionsRemaining: 250,
+        lifetimeActionsRemaining: 50,
         isWidgetHidden: false,
         canManageSubscription: true,
         subscriptionStatus: "active",
@@ -101,11 +101,11 @@ describe("BillingPanel", () => {
     mockedUseBillingSummaryQuery.mockReturnValue({
       data: {
         plan: "free",
-        actionsRemaining: 250,
+        actionsRemaining: 50,
         monthlyActionsRemaining: 0,
         monthlyActionQuota: 0,
         topupActionsRemaining: 0,
-        lifetimeActionsRemaining: 250,
+        lifetimeActionsRemaining: 50,
         isWidgetHidden: false,
         canManageSubscription: false,
         subscriptionStatus: null,

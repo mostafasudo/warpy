@@ -38,9 +38,22 @@ def test_get_or_create_billing_account_initializes_free_plan():
     with session_scope() as session:
         account = get_or_create_billing_account(session, "user-1")
         assert account.plan == BillingPlan.free
-        assert account.lifetime_actions_remaining == 250
+        assert account.lifetime_actions_remaining == 50
         assert account.monthly_actions_remaining == 0
         assert account.topup_actions_remaining == 0
+
+
+def test_get_or_create_billing_account_keeps_existing_lifetime_actions():
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        account = get_or_create_billing_account(session, "user-1")
+        account.lifetime_actions_remaining = 250
+        session.flush()
+
+    with session_scope() as session:
+        account = get_or_create_billing_account(session, "user-1")
+        assert account.lifetime_actions_remaining == 250
 
 
 def test_consume_actions_for_tool_results_is_idempotent():

@@ -10,7 +10,7 @@ from ..core.logger import log_info, log_warning
 from ..models import BillingAccount, BillingActionConsumption, BillingPlan, BillingTopUpCredit
 
 
-FREE_LIFETIME_ACTIONS = 250
+FREE_LIFETIME_ACTIONS = 50
 BASIC_MONTHLY_ACTIONS = 15_000
 PRO_MONTHLY_ACTIONS = 60_000
 
