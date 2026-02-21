@@ -284,6 +284,8 @@ def test_frontend_capability_enabled_includes_prompt_section(monkeypatch):
     assert "layered UIs" in executor._system_prompt
     assert "scope/scopeAlternatives" in executor._system_prompt
     assert "Never ask the user to send a screenshot" in executor._system_prompt
+    assert "Before confirming success for order-sensitive or state-sensitive UI changes" in executor._system_prompt
+    assert "If the user says the result is wrong or not what they asked for" in executor._system_prompt
 
 
 def test_build_frontend_recovery_note_when_element_not_found():

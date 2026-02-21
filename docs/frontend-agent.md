@@ -232,6 +232,8 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 - Frontend context is only requested when needed.
 - Context is DOM-only, capped, and scored to limit payload size.
 - Frontend actions are sequential and retryable with rescans.
+- For order-sensitive/state-sensitive edits (for example step order), the agent should verify resulting UI state with `frontend_context` before claiming completion.
+- If a user disputes a previous completion claim, the agent should trust the report enough to re-check the UI state first, then repair if needed.
 - On `ELEMENT_NOT_FOUND`, the expected recovery path is automated rescan (`frontend_context`) and selector fallback retries, not asking the user for a manual screenshot.
 - Sensitive field sanitization: text typed into password/secret/token fields is redacted (`***`) before storage.
 - The `goal` parameter is required for frontend actions to ensure meaningful activity labels.

@@ -85,7 +85,9 @@ FRONTEND_EXECUTION_FRAGMENT = """
 - For layered UIs (menus, popovers, dialogs, comboboxes), open the trigger control first, then select within that surfaced container.
 - For unstable targets, send selectorAlternatives (1-3) alongside the primary selector.
 - For ambiguous labels, set scope/scopeAlternatives so matching stays inside the intended container, not global page navigation.
-- If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user."""
+- If a frontend step is unclear or fails, request a new frontend_context with refined scope/hints before asking the user.
+- Before confirming success for order-sensitive or state-sensitive UI changes (step order, selected option, toggle state), verify the resulting UI state via frontend_context in the same turn.
+- If the user says the result is wrong or not what they asked for, treat that as a likely mismatch: re-check state with frontend_context and fix it before replying; do not repeat the prior claim without fresh verification."""
 FRONTEND_TIPS_FRAGMENT = """
 Frontend Action Tips:
 - If an action reports ELEMENT_NOT_FOUND, the selector didn't match anything - request fresh frontend_context with refined scope/hints
@@ -98,6 +100,7 @@ Frontend Action Tips:
 - After failures, always request fresh frontend_context - the DOM may have changed
 - frontend_context may include a screenshot field (base64 image) showing the actual page - use it to visually confirm element locations and page state
 - Never ask the user to send a screenshot; use frontend_context to capture a fresh one automatically
+- If the user corrects your previous completion claim, run a verification pass first (frontend_context focused on the changed UI area), then confirm or repair based on what you find
 """
 
 
