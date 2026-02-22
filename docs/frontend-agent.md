@@ -277,6 +277,7 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 - For order-sensitive/state-sensitive edits, the agent should verify resulting UI state with `read_page` before claiming completion.
 - If a user disputes a previous completion claim, the agent should trust the report enough to re-check the UI state first, then repair if needed.
 - On `ELEMENT_NOT_FOUND`, the expected recovery path is `read_page` rescan and ref-based retries, not asking the user for a manual screenshot.
+- On empty tree from `read_page` (common with async-loading pages showing spinners), the agent should wait 1-2s then retry with `filter="all"` up to 3 times. The agent must never tell the user the page isn't loading or ask them to refresh.
 - Sensitive field sanitization: text typed into password/secret/token fields is redacted (`***`) before storage.
 - The `goal` parameter is required for frontend actions to ensure meaningful activity labels.
 - `js_exec` is billable and recorded in the activity panel. It should only be used as a last resort.
@@ -298,7 +299,7 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 
 ### Widget
 - Ref map: bidirectional mapping between `ref_N` IDs and live DOM elements (`Map` + `WeakMap`).
-- Accessibility tree builder: recursive DOM walk producing compact text with ref IDs.
+- Accessibility tree builder: recursive DOM walk producing compact text with ref IDs. The `aria-hidden` check is skipped on the start node (`document.body`) so the walker still traverses portal-rendered modals (e.g., `react-modal`) that set `aria-hidden="true"` on `document.body`.
 - Find engine: natural language element search using token scoring.
 - Action engine: ref-based element resolution with CSS selector fallback, simulating user events.
 - Activity UI and element highlighting.

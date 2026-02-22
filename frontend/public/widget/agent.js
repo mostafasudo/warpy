@@ -1406,7 +1406,7 @@
       if (el.closest && el.closest("#" + WIDGET_CONTAINER_ID)) return;
       const style = getComputedStyle(el);
       if (!style || style.display === "none" || style.visibility === "hidden") return;
-      if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true") return;
+      if (el !== document.body && (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true")) return;
 
       const role = getImplicitRole(el);
       const interesting = isSemanticNode(el, role, filterMode);

@@ -223,6 +223,8 @@ def test_frontend_capability_enabled_includes_prompt_section(monkeypatch):
     assert "Never ask the user to send a screenshot" in executor._system_prompt
     assert "Before confirming success for order-sensitive or state-sensitive UI changes" in executor._system_prompt
     assert "If the user corrects your previous completion claim" in executor._system_prompt
+    assert "empty tree" in executor._system_prompt
+    assert "Never tell the user the page isn't loading" in executor._system_prompt
 
 
 def test_system_prompt_includes_safety_guidelines():

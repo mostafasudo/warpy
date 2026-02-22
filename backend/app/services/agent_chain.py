@@ -101,6 +101,7 @@ Frontend Tips:
 - read_page may include a screenshot field (base64 image) showing the actual page — use it to visually confirm element locations.
 - Never ask the user to send a screenshot; use read_page to capture one automatically.
 - If the user corrects your previous completion claim, run a verification pass (read_page), then confirm or repair.
+- If read_page returns an empty tree, the page is likely still loading (spinner/skeleton). Wait ~2s with a frontend wait action, then retry read_page with filter="all". Retry up to 3 times. Never tell the user the page isn't loading or ask them to refresh.
 """
 
 
