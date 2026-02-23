@@ -1,0 +1,6 @@
+{
+  "sync": ["backend/alembic", "backend/alembic.ini"],
+  "envOverrides": {
+    "VITE_API_URL": "http://localhost:${BACKEND_PORT}"
+  }
+}

@@ -2,62 +2,54 @@
 
 Run multiple git worktrees in parallel, each with isolated Docker containers and ports.
 
+Powered by [`worktree-compose`](../packages/worktree-compose/README.md) (`wtc`).
+
 | Command | What it does |
 |---------|-------------|
 | `pnpm worktree start` | Build and start containers for all worktrees |
 | `pnpm worktree stop` | Stop containers for all worktrees |
+| `pnpm worktree restart` | Restart containers (after migrations, config changes) |
 | `pnpm worktree list` | Print URLs and ports for every worktree |
-| `pnpm worktree promote <index>` | Merge a worktree branch into the current branch |
-| `pnpm worktree clean` | Stop containers and remove all worktrees except current |
+| `pnpm worktree promote <index>` | Copy changed files from a worktree into the current branch |
+| `pnpm worktree clean` | Stop containers and remove all worktrees |
 
-## Commands
-
-### `pnpm worktree start`
-
-Starts Docker Compose for every worktree except main. For each worktree it:
-
-1. Syncs `docker-compose.yml`, Dockerfiles, alembic config, and `.env` from main (always fresh)
-2. Stops any stale `*-wt-*` containers
-3. Assigns isolated ports (see table below)
-4. Sets `COMPOSE_PROJECT_NAME` to `{repo}-wt-{index}-{branch}`
-5. Sets `VITE_API_URL` to point at the worktree's backend port
-6. Runs `docker compose up -d --build`
-
-### `pnpm worktree stop`
-
-Runs `docker compose down` for every non-main worktree.
-
-### `pnpm worktree list`
-
-Prints all worktrees with their branch, path, project name, and localhost URLs.
-
-### `pnpm worktree promote <index>`
-
-Copies all changed files from a worktree into the current branch as uncommitted changes, including untracked files.
-
-Aborts if any of those files already have uncommitted changes locally, so existing work is never overwritten. Commit or stash local changes first if there's a conflict.
-
-Run `pnpm worktree list` to find the index.
-
-### `pnpm worktree clean`
-
-Stops containers and removes all worktrees except the current one. Prunes stale worktree refs.
+All commands accept optional indices: `pnpm worktree start 1`, `pnpm worktree start 1 2 3`.
 
 ## Port allocation
 
-Main worktree uses default ports (unset env = defaults in `docker-compose.yml`). Each additional worktree N gets `base + N`:
+`wtc` auto-detects services with `${VAR:-default}` port patterns in `docker-compose.yml`. Formula: `20000 + default_port + worktree_index`.
 
-| Service  | Main (default) | Worktree N    |
-|----------|---------------|---------------|
-| Postgres | 5434          | 15434 + N     |
-| Redis    | 6380          | 16380 + N     |
-| Backend  | 8000          | 18000 + N     |
-| Frontend | 5173          | 15173 + N     |
+| Service  | Main (default) | Worktree 1 | Worktree 2 |
+|----------|---------------|------------|------------|
+| Postgres | 5434          | 25435      | 25436      |
+| Redis    | 6380          | 26381      | 26382      |
+| Backend  | 8000          | 28001      | 28002      |
+| Frontend | 5173          | 25174      | 25175      |
 
 ## Project naming
 
 `COMPOSE_PROJECT_NAME` follows the pattern `{repo}-wt-{index}-{branch}`, lowercased with non-alphanumeric characters replaced by hyphens.
 
+## Configuration
+
+Warpy-specific config lives in `.wtcrc.json`:
+
+```json
+{
+  "sync": ["backend/alembic", "backend/alembic.ini"],
+  "envOverrides": {
+    "VITE_API_URL": "http://localhost:${BACKEND_PORT}"
+  }
+}
+```
+
+- **sync**: Extra files/dirs copied from main into each worktree on start.
+- **envOverrides**: Additional env vars injected with `${PORT}` interpolation.
+
+## MCP server
+
+Agents can manage their worktree stack via MCP tools (`wtc_start`, `wtc_stop`, `wtc_restart`, `wtc_list`, `wtc_promote`, `wtc_clean`). See the [wtc README](../packages/worktree-compose/README.md#mcp-server) for setup.
+
 ## How it works
 
-`docker-compose.yml` uses `${VAR:-default}` syntax for all host ports. The worktree script copies a fresh `.env` from main and appends `POSTGRES_PORT`, `REDIS_PORT`, `BACKEND_PORT`, `FRONTEND_PORT`, and `VITE_API_URL` before calling `docker compose up`. The frontend Dockerfile and Vite config read `FRONTEND_PORT` to bind the dev server to the correct port inside the container.
+`docker-compose.yml` uses `${VAR:-default}` syntax for all host ports. `wtc` copies a fresh `.env` from main, appends port overrides in a delimited block, and runs `docker compose up` with an isolated `COMPOSE_PROJECT_NAME`.

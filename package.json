@@ -1,8 +1,9 @@
 {
   "scripts": {
-    "worktree": "bash scripts/worktree.sh"
+    "worktree": "wtc"
   },
   "devDependencies": {
-    "shadcn": "^3.7.0"
+    "shadcn": "^3.7.0",
+    "worktree-compose": "^0.1.0"
   }
 }
