@@ -3265,6 +3265,28 @@
         color: var(--cta-fg);
       }
 
+      .cta-widget-close-hint {
+        display: none;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: none;
+        color: inherit;
+        font-size: 11px;
+        line-height: 1;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        .cta-widget-close {
+          width: auto;
+          padding: 0 8px;
+        }
+
+        .cta-widget-close-hint {
+          display: inline-flex;
+        }
+      }
+
       .cta-widget-close:active {
         transform: translateY(1px);
       }
@@ -4360,6 +4382,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
+            <span class="cta-widget-close-hint" aria-hidden="true">Esc</span>
           </button>
         </div>
       </div>
