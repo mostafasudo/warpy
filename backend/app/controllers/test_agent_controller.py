@@ -94,7 +94,6 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert fetched.status_code == 200
     body = fetched.json()
     assert body["widgetTitle"] == "Warpy"
-    assert body["widgetSubtitle"] == "Ready to act"
     assert body["widgetIconUrl"] is None
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
@@ -105,7 +104,6 @@ def test_agent_widget_config_get_and_update(client: TestClient):
         headers=auth_headers(),
         json={
             "widgetTitle": "Acme Assistant",
-            "widgetSubtitle": "Here to help",
             "widgetIconUrl": "https://example.com/icon.png",
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
@@ -131,7 +129,6 @@ def test_agent_widget_config_icon_url_validation(client: TestClient):
         headers=auth_headers(),
         json={
             "widgetTitle": "Acme Assistant",
-            "widgetSubtitle": "Here to help",
             "widgetIconUrl": "not a url",
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
@@ -150,7 +147,6 @@ def test_agent_widget_config_rejects_blank_title(client: TestClient):
         headers=auth_headers(),
         json={
             "widgetTitle": "   ",
-            "widgetSubtitle": "Here to help",
             "widgetIconUrl": None,
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
@@ -158,6 +154,27 @@ def test_agent_widget_config_rejects_blank_title(client: TestClient):
         },
     )
     assert invalid.status_code == 400
+
+
+def test_agent_widget_config_allows_blank_empty_state_fields(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    updated = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetIconUrl": None,
+            "widgetEmptyTitle": "   ",
+            "widgetEmptyDescription": "   ",
+            "widgetInputPlaceholder": "Ask Acme…",
+        },
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()
+    assert updated_body["widgetEmptyTitle"] == ""
+    assert updated_body["widgetEmptyDescription"] == ""
 
 
 def test_agent_widget_install_preferences_get_and_update(client: TestClient):

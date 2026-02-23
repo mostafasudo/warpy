@@ -28,10 +28,11 @@ describe("widget config mutations", () => {
 
   it("updates cache after widget config update", () => {
     useUpdateAgentWidgetConfig()
-    const options = (useMutation as unknown as jest.Mock).mock.calls[0]?.[0] as any
+    const options = (useMutation as unknown as jest.Mock).mock.calls[0]?.[0] as {
+      onSuccess?: (data: unknown, variables: unknown, context: unknown) => void
+    }
     const next = {
       widgetTitle: "Acme",
-      widgetSubtitle: "Ready",
       widgetIconUrl: null,
       widgetEmptyTitle: "Hi",
       widgetEmptyDescription: "Hello",
@@ -41,4 +42,3 @@ describe("widget config mutations", () => {
     expect(setQueryData).toHaveBeenCalledWith(agentWidgetConfigQueryKey, next)
   })
 })
-

@@ -212,7 +212,6 @@ class Agent(Base):
     widget_api_key_hash_draft = Column(Text, nullable=True)
     widget_api_key_last4_draft = Column(Text, nullable=True)
     widget_title = Column(Text, nullable=False, server_default="Warpy")
-    widget_subtitle = Column(Text, nullable=False, server_default="Ready to act")
     widget_icon_url = Column(Text, nullable=True)
     widget_empty_title = Column(Text, nullable=False, server_default="What would you like to do?")
     widget_empty_description = Column(

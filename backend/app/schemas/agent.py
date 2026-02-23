@@ -57,10 +57,9 @@ class AgentWidgetConfigResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     widget_title: str = Field(alias="widgetTitle", min_length=1, max_length=80)
-    widget_subtitle: str = Field(alias="widgetSubtitle", min_length=1, max_length=80)
     widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl", max_length=2048)
-    widget_empty_title: str = Field(alias="widgetEmptyTitle", min_length=1, max_length=120)
-    widget_empty_description: str = Field(alias="widgetEmptyDescription", min_length=1, max_length=240)
+    widget_empty_title: str = Field(alias="widgetEmptyTitle", max_length=120)
+    widget_empty_description: str = Field(alias="widgetEmptyDescription", max_length=240)
     widget_input_placeholder: str = Field(alias="widgetInputPlaceholder", min_length=1, max_length=120)
     widget_security_disclosure_enabled: bool = Field(default=True, alias="widgetSecurityDisclosureEnabled")
 
@@ -149,4 +148,3 @@ class UserRateLimitsUpdate(BaseModel):
     enabled: bool
     daily_limit: int | None = Field(default=None, alias="dailyLimit", ge=1)
     monthly_limit: int | None = Field(default=None, alias="monthlyLimit", ge=1)
-

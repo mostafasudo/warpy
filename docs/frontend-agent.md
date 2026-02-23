@@ -261,6 +261,8 @@ Execution reliability:
 - Frontend-interaction warning appears slightly before frontend actions run, remains visible for a minimum duration, and persists briefly after completion.
 - Warning is visible both when the panel is open (inline subtle alert) and when collapsed (launcher-adjacent subtle alert).
 - While a run is active and the panel is open, Send is replaced by an immediate Stop button.
+- Chat header controls are icon-only: Security/Privacy on the left, New Chat + Close on the right.
+- Header, message area, footer, and Security/Privacy panel share a unified surface background (no section divider lines).
 - Default execution failures render a Resume button that retries the original failed query; consecutive duplicate resume errors are collapsed into a single latest message.
 - Screen share prompt: a minimal inline bar (sticky at the top of the messages area) with a status dot, descriptive text, and Share/Skip actions. Uses the same design tokens as the rest of the widget (`.cta-widget-screen-prompt`). Shows a live countdown ("Continuing in Xs") on a second line. When sharing is active, the bar changes to "Sharing this tab" with a pulsing dot and a "Stop" link. The bar remains visible in the empty-state/new-chat view so users always have access to the stop control.
 

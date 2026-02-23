@@ -3223,76 +3223,19 @@
       .cta-widget-header {
         grid-area: header;
         position: relative;
-        z-index: 2;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: 12px;
         padding: 10px 14px;
         padding-top: calc(10px + env(safe-area-inset-top, 0px));
-        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
-        backdrop-filter: blur(20px) saturate(180%);
-        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        background: transparent;
       }
 
       .cta-widget-header-left {
         display: flex;
         align-items: center;
-        gap: 10px;
-        min-width: 0;
-      }
-
-      .cta-widget-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--cta-bubble-assistant);
-        border: 1px solid var(--cta-border-strong);
-        flex-shrink: 0;
-        position: relative;
-      }
-
-      .cta-widget-avatar svg,
-      .cta-widget-avatar img {
-        width: 18px;
-        height: 18px;
-      }
-
-      .cta-widget-avatar svg {
-        color: var(--cta-accent);
-      }
-
-      .cta-widget-avatar img {
-        border-radius: 6px;
-        object-fit: contain;
-        pointer-events: none;
-        user-select: none;
-        -webkit-user-drag: none;
-      }
-
-
-
-      .cta-widget-title {
-        font-size: 13px;
-        font-weight: 650;
-        letter-spacing: -0.01em;
-        margin: 0;
-        color: var(--cta-fg);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .cta-widget-subtitle {
-        font-size: 12px;
-        margin: 0;
-        color: var(--cta-fg-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        min-width: 32px;
       }
 
       .cta-widget-header-actions {
@@ -3322,28 +3265,6 @@
         color: var(--cta-fg);
       }
 
-      .cta-widget-close-hint {
-        display: none;
-        align-items: center;
-        padding: 2px 6px;
-        border-radius: 8px;
-        border: none;
-        color: inherit;
-        font-size: 11px;
-        line-height: 1;
-      }
-
-      @media (hover: hover) and (pointer: fine) {
-        .cta-widget-close {
-          width: auto;
-          padding: 0 8px;
-        }
-
-        .cta-widget-close-hint {
-          display: inline-flex;
-        }
-      }
-
       .cta-widget-close:active {
         transform: translateY(1px);
       }
@@ -3360,13 +3281,16 @@
       }
 
       .cta-widget-new-chat {
+        width: 32px;
         height: 32px;
-        padding: 0 8px;
+        padding: 0;
         background: transparent;
         border: none;
         border-radius: 10px;
         cursor: pointer;
-        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         color: var(--cta-fg-muted);
         transition: color 160ms ease, transform 160ms ease;
       }
@@ -3382,6 +3306,12 @@
       .cta-widget-new-chat:focus-visible {
         outline: none;
         box-shadow: 0 0 0 4px var(--cta-focus);
+      }
+
+      .cta-widget-new-chat svg {
+        width: 16px;
+        height: 16px;
+        color: inherit;
       }
 
       .cta-widget-security-btn {
@@ -3421,14 +3351,12 @@
       .cta-security-panel {
         position: absolute;
         inset: 0;
-        background: var(--cta-surface-strong);
+        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.985);
         display: flex;
         flex-direction: column;
         z-index: 10;
         transform: translateX(100%);
         transition: transform 240ms cubic-bezier(0.2, 0.9, 0.2, 1);
-        backdrop-filter: blur(32px) saturate(180%);
-        -webkit-backdrop-filter: blur(32px) saturate(180%);
       }
 
       .cta-security-panel.open {
@@ -3441,9 +3369,7 @@
         gap: 10px;
         padding: 10px 14px;
         padding-top: calc(10px + env(safe-area-inset-top, 0px));
-        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
-        backdrop-filter: blur(20px) saturate(180%);
-        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        background: transparent;
       }
 
       .cta-security-back {
@@ -3486,6 +3412,7 @@
         flex: 1;
         overflow-y: auto;
         padding: 20px 16px;
+        background: transparent;
       }
 
       .cta-security-section {
@@ -3543,15 +3470,13 @@
 
       .cta-widget-messages {
         grid-area: messages;
-        grid-row: 1 / -1;
         overflow-y: auto;
         min-height: 0;
         padding: 14px;
-        padding-top: calc(66px + env(safe-area-inset-top, 0px));
-        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
         display: flex;
         flex-direction: column;
         gap: 10px;
+        background: transparent;
         scrollbar-width: thin;
         scrollbar-color: var(--cta-border) transparent;
         -webkit-overflow-scrolling: touch;
@@ -3581,21 +3506,21 @@
       }
 
       .cta-widget-empty-icon {
-        width: 56px;
-        height: 56px;
+        width: 62px;
+        height: 62px;
         border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
         margin-bottom: 14px;
-        background: var(--cta-bubble-assistant);
-        border: 1px solid var(--cta-border-strong);
+        background: var(--cta-surface-strong);
+        border: 1px solid var(--cta-border);
       }
 
       .cta-widget-empty-icon svg,
       .cta-widget-empty-icon img {
-        width: 28px;
-        height: 28px;
+        width: 30px;
+        height: 30px;
       }
 
       .cta-widget-empty-icon svg {
@@ -3981,11 +3906,8 @@
       .cta-widget-input-area {
         grid-area: footer;
         position: relative;
-        z-index: 2;
         padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
-        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.85);
-        backdrop-filter: blur(20px) saturate(180%);
-        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        background: transparent;
       }
 
       .cta-widget-front-warning {
@@ -4360,7 +4282,6 @@
     `;
 
     let widgetTitle = "Warpy";
-    let widgetSubtitle = "Ready to act";
     let widgetIconUrl = null;
     let widgetEmptyTitle = "What would you like to do?";
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
@@ -4422,26 +4343,23 @@
     panel.innerHTML = `
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
-          <div class="cta-widget-avatar">
-            ${DEFAULT_WIDGET_ICON}
-          </div>
-          <div>
-            <p class="cta-widget-title"></p>
-            <p class="cta-widget-subtitle"></p>
-          </div>
-        </div>
-        <div class="cta-widget-header-actions">
           <button class="cta-widget-security-btn" aria-label="Security & Privacy" title="Security & Privacy">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
           </button>
-          <button class="cta-widget-new-chat">New chat</button>
+        </div>
+        <div class="cta-widget-header-actions">
+          <button class="cta-widget-new-chat" aria-label="Start new chat" title="Start new chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H8l-5 5V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <path d="M12 7v6M9 10h6"/>
+            </svg>
+          </button>
           <button class="cta-widget-close" aria-label="Close (Esc)" aria-keyshortcuts="Escape" title="Close (Esc)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
-            <span class="cta-widget-close-hint" aria-hidden="true">Esc</span>
           </button>
         </div>
       </div>
@@ -4523,9 +4441,6 @@
     const voiceHintEl = panel.querySelector(".cta-voice-hint");
     const voiceErrorEl = panel.querySelector(".cta-voice-error");
     const frontWarningEl = panel.querySelector(".cta-widget-front-warning");
-    const titleEl = panel.querySelector(".cta-widget-title");
-    const subtitleEl = panel.querySelector(".cta-widget-subtitle");
-    const avatarEl = panel.querySelector(".cta-widget-avatar");
     const securityBtnEl = panel.querySelector(".cta-widget-security-btn");
     const securityPanelEl = panel.querySelector(".cta-security-panel");
     const securityBackEl = panel.querySelector(".cta-security-back");
@@ -4548,17 +4463,11 @@
 
     function syncHeader() {
       panel.setAttribute("aria-label", widgetTitle);
-      if (titleEl) titleEl.textContent = widgetTitle;
-      if (subtitleEl) subtitleEl.textContent = widgetSubtitle;
       if (inputEl) inputEl.setAttribute("placeholder", widgetInputPlaceholder);
     }
 
     function syncIcons() {
       toggle.innerHTML = getIconMarkup();
-      if (!avatarEl) return;
-      const existingIcon = avatarEl.querySelector("svg, img");
-      if (existingIcon) existingIcon.remove();
-      avatarEl.insertAdjacentHTML("afterbegin", getIconMarkup());
     }
 
     function syncSecurityButton() {
@@ -4872,12 +4781,14 @@
       if (state.messages.length === 0 && !frontendActivity) {
         messagesEl.innerHTML = "";
         renderScreenShareBar(messagesEl);
+        const emptyTitle = widgetEmptyTitle.trim();
+        const emptyDescription = widgetEmptyDescription.trim();
         const empty = document.createElement("div");
         empty.className = "cta-widget-empty";
         empty.innerHTML = `
           <div class="cta-widget-empty-icon">${getIconMarkup()}</div>
-          <h3>${escapeHtml(widgetEmptyTitle)}</h3>
-          <p>${escapeHtml(widgetEmptyDescription)}</p>
+          ${emptyTitle ? `<h3>${escapeHtml(emptyTitle)}</h3>` : ""}
+          ${emptyDescription ? `<p>${escapeHtml(emptyDescription)}</p>` : ""}
         `;
         messagesEl.appendChild(empty);
         return;
@@ -5298,6 +5209,10 @@
       return typeof data[key] === "string" && data[key].trim() ? data[key].trim() : null;
     }
 
+    function getOptionalConfigString(data, key) {
+      return typeof data[key] === "string" ? data[key].trim() : null;
+    }
+
     function applyRemoteConfig(data) {
       if (widgetHidden) return;
       if (!data || typeof data !== "object") return;
@@ -5308,10 +5223,11 @@
       headerConfig = data.headers || {};
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
       widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
-      widgetSubtitle = getConfigString(data, "widgetSubtitle") || widgetSubtitle;
       widgetIconUrl = getConfigString(data, "widgetIconUrl");
-      widgetEmptyTitle = getConfigString(data, "widgetEmptyTitle") || widgetEmptyTitle;
-      widgetEmptyDescription = getConfigString(data, "widgetEmptyDescription") || widgetEmptyDescription;
+      const emptyTitle = getOptionalConfigString(data, "widgetEmptyTitle");
+      const emptyDescription = getOptionalConfigString(data, "widgetEmptyDescription");
+      if (emptyTitle !== null) widgetEmptyTitle = emptyTitle;
+      if (emptyDescription !== null) widgetEmptyDescription = emptyDescription;
       widgetInputPlaceholder = getConfigString(data, "widgetInputPlaceholder") || widgetInputPlaceholder;
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;

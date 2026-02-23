@@ -75,7 +75,6 @@ def get_widget_config(
         require_signed_widget_token=agent.widget_auth_enabled,
         widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path,
         widget_title=agent.widget_title,
-        widget_subtitle=agent.widget_subtitle,
         widget_icon_url=agent.widget_icon_url,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,

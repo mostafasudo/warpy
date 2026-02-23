@@ -136,7 +136,6 @@ const baseWidgetSecurity = {
 
 const baseWidgetConfig = {
   widgetTitle: "Warpy",
-  widgetSubtitle: "Ready to act",
   widgetIconUrl: null,
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
@@ -332,7 +331,7 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
-    const titleInput = screen.getByLabelText("Widget title")
+    const titleInput = screen.getByLabelText("Widget name")
     expect(screen.getByText("Default")).not.toBeNull()
     await user.clear(titleInput)
     await user.type(titleInput, "Acme Assistant")
@@ -353,6 +352,43 @@ describe("AgentPanel", () => {
         description: "Widget configuration updated.",
         variant: "success"
       })
+    })
+  })
+
+  it("saves blank empty state fields", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => baseWidgetConfig)
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    await user.clear(screen.getByLabelText("Empty state title (optional)"))
+    await user.clear(screen.getByLabelText("Empty state description (optional)"))
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widgetEmptyTitle: "",
+          widgetEmptyDescription: ""
+        })
+      )
     })
   })
 
@@ -381,7 +417,7 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
-    const titleInput = screen.getByLabelText("Widget title")
+    const titleInput = screen.getByLabelText("Widget name")
     await user.clear(titleInput)
     await user.type(titleInput, "Acme Assistant")
     await user.click(screen.getByRole("button", { name: /save changes/i }))
@@ -413,7 +449,7 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
-    const titleInput = screen.getByLabelText("Widget title")
+    const titleInput = screen.getByLabelText("Widget name")
     await user.clear(titleInput)
     await user.type(titleInput, "Acme Assistant")
     expect(screen.getByText("Unsaved")).not.toBeNull()
@@ -421,15 +457,15 @@ describe("AgentPanel", () => {
     await user.click(screen.getByRole("button", { name: /restore defaults/i }))
     expect(screen.queryByText("Unsaved")).toBeNull()
     expect(screen.getByText("Default")).not.toBeNull()
-    expect((screen.getByLabelText("Widget title") as HTMLInputElement).value).toBe("Warpy")
+    expect((screen.getByLabelText("Widget name") as HTMLInputElement).value).toBe("Warpy")
 
-    await user.clear(screen.getByLabelText("Widget title"))
-    await user.type(screen.getByLabelText("Widget title"), "Acme Assistant")
+    await user.clear(screen.getByLabelText("Widget name"))
+    await user.type(screen.getByLabelText("Widget name"), "Acme Assistant")
     expect(screen.getByText("Unsaved")).not.toBeNull()
 
     await user.click(screen.getByRole("button", { name: /discard changes/i }))
     expect(screen.queryByText("Unsaved")).toBeNull()
-    expect((screen.getByLabelText("Widget title") as HTMLInputElement).value).toBe("Warpy")
+    expect((screen.getByLabelText("Widget name") as HTMLInputElement).value).toBe("Warpy")
   })
 
   it("switches icon mode and saves icon URL", async () => {

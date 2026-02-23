@@ -273,7 +273,6 @@ describe("apiClient", () => {
     const responses = [
       jsonResponse({
         widgetTitle: "Warpy",
-        widgetSubtitle: "Ready to act",
         widgetIconUrl: null,
         widgetEmptyTitle: "What would you like to do?",
         widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
@@ -282,7 +281,6 @@ describe("apiClient", () => {
       }),
       jsonResponse({
         widgetTitle: "Acme Assistant",
-        widgetSubtitle: "Here to help",
         widgetIconUrl: "https://example.com/icon.png",
         widgetEmptyTitle: "How can we help?",
         widgetEmptyDescription: "Ask a question or request help.",
@@ -300,7 +298,6 @@ describe("apiClient", () => {
 
     await apiClient.updateAgentWidgetConfig({
       widgetTitle: "Acme Assistant",
-      widgetSubtitle: "Here to help",
       widgetIconUrl: "https://example.com/icon.png",
       widgetEmptyTitle: "How can we help?",
       widgetEmptyDescription: "Ask a question or request help.",

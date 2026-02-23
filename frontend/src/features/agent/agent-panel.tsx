@@ -49,8 +49,8 @@ type EnvironmentTabsProps = {
 }
 
 const EnvironmentTabs = ({ environments, selected, onSelect }: EnvironmentTabsProps) => (
-  <div className="mb-6 flex justify-center">
-    <div className="inline-flex gap-1 rounded-lg bg-muted/50 p-1">
+  <div className="max-w-[36rem] overflow-x-auto">
+    <div className="inline-flex min-w-max gap-1 rounded-lg bg-muted/50 p-1">
       {environments.map((env) => (
         <button
           key={env}
@@ -267,85 +267,83 @@ const WidgetInstallDisplay = ({ agentId, baseUrl }: WidgetInstallDisplayProps) =
   }
 
   return (
-    <div className="flex justify-center">
-      <div className="w-full max-w-3xl space-y-6">
-        <div className="rounded-xl border border-border bg-card/70 p-4 shadow-sm">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="framework-select">Framework</Label>
-              <Select value={framework} onValueChange={handleFrameworkChange}>
-                <SelectTrigger id="framework-select" aria-label="Framework">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FRAMEWORK_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="package-manager-select">Package manager</Label>
-              <Select value={packageManager} onValueChange={handlePackageManagerChange}>
-                <SelectTrigger id="package-manager-select" aria-label="Package manager">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PACKAGE_MANAGER_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="space-y-6">
+      <div className="rounded-xl border border-border bg-card/70 p-4 shadow-sm">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="framework-select">Framework</Label>
+            <Select value={framework} onValueChange={handleFrameworkChange}>
+              <SelectTrigger id="framework-select" aria-label="Framework">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FRAMEWORK_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="package-manager-select">Package manager</Label>
+            <Select value={packageManager} onValueChange={handlePackageManagerChange}>
+              <SelectTrigger id="package-manager-select" aria-label="Package manager">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PACKAGE_MANAGER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
+      </div>
 
-        {showInstall ? (
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold">Install</h4>
-            <CodeSnippet
-              code={installCode}
-              copied={copied === "install"}
-              onCopy={() => handleCopy(installCode, "install")}
-              testId="install-code"
-              buttonTestId="copy-install-button"
-            />
-          </div>
-        ) : null}
-
+      {showInstall ? (
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold">Usage</h4>
+          <h4 className="text-sm font-semibold">Install</h4>
           <CodeSnippet
-            code={usageCode}
-            copied={copied === "usage"}
-            onCopy={() => handleCopy(usageCode, "usage")}
-            testId="usage-code"
-            buttonTestId="copy-usage-button"
+            code={installCode}
+            copied={copied === "install"}
+            onCopy={() => handleCopy(installCode, "install")}
+            testId="install-code"
+            buttonTestId="copy-install-button"
           />
         </div>
+      ) : null}
 
-        <div className="text-sm">
-          <span className="inline-flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
-            <Info className="h-4 w-4 shrink-0 text-primary" />
-            {framework === "script" ? (
-              <span className="text-muted-foreground">
-                Paste before the closing{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-primary">
-                  {"</body>"}
-                </code>{" "}
-                tag.
-              </span>
-            ) : (
-              <span className="text-muted-foreground">
-                Render this where you want the widget, and conditionally mount/unmount as needed.
-              </span>
-            )}
-          </span>
-        </div>
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold">Usage</h4>
+        <CodeSnippet
+          code={usageCode}
+          copied={copied === "usage"}
+          onCopy={() => handleCopy(usageCode, "usage")}
+          testId="usage-code"
+          buttonTestId="copy-usage-button"
+        />
+      </div>
+
+      <div className="text-sm">
+        <span className="inline-flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
+          <Info className="h-4 w-4 shrink-0 text-primary" />
+          {framework === "script" ? (
+            <span className="text-muted-foreground">
+              Paste before the closing{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-primary">
+                {"</body>"}
+              </code>{" "}
+              tag.
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Render this where you want the widget, and conditionally mount/unmount as needed.
+            </span>
+          )}
+        </span>
       </div>
     </div>
   )
@@ -375,7 +373,6 @@ Notes
 
 type WidgetConfigDraft = {
   widgetTitle: string
-  widgetSubtitle: string
   widgetIconUrl: string | null
   widgetEmptyTitle: string
   widgetEmptyDescription: string
@@ -385,7 +382,6 @@ type WidgetConfigDraft = {
 
 const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetTitle: "Warpy",
-  widgetSubtitle: "Ready to act",
   widgetIconUrl: null,
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
@@ -395,7 +391,6 @@ const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
 
 const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
   widgetTitle: value.widgetTitle.trim(),
-  widgetSubtitle: value.widgetSubtitle.trim(),
   widgetIconUrl: value.widgetIconUrl?.trim() ? value.widgetIconUrl.trim() : null,
   widgetEmptyTitle: value.widgetEmptyTitle.trim(),
   widgetEmptyDescription: value.widgetEmptyDescription.trim(),
@@ -538,27 +533,17 @@ const ConfigureWidgetPanel = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{draft.widgetTitle}</p>
-                      <p className="truncate text-xs text-muted-foreground">{draft.widgetSubtitle}</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="widget-title">Widget title</Label>
+                    <Label htmlFor="widget-title">Widget name</Label>
                     <Input
                       id="widget-title"
                       value={draft.widgetTitle}
                       onChange={(event) => setDraft({ ...draft, widgetTitle: event.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="widget-subtitle">Widget subtitle</Label>
-                    <Input
-                      id="widget-subtitle"
-                      value={draft.widgetSubtitle}
-                      onChange={(event) => setDraft({ ...draft, widgetSubtitle: event.target.value })}
                     />
                   </div>
 
@@ -605,7 +590,7 @@ const ConfigureWidgetPanel = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="widget-empty-title">Empty state title</Label>
+                    <Label htmlFor="widget-empty-title">Empty state title (optional)</Label>
                     <Input
                       id="widget-empty-title"
                       value={draft.widgetEmptyTitle}
@@ -614,7 +599,7 @@ const ConfigureWidgetPanel = () => {
                   </div>
 
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="widget-empty-description">Empty state description</Label>
+                    <Label htmlFor="widget-empty-description">Empty state description (optional)</Label>
                     <Textarea
                       id="widget-empty-description"
                       value={draft.widgetEmptyDescription}
@@ -1305,12 +1290,14 @@ export const AgentPanel = () => {
     <PanelShell
       title="Activate Agent"
       description="Install the widget with a script tag or an npm package."
+      action={environments.length ? (
+        <EnvironmentTabs
+          environments={environments}
+          selected={selectedEnv}
+          onSelect={setSelectedEnv}
+        />
+      ) : null}
     >
-      <EnvironmentTabs
-        environments={environments}
-        selected={selectedEnv}
-        onSelect={setSelectedEnv}
-      />
       {agent ? (
         <>
           <WidgetInstallDisplay agentId={agent.id} baseUrl={currentBaseUrl} />

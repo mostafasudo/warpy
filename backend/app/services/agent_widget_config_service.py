@@ -13,7 +13,6 @@ def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfig
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return AgentWidgetConfigResponse(
         widget_title=agent.widget_title,
-        widget_subtitle=agent.widget_subtitle,
         widget_icon_url=agent.widget_icon_url,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
@@ -31,11 +30,10 @@ def update_agent_widget_config(
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    agent.widget_title = _strip_required(payload.widget_title, "Widget title")
-    agent.widget_subtitle = _strip_required(payload.widget_subtitle, "Widget subtitle")
+    agent.widget_title = _strip_required(payload.widget_title, "Widget name")
     agent.widget_icon_url = _normalize_widget_icon_url(payload.widget_icon_url)
-    agent.widget_empty_title = _strip_required(payload.widget_empty_title, "Empty state title")
-    agent.widget_empty_description = _strip_required(payload.widget_empty_description, "Empty state description")
+    agent.widget_empty_title = _strip_optional(payload.widget_empty_title)
+    agent.widget_empty_description = _strip_optional(payload.widget_empty_description)
     agent.widget_input_placeholder = _strip_required(payload.widget_input_placeholder, "Input placeholder")
     agent.widget_security_disclosure_enabled = payload.widget_security_disclosure_enabled
 
@@ -43,7 +41,6 @@ def update_agent_widget_config(
     log_info("AgentWidgetConfigService", "update", "Widget config updated", user_id=user_id)
     return AgentWidgetConfigResponse(
         widget_title=agent.widget_title,
-        widget_subtitle=agent.widget_subtitle,
         widget_icon_url=agent.widget_icon_url,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
@@ -70,3 +67,7 @@ def _strip_required(value: str, label: str) -> str:
     if not trimmed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{label} is required.")
     return trimmed
+
+
+def _strip_optional(value: str) -> str:
+    return value.strip()
