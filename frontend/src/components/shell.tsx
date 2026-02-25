@@ -238,7 +238,7 @@ export const Shell = () => {
             />
             <NavButton
               active={section === "contact"}
-              label="Contact Us"
+              label="Get Help"
               icon={<Mail className="h-4 w-4" />}
               collapsed={sidebarCollapsed}
               onClick={() => setSection("contact")}

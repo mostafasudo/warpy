@@ -91,7 +91,7 @@ describe("Shell", () => {
     await waitFor(() => {
       expect(new URL(window.location.href).searchParams.get("tab")).toBe("agent")
     })
-    await user.click(screen.getByRole("button", { name: "Contact Us" }))
+    await user.click(screen.getByRole("button", { name: "Get Help" }))
     expect(screen.getByTestId("contact-panel")).not.toBeNull()
     await waitFor(() => {
       expect(new URL(window.location.href).searchParams.get("tab")).toBe("contact")
