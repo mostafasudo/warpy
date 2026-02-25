@@ -87,7 +87,7 @@ endpoints:
 
 ## Competitors
 
-- https://www.userpilot.com
+- https://usecrow.ai
 
 ## Go-to-market strategy
 
