@@ -81,10 +81,12 @@ describe("ActivityPanel", () => {
                 {
                   id: "a1",
                   createdAt: "2026-01-02T00:00:02Z",
+                  toolType: "backend",
                   feature: "Catalog",
                   action: "Fetch products",
                   statusCode: 200,
                   error: null,
+                  responseBody: { products: [{ id: "p1" }] },
                   request: { params: {}, query: {}, body: { q: "shoes" } }
                 }
               ],
@@ -116,6 +118,288 @@ describe("ActivityPanel", () => {
 
     await user.click(screen.getByTestId("action-details"))
     expect(screen.getByText(/"q": "shoes"/)).not.toBeNull()
+    await user.click(screen.getByTestId("action-response-details"))
+    expect(screen.getByText(/"products"/)).not.toBeNull()
+  })
+
+  it("shows frontend tool inputs with frontend-specific labels", async () => {
+    mockedSummary.mockReturnValue({
+      data: {
+        conversationCount: 1,
+        actionCount: 1,
+        hasAnyConversation: true,
+        topActions: []
+      },
+      isPending: false
+    })
+
+    mockedConversations.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              {
+                id: "c1-uuid",
+                participant: "widget",
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z",
+                userMessageCount: 2,
+                actionCount: 1
+              }
+            ],
+            nextCursor: null
+          }
+        ]
+      },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+
+    mockedDetail.mockImplementation((args: any) => ({
+      data: args?.conversationId
+        ? {
+          pages: [
+            {
+              id: "c1-uuid",
+              participant: "widget",
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-02T00:00:00Z",
+              messages: [
+                { role: "user", content: "Open drawer", createdAt: "2026-01-02T00:00:00Z" },
+                { role: "assistant", content: "Done", createdAt: "2026-01-02T00:00:01Z" }
+              ],
+              nextMessageCursor: null,
+              actions: [
+                {
+                  id: "a-frontend-1",
+                  createdAt: "2026-01-02T00:00:02Z",
+                  toolType: "frontend",
+                  feature: "UI",
+                  action: "Open drawer",
+                  statusCode: 200,
+                  error: null,
+                  responseBody: {
+                    kind: "frontend_tool",
+                    tool: "open_drawer",
+                    vars: { drawer: "orders" },
+                    title: "Warpy - Jarvis for your dashboard",
+                    url: "http://localhost:5173/?tab=features",
+                    result: { ok: true }
+                  },
+                  request: {
+                    params: { drawer: "orders" },
+                    query: { source: "activity" },
+                    body: {}
+                  }
+                }
+              ],
+              nextActionCursor: null
+            }
+          ]
+        }
+        : undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    }))
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<ActivityPanel />)
+
+    await user.click(screen.getByTestId("view-c1-uuid"))
+    expect(await screen.findByText("Open drawer · UI")).not.toBeNull()
+    expect(screen.getByText("Success")).not.toBeNull()
+    await user.click(screen.getByRole("button", { name: "View inputs" }))
+    expect(screen.getByText("Information sent")).not.toBeNull()
+    expect(screen.getByText("URL options")).not.toBeNull()
+    await user.click(screen.getByRole("button", { name: "View tool result" }))
+    expect(screen.getByText(/"ok": true/)).not.toBeNull()
+    expect(screen.getByText(/"url": "http:\/\/localhost:5173\/\?tab=features"/)).not.toBeNull()
+    expect(screen.queryByText(/"kind": "frontend_tool"/)).toBeNull()
+    expect(screen.queryByText(/"tool": "open_drawer"/)).toBeNull()
+    expect(screen.queryByText(/"vars":/)).toBeNull()
+    expect(screen.queryByText(/"title": "Warpy - Jarvis for your dashboard"/)).toBeNull()
+  })
+
+  it("shows only issue (no result body) in tool result details for frontend tool errors", async () => {
+    mockedSummary.mockReturnValue({
+      data: {
+        conversationCount: 1,
+        actionCount: 1,
+        hasAnyConversation: true,
+        topActions: []
+      },
+      isPending: false
+    })
+
+    mockedConversations.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              {
+                id: "c1-uuid",
+                participant: "widget",
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z",
+                userMessageCount: 2,
+                actionCount: 1
+              }
+            ],
+            nextCursor: null
+          }
+        ]
+      },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+
+    mockedDetail.mockImplementation((args: any) => ({
+      data: args?.conversationId
+        ? {
+          pages: [
+            {
+              id: "c1-uuid",
+              participant: "widget",
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-02T00:00:00Z",
+              messages: [
+                { role: "user", content: "Open drawer", createdAt: "2026-01-02T00:00:00Z" },
+                { role: "assistant", content: "Done", createdAt: "2026-01-02T00:00:01Z" }
+              ],
+              nextMessageCursor: null,
+              actions: [
+                {
+                  id: "a-frontend-err-1",
+                  createdAt: "2026-01-02T00:00:02Z",
+                  toolType: "frontend",
+                  feature: "UI",
+                  action: "Open drawer",
+                  statusCode: 500,
+                  error: "Unknown tool: log-name",
+                  responseBody: { tool: "log-name" },
+                  request: {
+                    params: { drawer: "orders" },
+                    query: {},
+                    body: {}
+                  }
+                }
+              ],
+              nextActionCursor: null
+            }
+          ]
+        }
+        : undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    }))
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<ActivityPanel />)
+
+    await user.click(screen.getByTestId("view-c1-uuid"))
+    expect(await screen.findByText("Failed")).not.toBeNull()
+    await user.click(screen.getByRole("button", { name: "View tool result" }))
+    expect(screen.getByText("Issue")).not.toBeNull()
+    expect(screen.getByText("Unknown tool: log-name")).not.toBeNull()
+    expect(screen.queryByText("Result")).toBeNull()
+    expect(screen.queryByText(/"tool": "log-name"/)).toBeNull()
+  })
+
+  it("renders screen autopilot actions separately from tool actions", async () => {
+    mockedSummary.mockReturnValue({
+      data: {
+        conversationCount: 1,
+        actionCount: 1,
+        hasAnyConversation: true,
+        topActions: []
+      },
+      isPending: false
+    })
+
+    mockedConversations.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              {
+                id: "c1-uuid",
+                participant: "widget",
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z",
+                userMessageCount: 1,
+                actionCount: 1
+              }
+            ],
+            nextCursor: null
+          }
+        ]
+      },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+
+    mockedDetail.mockImplementation((args: any) => ({
+      data: args?.conversationId
+        ? {
+          pages: [
+            {
+              id: "c1-uuid",
+              participant: "widget",
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-02T00:00:00Z",
+              messages: [
+                { role: "user", content: "Open menu", createdAt: "2026-01-02T00:00:00Z" },
+                { role: "assistant", content: "Done", createdAt: "2026-01-02T00:00:01Z" }
+              ],
+              nextMessageCursor: null,
+              actions: [
+                {
+                  id: "a-screen-1",
+                  createdAt: "2026-01-02T00:00:02Z",
+                  toolType: "screen_autopilot",
+                  feature: null,
+                  action: null,
+                  statusCode: 200,
+                  error: null,
+                  responseBody: null,
+                  request: null,
+                  frontendGoal: "Open menu",
+                  frontendUrl: "https://app.example.com/orders",
+                  frontendActions: [{ action: "click", selector: "button[aria-label='Menu']", status: "ok" }]
+                }
+              ],
+              nextActionCursor: null
+            }
+          ]
+        }
+        : undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    }))
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<ActivityPanel />)
+
+    await user.click(screen.getByTestId("view-c1-uuid"))
+    expect(await screen.findByText("Screen Autopilot · Open menu")).not.toBeNull()
+    expect(screen.getByText("Success")).not.toBeNull()
+    await user.click(screen.getByTestId("action-details"))
+    expect(screen.getByText("click")).not.toBeNull()
   })
 
   it("shows global empty state when no activity", () => {

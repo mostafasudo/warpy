@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { type ReactElement } from "react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { type BodyField, type FlatField } from "@/stores/endpoint-builder"
+import { type BodyField, type FlatField } from "@/stores/tool-builder"
 import { BodyFieldRow } from "./BodyFieldRow"
 import { FlatFieldRow } from "./FlatFieldRow"
 

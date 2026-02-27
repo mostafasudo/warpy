@@ -3,7 +3,7 @@ import { Plus } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { Button } from "@/components/ui/button"
-import { type FlatField } from "@/stores/endpoint-builder"
+import { type FlatField } from "@/stores/tool-builder"
 import { FlatFieldRow } from "./FlatFieldRow"
 import type { FieldValidation } from "./validation"
 

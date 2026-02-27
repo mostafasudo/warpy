@@ -12,7 +12,7 @@ from ..core.logger import log_error, log_info
 
 @dataclass
 class CachedTool:
-    endpoint_id: UUID
+    tool_id: UUID
     last_used: float
 
 
@@ -48,35 +48,35 @@ class ToolCache:
 
     def load(self) -> list[CachedTool]:
         self._load_from_redis()
-        return [CachedTool(endpoint_id=k, last_used=v) for k, v in self._tools.items()]
+        return [CachedTool(tool_id=k, last_used=v) for k, v in self._tools.items()]
 
     def save(self) -> None:
         self._save_to_redis()
 
-    def get_endpoint_ids(self) -> list[UUID]:
+    def get_tool_ids(self) -> list[UUID]:
         return list(self._tools.keys())
 
-    def update_used(self, endpoint_ids: list[UUID]) -> None:
+    def update_used(self, tool_ids: list[UUID]) -> None:
         now = time.time()
-        for eid in endpoint_ids:
-            if eid in self._tools:
-                self._tools[eid] = now
+        for tool_id in tool_ids:
+            if tool_id in self._tools:
+                self._tools[tool_id] = now
 
-    def add_tools(self, endpoint_ids: list[UUID]) -> None:
+    def add_tools(self, tool_ids: list[UUID]) -> None:
         now = time.time()
-        for eid in endpoint_ids:
-            if eid not in self._tools:
-                self._tools[eid] = now
+        for tool_id in tool_ids:
+            if tool_id not in self._tools:
+                self._tools[tool_id] = now
 
     def remove_invalid(self, valid_ids: set[UUID]) -> None:
-        to_remove = [eid for eid in self._tools if eid not in valid_ids]
-        for eid in to_remove:
-            del self._tools[eid]
+        to_remove = [tool_id for tool_id in self._tools if tool_id not in valid_ids]
+        for tool_id in to_remove:
+            del self._tools[tool_id]
         if to_remove:
             log_info(
                 "ToolCache",
                 "remove_invalid",
-                f"Removed {len(to_remove)} invalid endpoints"
+                f"Removed {len(to_remove)} invalid tools"
             )
 
     def enforce_cap(self, max_tools: int) -> None:
@@ -84,8 +84,8 @@ class ToolCache:
             return
         sorted_items = sorted(self._tools.items(), key=lambda x: x[1])
         evict_count = len(self._tools) - max_tools
-        for eid, _ in sorted_items[:evict_count]:
-            del self._tools[eid]
+        for tool_id, _ in sorted_items[:evict_count]:
+            del self._tools[tool_id]
         log_info("ToolCache", "enforce_cap", f"Evicted {evict_count} tools via LRU")
 
     def clear(self) -> None:
@@ -95,5 +95,3 @@ class ToolCache:
                 self._redis.delete(self._key)
             except RedisError as exc:
                 log_error("ToolCache", "clear", "Failed to clear cache", exc=exc)
-
-

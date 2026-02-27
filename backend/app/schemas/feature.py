@@ -1,8 +1,11 @@
 from enum import Enum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+
+if TYPE_CHECKING:
+    from .tool import ToolResponse
 
 
 class FeatureEnabledState(str, Enum):
@@ -41,7 +44,7 @@ class FeatureResponse(FeaturePayload):
 
     id: UUID
     enabled_state: FeatureEnabledState = Field(alias="enabledState")
-    endpoint_count: int = Field(alias="endpointCount")
+    tool_count: int = Field(alias="toolCount")
 
 
 class FeatureTogglePayload(BaseModel):
@@ -50,7 +53,7 @@ class FeatureTogglePayload(BaseModel):
     agent_enabled: bool = Field(alias="agentEnabled")
 
 
-class EndpointPagination(BaseModel):
+class ToolPagination(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     page: int = Field(ge=1)
@@ -64,6 +67,6 @@ class EndpointPagination(BaseModel):
         return self.page < self.total_pages
 
 
-class FeatureWithEndpointsResponse(FeatureResponse):
-    endpoints: list["EndpointResponse"] = Field(default_factory=list)
-    pagination: EndpointPagination
+class FeatureWithToolsResponse(FeatureResponse):
+    tools: list["ToolResponse"] = Field(default_factory=list)
+    pagination: ToolPagination

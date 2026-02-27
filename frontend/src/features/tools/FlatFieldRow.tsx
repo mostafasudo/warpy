@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { type FlatField } from "@/stores/endpoint-builder"
+import { type FlatField } from "@/stores/tool-builder"
 import { EnumValuesInput } from "./EnumValuesInput"
 import type { FieldValidation } from "./validation"
 
@@ -111,7 +111,7 @@ export const FlatFieldRow = ({ field, invalid, onChange, onRemove, focusRef }: F
               >
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remove field?</AlertDialogTitle>
-                  <AlertDialogDescription>This will delete the field from this endpoint draft.</AlertDialogDescription>
+                  <AlertDialogDescription>This will delete the field from this tool draft.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel type="button">Cancel</AlertDialogCancel>

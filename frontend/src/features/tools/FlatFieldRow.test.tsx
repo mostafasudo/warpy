@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { FlatFieldRow } from "./FlatFieldRow"
-import { type FlatField } from "@/stores/endpoint-builder"
+import { type FlatField } from "@/stores/tool-builder"
 
 beforeAll(() => {
   ;(HTMLElement.prototype as any).hasPointerCapture = () => false

@@ -10,6 +10,39 @@ The Warpy agent can observe and act on the host dashboard directly. Four always-
 
 In addition, `backend` tool calls invoke customer-configured API endpoints. Tool calls use a `type` discriminator (`backend`, `read_page`, `find_elements`, `frontend`, `js_exec`) so the widget knows how to execute each one. Billing is backend-controlled based on `tool_type`.
 
+In the Agents tab, the toggle for this behavior is labeled **Screen Autopilot**. It controls screen-level context and automated page actions (`read_page`, `find_elements`, `frontend`, `js_exec`) and does not require your defined frontend tools.
+
+## Manual frontend tools under Features
+Features can now contain both backend and frontend tools:
+
+- **Backend tool**: existing HTTP endpoint behavior.
+- **Frontend tool**: browser-executed handler call.
+
+Frontend feature tools are invoked in the host page with:
+
+```js
+window.warpy("tool_name", vars)
+```
+
+Customers implement this handler in their dashboard app. The widget passes:
+- `tool_name`: configured tool function name
+- `vars`: tool arguments object produced by the model
+
+In the Features UI, frontend tool parameters are defined with the structured field builder (name, type, required, nested objects/arrays, descriptions), then saved as OpenAI function `parameters` JSON schema.
+
+Minimal host-side registration example:
+
+```js
+window.warpy = async (toolName, vars) => {
+  if (toolName === "open_order_drawer") {
+    const orderId = vars["orderId"]
+    return { ok: true, orderId }
+  }
+
+  throw new Error(`Unknown tool: ${toolName}`)
+}
+```
+
 ## Capabilities
 - Accessibility tree extraction with ref-based element targeting.
 - Natural language element search via `find_elements`.
@@ -21,7 +54,7 @@ In addition, `backend` tool calls invoke customer-configured API endpoints. Tool
 - User stop control while runs are in progress (Send becomes Stop).
 - Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
 - System prompt encourages proactive retries and page rescans via `read_page`.
-- Frontend actions tracked in the Activity panel alongside backend actions.
+- Screen autopilot actions and frontend tool actions are tracked in the Activity panel alongside backend actions.
 
 ## High-level flow
 ```mermaid
@@ -33,7 +66,7 @@ sequenceDiagram
 
   U->>W: "Change filters to last 30 days"
   W->>B: /widget/chat (message)
-  B->>L: find_actions + frontend tools
+  B->>L: find_tools + screen autopilot tools
   L-->>B: read_page(filter="interactive")
   B-->>W: toolCalls[type=read_page]
   W->>U: Screen share prompt (if not already sharing)
@@ -53,13 +86,15 @@ sequenceDiagram
 ## Decision path
 ```mermaid
 flowchart TD
-  A[User request] --> B[find_actions]
+  A[User request] --> B[find_tools]
   B -->|Backend tool found| C[Execute backend tool]
-  B -->|No match or UI task| D[read_page]
-  D --> E[LLM plans UI steps using ref IDs]
-  E --> F[frontend]
-  F --> G[Execute actions in widget]
-  G --> H[LLM summary]
+  B -->|No backend tool, frontend tool found| D[Execute frontend tool]
+  B -->|No suitable backend/frontend tool| E[Use screen autopilot]
+  E --> F[read_page]
+  F --> G[LLM plans UI steps using ref IDs]
+  G --> H[frontend]
+  H --> I[Execute actions in widget]
+  I --> J[LLM summary]
 ```
 
 ## Tool contracts
@@ -68,8 +103,12 @@ All tool calls returned to the widget include a `type` discriminator:
 - `backend` (API endpoint calls)
 - `read_page` (accessibility tree, read-only)
 - `find_elements` (element search, read-only)
-- `frontend` (UI actions, billable)
+- `frontend` (billable; either built-in UI actions or customer manual frontend tools)
 - `js_exec` (JavaScript execution, billable)
+
+`frontend` call behavior depends on the tool name:
+- `name: "frontend"` => built-in action engine (`actions` array).
+- `name: "<custom_tool_name>"` => manual frontend tool call via `window.warpy(name, vars)`.
 
 Example: read_page tool call
 ```json
@@ -107,6 +146,18 @@ Example: frontend actions tool call with ref IDs
     { "action": "click", "ref": "ref_12" },
     { "action": "click", "ref": "ref_15" }
   ]
+}
+```
+
+Example: manual frontend feature tool call
+```json
+{
+  "id": "call_5",
+  "type": "frontend",
+  "name": "open_order_drawer",
+  "params": {
+    "orderId": "ord_123"
+  }
 }
 ```
 
@@ -168,6 +219,22 @@ frontend actions result:
       { "index": 0, "action": "click", "selector": "ref_7", "status": "ok", "durationMs": 42 },
       { "index": 1, "action": "click", "selector": "ref_12", "status": "ok", "durationMs": 38 }
     ]
+  }
+}
+```
+
+manual frontend tool result:
+```json
+{
+  "id": "call_5",
+  "statusCode": 200,
+  "body": {
+    "kind": "frontend_tool",
+    "tool": "open_order_drawer",
+    "vars": { "orderId": "ord_123" },
+    "result": { "ok": true },
+    "url": "https://example.com/dashboard/orders",
+    "title": "Orders"
   }
 }
 ```
@@ -296,7 +363,7 @@ Frontend actions are recorded and displayed in the Activity panel alongside back
 - Tool schemas: `ReadPageInput`, `FindElementsInput`, `FrontendActionInput`, `JsExecInput`.
 - `ToolCallPayload` includes `type`, `goal`, `readPageOptions`, `findQuery`, `actions`, `jsCode`.
 - `AgentExecutor` routes `read_page`, `find_elements`, `frontend`, and `js_exec` tool calls to the widget for client-side execution.
-- `ConversationAction` model stores `tool_type`, `frontend_goal`, `frontend_url`, `frontend_actions`.
+- `ConversationAction` model stores `tool_type`, `frontend_goal`, `frontend_url`, `frontend_actions`, `status_code`, `error`, and `response_body`.
 - Billing determined by `tool_type` on the backend (not client flags).
 
 ### Widget

@@ -2766,6 +2766,50 @@
     }
   }
 
+  async function executeFrontendHandlerTool(toolCall, signal) {
+    throwIfAborted(signal);
+    const toolName = typeof toolCall.name === "string" ? toolCall.name.trim() : "";
+    if (!toolName) {
+      return { id: toolCall.id, statusCode: 400, body: null, error: "Frontend tool name is required" };
+    }
+    if (typeof window.warpy !== "function") {
+      return {
+        id: toolCall.id,
+        statusCode: 400,
+        body: { kind: "frontend_tool", tool: toolName },
+        error: "window.warpy handler is not registered",
+      };
+    }
+    const vars = toolCall.params && typeof toolCall.params === "object" ? toolCall.params : {};
+    try {
+      const result = await window.warpy(toolName, vars);
+      return {
+        id: toolCall.id,
+        statusCode: 200,
+        body: {
+          kind: "frontend_tool",
+          tool: toolName,
+          vars,
+          result: result === undefined ? null : result,
+          url: window.location.href,
+          title: document.title,
+        },
+      };
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      return {
+        id: toolCall.id,
+        statusCode: 500,
+        body: {
+          kind: "frontend_tool",
+          tool: toolName,
+          vars,
+        },
+        error: error && error.message ? error.message : "frontend tool failed",
+      };
+    }
+  }
+
   async function executeFrontendActions(toolCall, ui, signal) {
     throwIfAborted(signal);
     const actions = Array.isArray(toolCall.actions) ? toolCall.actions : [];
@@ -2905,6 +2949,9 @@
       return executeFindElements(toolCall, ui, signal);
     }
     if (type === "frontend") {
+      if ((toolCall.name || "") !== "frontend") {
+        return executeFrontendHandlerTool(toolCall, signal);
+      }
       return executeFrontendActions(toolCall, ui, signal);
     }
     if (type === "js_exec") {

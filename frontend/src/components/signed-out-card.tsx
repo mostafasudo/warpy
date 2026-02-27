@@ -10,7 +10,7 @@ const highlights = [
   {
     icon: LayoutDashboard,
     title: "Configure your dashboard",
-    description: "Manage agents, API config, and endpoints in one place."
+    description: "Manage agents, API config, and tools in one place."
   },
   {
     icon: Network,

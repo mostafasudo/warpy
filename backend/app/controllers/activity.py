@@ -30,10 +30,21 @@ from ..services.activity_service import (
 router = APIRouter(prefix="/activity", tags=["activity"])
 
 
-def _transform_action_event(action, endpoints: dict) -> ActivityActionEvent:
+def _transform_action_event(action, tools: dict) -> ActivityActionEvent:
     tool_type = getattr(action, "tool_type", "backend") or "backend"
+    is_screen_autopilot = (
+        tool_type == "screen_autopilot"
+        or (
+            tool_type == "frontend"
+            and getattr(action, "tool_id", None) is None
+            and (
+                bool(getattr(action, "frontend_goal", None))
+                or bool(getattr(action, "frontend_actions", None))
+            )
+        )
+    )
 
-    if tool_type == "frontend":
+    if is_screen_autopilot:
         frontend_actions_raw = action.frontend_actions or []
         frontend_actions = [
             ActivityFrontendAction(
@@ -49,27 +60,28 @@ def _transform_action_event(action, endpoints: dict) -> ActivityActionEvent:
         return ActivityActionEvent(
             id=action.id,
             createdAt=action.created_at,
-            toolType="frontend",
+            toolType="screen_autopilot",
             feature=None,
             action=None,
             request=None,
             frontendGoal=action.frontend_goal,
             frontendUrl=action.frontend_url,
             frontendActions=frontend_actions if frontend_actions else None,
+            responseBody=getattr(action, "response_body", None),
             statusCode=action.status_code,
             error=action.error,
         )
 
-    endpoint = endpoints.get(action.endpoint_id) if action.endpoint_id else None
+    tool = tools.get(action.tool_id) if action.tool_id else None
     feature_name = ""
     action_name = ""
-    if endpoint:
-        feature_name = getattr(getattr(endpoint, "feature", None), "name", "") or ""
-        action_name = action_label(endpoint)
+    if tool:
+        feature_name = getattr(getattr(tool, "feature", None), "name", "") or ""
+        action_name = action_label(tool)
     return ActivityActionEvent(
         id=action.id,
         createdAt=action.created_at,
-        toolType="backend",
+        toolType="frontend" if tool_type == "frontend" else "backend",
         feature=feature_name,
         action=action_name,
         request=ActivityActionRequest(
@@ -80,6 +92,7 @@ def _transform_action_event(action, endpoints: dict) -> ActivityActionEvent:
         frontendGoal=None,
         frontendUrl=None,
         frontendActions=None,
+        responseBody=getattr(action, "response_body", None),
         statusCode=action.status_code,
         error=action.error,
     )
@@ -173,7 +186,7 @@ def get_activity_conversation_detail_route(
     clerk_session: ClerkSession = Depends(require_clerk_session),
 ) -> ActivityConversationDetailResponse:
     try:
-        conversation, messages, next_message_cursor, actions, next_action_cursor, endpoints = get_activity_conversation_detail(
+        conversation, messages, next_message_cursor, actions, next_action_cursor, tools = get_activity_conversation_detail(
             session,
             clerk_session.user_id,
             conversation_id,
@@ -195,7 +208,7 @@ def get_activity_conversation_detail_route(
             ],
             nextMessageCursor=next_message_cursor,
             actions=[
-                _transform_action_event(action, endpoints)
+                _transform_action_event(action, tools)
                 for action in actions
             ],
             nextActionCursor=next_action_cursor,

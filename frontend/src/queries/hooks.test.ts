@@ -8,10 +8,10 @@ const apiClient: Record<string, any> = {
   health: jest.fn(),
   getConfig: jest.fn(),
   updateConfig: jest.fn(),
-  listEndpoints: jest.fn(),
-  createEndpoint: jest.fn(),
-  updateEndpoint: jest.fn(),
-  deleteEndpoint: jest.fn(),
+  listTools: jest.fn(),
+  createTool: jest.fn(),
+  updateTool: jest.fn(),
+  deleteTool: jest.fn(),
   listFeatures: jest.fn(),
   createFeature: jest.fn(),
   updateFeature: jest.fn(),
@@ -91,7 +91,7 @@ describe("react-query hooks", () => {
     expect(queryClient.invalidateQueries).toHaveBeenCalled()
   })
 
-  it("lists, creates, updates, and deletes endpoints", async () => {
+  it("lists, creates, updates, and deletes tools", async () => {
     queryMock.useQuery.mockImplementation((options: any) => {
       options.queryFn()
       return { data: { items: [], total: 0 } }
@@ -108,25 +108,25 @@ describe("react-query hooks", () => {
     })
     const queryClient = { invalidateQueries: jest.fn() }
     queryMock.useQueryClient.mockReturnValue(queryClient)
-    const { useEndpointsQuery } = require("./use-endpoints")
-    const { useCreateEndpoint } = require("./use-create-endpoint")
-    const { useUpdateEndpoint } = require("./use-update-endpoint")
-    const { useDeleteEndpoint } = require("./use-delete-endpoint")
+    const { useToolsQuery } = require("./use-tools")
+    const { useCreateTool } = require("./use-create-tool")
+    const { useUpdateTool } = require("./use-update-tool")
+    const { useDeleteTool } = require("./use-delete-tool")
 
-    ;(apiClient.listEndpoints as any).mockResolvedValue({ items: [], total: 0 })
-    useEndpointsQuery(1, 5, "test")
-    expect(apiClient.listEndpoints).toHaveBeenCalledWith(1, 5, "test")
+    ;(apiClient.listTools as any).mockResolvedValue({ items: [], total: 0 })
+    useToolsQuery(1, 5, "test")
+    expect(apiClient.listTools).toHaveBeenCalledWith(1, 5, "test")
 
-    ;(apiClient.createEndpoint as any).mockResolvedValue({ id: "1" })
-    await useCreateEndpoint().mutateAsync({ path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true, feature: { mode: "auto" } })
+    ;(apiClient.createTool as any).mockResolvedValue({ id: "1" })
+    await useCreateTool().mutateAsync({ path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true, feature: { mode: "auto" } })
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
 
-    ;(apiClient.updateEndpoint as any).mockResolvedValue({ id: "1" })
-    await useUpdateEndpoint().mutateAsync({ id: "1", payload: { path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true, feature: { mode: "auto" } } })
+    ;(apiClient.updateTool as any).mockResolvedValue({ id: "1" })
+    await useUpdateTool().mutateAsync({ id: "1", payload: { path: "/", method: "GET", tool: { type: "function", function: { name: "", description: "", parameters: { type: "object", properties: {} } } }, agentEnabled: true, feature: { mode: "auto" } } })
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(4)
 
-    ;(apiClient.deleteEndpoint as any).mockResolvedValue(undefined)
-    await useDeleteEndpoint().mutateAsync("1")
+    ;(apiClient.deleteTool as any).mockResolvedValue(undefined)
+    await useDeleteTool().mutateAsync("1")
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(6)
   })
 

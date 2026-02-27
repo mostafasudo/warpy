@@ -1,14 +1,15 @@
-import { endpointBuilderUtils } from "@/stores/endpoint-builder"
+import { toolBuilderUtils } from "@/stores/tool-builder"
 import type {
   BodyField,
-  EndpointBuilderState,
+  ToolBuilderState,
   FlatField,
   PathParam
-} from "@/stores/endpoint-builder"
+} from "@/stores/tool-builder"
 import type {
-  EndpointPayload,
-  EndpointResponse,
-  EndpointTool,
+  ToolPayload,
+  ToolResponse,
+  ToolDefinition,
+  ToolType,
   FeatureSelector,
   HttpMethod,
   ToolParameters
@@ -30,18 +31,18 @@ const normalizeToolParameters = (parameters?: ToolParameters): ToolParameters =>
 })
 
 const sanitizeEnumValues = (values: (string | number)[] | undefined, type: PrimitiveType) => {
-  const clean = endpointBuilderUtils.coerceEnumValues(values, type)
+  const clean = toolBuilderUtils.coerceEnumValues(values, type)
   return clean && clean.length ? clean : undefined
 }
 
 const ensureApiPath = (path: string) =>
-  endpointBuilderUtils
+  toolBuilderUtils
     .normalizePathInput(path)
     .replace(/:([A-Za-z0-9_-]+)/g, "{$1}")
     .replace(/\/{2,}/g, "/")
 
 const formatPathForDisplay = (path: string) =>
-  endpointBuilderUtils.normalizePathInput(path.replace(/\{([^}]+)\}/g, ":$1"))
+  toolBuilderUtils.normalizePathInput(path.replace(/\{([^}]+)\}/g, ":$1"))
 
 const getPrimitiveSchema = (
   type: PrimitiveType,
@@ -103,9 +104,9 @@ const buildPathParams = (params: PathParam[]) => {
 const buildBodyFieldSchema = (field: BodyField): Record<string, unknown> => {
   const name = field.name.trim()
   const description = field.description.trim()
-  if (endpointBuilderUtils.isPrimitiveType(field.type)) {
+  if (toolBuilderUtils.isPrimitiveType(field.type)) {
     const enumValues =
-      field.fixed === undefined && endpointBuilderUtils.isEnumSupported(field.type)
+      field.fixed === undefined && toolBuilderUtils.isEnumSupported(field.type)
         ? sanitizeEnumValues(field.enumValues, field.type)
         : undefined
     return getPrimitiveSchema(field.type, field.fixed, name, description, enumValues)
@@ -194,69 +195,84 @@ const buildBodySection = (fields: BodyField[]) => {
   return schema
 }
 
-export const buildEndpointPayload = (state: EndpointBuilderState): EndpointPayload => {
-  const topProperties: Record<string, any> = {}
-  const topRequired: string[] = []
-
-  const params = buildPathParams(state.pathParams)
-  if (params) {
-    const paramsSchema: Record<string, any> = {
-      type: "object",
-      properties: params.properties,
-      description: "Path params of the endpoint"
-    }
-    if (params.required.length) {
-      paramsSchema.required = params.required
-    }
-    topProperties.params = paramsSchema
-    topRequired.push("params")
-  }
-
-  const headers = buildFlatProperties(state.headers)
-  if (headers) {
-    const headerSchema: Record<string, any> = {
-      type: "object",
-      properties: headers.properties,
-      description: "Headers of the endpoint"
-    }
-    if (headers.required.length) {
-      headerSchema.required = headers.required
-      topRequired.push("headers")
-    }
-    topProperties.headers = headerSchema
-  }
-
-  const query = buildFlatProperties(state.queryParams)
-  if (query) {
-    const querySchema: Record<string, any> = {
-      type: "object",
-      properties: query.properties,
-      description: "Query params of the endpoint"
-    }
-    if (query.required.length) {
-      querySchema.required = query.required
-      topRequired.push("query")
-    }
-    topProperties.query = querySchema
-  }
-
-  const body = buildBodySection(state.bodyFields)
-  if (body && state.method !== "GET") {
-    body.description = "Body of the endpoint"
-    topProperties.body = body
-    const bodyRequired = Array.isArray((body as any).required) ? (body as any).required : []
-    if (bodyRequired.length) {
-      topRequired.push("body")
-    }
-  }
-
-  const parameters: ToolParameters = {
+export const buildToolPayload = (state: ToolBuilderState): ToolPayload => {
+  const toolType: ToolType = state.toolType === "frontend" ? "frontend" : "backend"
+  let parameters: ToolParameters = {
     type: "object",
-    properties: topProperties,
-    required: topRequired.length ? topRequired : []
+    properties: {}
   }
 
-  const tool: EndpointTool = {
+  if (toolType === "frontend") {
+    const frontendParameters = buildBodySection(state.bodyFields)
+    parameters = frontendParameters
+      ? frontendParameters as ToolParameters
+      : { type: "object", properties: {} }
+  }
+
+  if (toolType === "backend") {
+    const topProperties: Record<string, any> = {}
+    const topRequired: string[] = []
+
+    const params = buildPathParams(state.pathParams)
+    if (params) {
+      const paramsSchema: Record<string, any> = {
+        type: "object",
+        properties: params.properties,
+        description: "Path params for this backend tool"
+      }
+      if (params.required.length) {
+        paramsSchema.required = params.required
+      }
+      topProperties.params = paramsSchema
+      topRequired.push("params")
+    }
+
+    const headers = buildFlatProperties(state.headers)
+    if (headers) {
+      const headerSchema: Record<string, any> = {
+        type: "object",
+        properties: headers.properties,
+        description: "Headers for this backend tool"
+      }
+      if (headers.required.length) {
+        headerSchema.required = headers.required
+        topRequired.push("headers")
+      }
+      topProperties.headers = headerSchema
+    }
+
+    const query = buildFlatProperties(state.queryParams)
+    if (query) {
+      const querySchema: Record<string, any> = {
+        type: "object",
+        properties: query.properties,
+        description: "Query params for this backend tool"
+      }
+      if (query.required.length) {
+        querySchema.required = query.required
+        topRequired.push("query")
+      }
+      topProperties.query = querySchema
+    }
+
+    const body = buildBodySection(state.bodyFields)
+    if (body && state.method !== "GET") {
+      body.description = "Body for this backend tool"
+      topProperties.body = body
+      const bodyRequired = Array.isArray((body as any).required) ? (body as any).required : []
+      if (bodyRequired.length) {
+        topRequired.push("body")
+      }
+    }
+
+    parameters = {
+      type: "object",
+      properties: topProperties,
+      required: topRequired.length ? topRequired : []
+    }
+  }
+
+  const tool: ToolDefinition = {
     type: "function",
     function: {
       name: state.name.trim(),
@@ -275,7 +291,17 @@ export const buildEndpointPayload = (state: EndpointBuilderState): EndpointPaylo
     return { mode: "auto" }
   })()
 
+  if (toolType === "frontend") {
+    return {
+      toolType,
+      tool,
+      agentEnabled: state.agentEnabled,
+      feature
+    }
+  }
+
   return {
+    toolType,
     path: ensureApiPath(state.path),
     method: state.method,
     tool,
@@ -307,7 +333,7 @@ const parseEnumValues = (raw: unknown, type: PrimitiveType) => {
   if (!Array.isArray(raw)) {
     return undefined
   }
-  if (!endpointBuilderUtils.isEnumSupported(type)) {
+  if (!toolBuilderUtils.isEnumSupported(type)) {
     return undefined
   }
   const seen = new Set<string>()
@@ -430,12 +456,15 @@ const parseBodyField = (name: string, schema: any, required: boolean): BodyField
   }
 }
 
-export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointBuilderState => {
-  const parameters = normalizeToolParameters(endpoint.tool?.function?.parameters)
-  const path = formatPathForDisplay(endpoint.path)
-  const pathNames = endpointBuilderUtils.extractPathParams(path)
-  const feature = endpoint.feature as
-    | (EndpointResponse["feature"] & Partial<FeatureSelector>)
+export const mapToolToBuilderState = (tool: ToolResponse): ToolBuilderState => {
+  const parameters = normalizeToolParameters(tool.tool?.function?.parameters)
+  const toolType: ToolType = tool.toolType === "frontend" ? "frontend" : "backend"
+  const resolvedPath = tool.path ?? "/"
+  const resolvedMethod: HttpMethod = (tool.method as HttpMethod) ?? "GET"
+  const path = toolType === "backend" ? formatPathForDisplay(resolvedPath) : "/"
+  const pathNames = toolBuilderUtils.extractPathParams(path)
+  const feature = tool.feature as
+    | (ToolResponse["feature"] & Partial<FeatureSelector>)
     | undefined
 
   const paramsSchema = (parameters.properties as any)?.params
@@ -465,9 +494,15 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
     Object.entries(bodySchema?.properties ?? {}).map(([name, schema]) =>
       parseBodyField(name, schema, bodyRequired.includes(name))
     ) ?? []
-  const bodyFields = endpoint.method === "GET" ? [] : parsedBodyFields
+  const bodyFields = resolvedMethod === "GET" ? [] : parsedBodyFields
 
-  const featureMode: EndpointBuilderState["featureMode"] = (() => {
+  const frontendRequired: string[] = Array.isArray(parameters.required) ? parameters.required : []
+  const frontendBodyFields =
+    Object.entries(parameters.properties ?? {}).map(([name, schema]) =>
+      parseBodyField(name, schema, frontendRequired.includes(name))
+    ) ?? []
+
+  const featureMode: ToolBuilderState["featureMode"] = (() => {
     if (feature?.mode === "existing" || (!feature?.mode && feature?.id)) {
       return "existing"
     }
@@ -477,19 +512,20 @@ export const mapEndpointToBuilderState = (endpoint: EndpointResponse): EndpointB
     return "auto"
   })()
 
-  const state: EndpointBuilderState = {
+  const state: ToolBuilderState = {
+    toolType,
     path,
-    method: endpoint.method as HttpMethod,
-    name: endpoint.tool?.function?.name ?? "",
-    description: endpoint.tool?.function?.description ?? "",
-    agentEnabled: endpoint.agentEnabled ?? true,
+    method: resolvedMethod,
+    name: tool.tool?.function?.name ?? "",
+    description: tool.tool?.function?.description ?? "",
+    agentEnabled: tool.agentEnabled ?? true,
     featureMode,
     featureId: feature?.id ?? null,
     featureName: feature?.name ?? "",
-    pathParams,
-    headers,
-    queryParams,
-    bodyFields
+    pathParams: toolType === "backend" ? pathParams : [],
+    headers: toolType === "backend" ? headers : [],
+    queryParams: toolType === "backend" ? queryParams : [],
+    bodyFields: toolType === "backend" ? bodyFields : frontendBodyFields
   }
 
   return state

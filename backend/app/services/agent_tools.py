@@ -7,13 +7,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import Endpoint
-from .embedding_service import search_similar_endpoints
-from .agent_execution import execute_endpoint
+from ..models import Tool
+from .embedding_service import search_similar_tools
+from .agent_execution import execute_backend_tool
 from .agent_schema import SchemaFactory, serialize_args
 
 
-class FindActionsInput(BaseModel):
+class FindToolsInput(BaseModel):
     query: str = Field(
         description="Concise task description in the user's words; include key nouns and verbs only."
     )
@@ -87,11 +87,11 @@ class FrontendActionInput(BaseModel):
 
 class FrontendActionsInput(BaseModel):
     goal: str = Field(
-        description="Short outcome label for the action sequence (e.g., 'Apply date filter', 'Create new feature')."
+        description="Short outcome label for the screen autopilot action sequence (e.g., 'Apply date filter', 'Create new feature')."
     )
     actions: list[FrontendActionInput] = Field(
         default_factory=list,
-        description="Ordered list of UI actions. Use ref IDs from read_page/find for targeting."
+        description="Ordered list of screen autopilot actions. Use ref IDs from read_page/find_elements for targeting."
     )
 
 
@@ -101,46 +101,50 @@ class JsExecInput(BaseModel):
     )
 
 
-def create_find_actions_tool(session: Session, user_id: str) -> StructuredTool:
-    def find_actions(query: str) -> str:
-        endpoint_ids = search_similar_endpoints(session, user_id, query)
-        if not endpoint_ids:
+def create_find_tools_tool(session: Session, user_id: str) -> StructuredTool:
+    def find_tools(query: str) -> str:
+        tool_ids = search_similar_tools(session, user_id, query)
+        if not tool_ids:
             return json.dumps([], indent=2)
-        endpoints = session.scalars(
-            select(Endpoint).where(
-                Endpoint.id.in_(endpoint_ids),
-                Endpoint.user_id == user_id,
-                Endpoint.agent_enabled.is_(True)
-            ).options(selectinload(Endpoint.feature))
+        tools = session.scalars(
+            select(Tool).where(
+                Tool.id.in_(tool_ids),
+                Tool.user_id == user_id,
+                Tool.agent_enabled.is_(True)
+            ).options(selectinload(Tool.feature))
         ).all()
-        if not endpoints:
+        if not tools:
             return json.dumps([], indent=2)
         result = []
-        for endpoint in endpoints:
-            tool = endpoint.tool or {}
-            function = tool.get("function", {})
+        for tool in tools:
+            tool_spec = tool.tool or {}
+            function = tool_spec.get("function", {})
+            is_backend = getattr(tool, "tool_type", "backend") == "backend"
             result.append(
                 {
-                    "id": str(endpoint.id),
-                    "method": endpoint.method.value,
-                    "path": endpoint.path,
+                    "id": str(tool.id),
+                    "toolType": "backend" if is_backend else "frontend",
+                    "method": tool.method.value if is_backend and tool.method else None,
+                    "path": tool.path if is_backend else None,
                     "name": function.get("name", ""),
                     "description": function.get("description", ""),
-                    "feature": getattr(endpoint.feature, "name", "")
+                    "feature": getattr(tool.feature, "name", "")
                 }
             )
         return json.dumps(result, indent=2)
 
     return StructuredTool.from_function(
-        func=find_actions,
-        name="find_actions",
+        func=find_tools,
+        name="find_tools",
         description=(
-            "Task: Find relevant backend actions for the user's request. "
-            "Use when you need available endpoints or are unsure what to call. "
-            "Output: JSON list of actions with id, method, path, name, description, feature. "
-            "If the list is empty, no backend action fits—use read_page to observe the page."
+            "Task: Find relevant tools for the user's request. "
+            "Use when you need available tools or are unsure what to call first. "
+            "Returns both backend and frontend tools. "
+            "Backend tools call dashboard APIs/services (method/path shown). "
+            "Frontend tools call browser handlers in the user's app (toolType='frontend'). "
+            "Output: JSON list with id, toolType, method/path (backend only), name, description, feature."
         ),
-        args_schema=FindActionsInput
+        args_schema=FindToolsInput
     )
 
 
@@ -157,7 +161,7 @@ def create_read_page_tool() -> StructuredTool:
             "Use filter='interactive' for just buttons/links/inputs. "
             "Use refId to scope to a subtree of a known element. "
             "Includes a screenshot when screen sharing is active. "
-            "Output: Compact text tree with ref IDs that can be used in frontend actions."
+            "Output: Compact text tree with ref IDs that can be used in screen autopilot actions."
         ),
         args_schema=ReadPageInput
     )
@@ -188,8 +192,8 @@ def create_frontend_actions_tool() -> StructuredTool:
         func=frontend,
         name="frontend",
         description=(
-            "Task: Execute frontend UI actions in order. "
-            "Use ref IDs from read_page/find to target elements. Falls back to CSS selectors. "
+            "Task: Execute screen autopilot actions against the current page DOM in order. "
+            "Use ref IDs from read_page/find_elements to target elements. Falls back to CSS selectors. "
             "Output: Per-action results with status."
         ),
         args_schema=FrontendActionsInput
@@ -212,25 +216,27 @@ def create_js_exec_tool() -> StructuredTool:
     )
 
 
-def create_endpoint_tool(
+def create_backend_tool(
     session: Session,
     user_id: str,
-    endpoint: Endpoint,
+    tool: Tool,
     schema_factory: SchemaFactory | None = None,
     conversation_id: UUID | None = None,
 ) -> StructuredTool:
     factory = schema_factory or SchemaFactory()
-    tool_spec = endpoint.tool or {}
+    tool_spec = tool.tool or {}
     function_spec = tool_spec.get("function", {})
-    name = function_spec.get("name", f"endpoint_{endpoint.id}")
-    description = function_spec.get("description", f"{endpoint.method.value} {endpoint.path}")
+    name = function_spec.get("name", f"tool_{tool.id}")
+    default_method = tool.method.value if tool.method else "GET"
+    default_path = tool.path or "/"
+    description = function_spec.get("description", f"{default_method} {default_path}")
     parameters = function_spec.get("parameters", {"type": "object", "properties": {}})
     InputModel = factory.model_from_schema(f"{name}Input", parameters)
 
     def execute_func(**kwargs: Any) -> str:
         serialized = serialize_args(kwargs)
         filtered = {key: value for key, value in serialized.items() if value is not None}
-        result = execute_endpoint(session, user_id, endpoint, filtered, conversation_id=conversation_id)
+        result = execute_backend_tool(session, user_id, tool, filtered, conversation_id=conversation_id)
         return json.dumps(result, indent=2)
 
     return StructuredTool.from_function(
@@ -241,21 +247,47 @@ def create_endpoint_tool(
     )
 
 
-def get_endpoint_tools(
+def create_frontend_tool(tool: Tool, schema_factory: SchemaFactory | None = None) -> StructuredTool:
+    factory = schema_factory or SchemaFactory()
+    tool_spec = tool.tool or {}
+    function_spec = tool_spec.get("function", {})
+    name = function_spec.get("name", f"frontend_tool_{tool.id}")
+    description = function_spec.get("description", "Run a frontend tool handler in the browser")
+    parameters = function_spec.get("parameters", {"type": "object", "properties": {}})
+    InputModel = factory.model_from_schema(f"{name}Input", parameters)
+
+    def execute_func(**_kwargs: Any) -> str:
+        return json.dumps({"status": "queued"})
+
+    return StructuredTool.from_function(
+        func=execute_func,
+        name=name,
+        description=description,
+        args_schema=InputModel
+    )
+
+
+def get_agent_tools(
     session: Session,
     user_id: str,
-    endpoint_ids: list[UUID],
+    tool_ids: list[UUID],
     schema_factory: SchemaFactory | None = None,
     conversation_id: UUID | None = None,
 ) -> list[StructuredTool]:
-    if not endpoint_ids:
+    if not tool_ids:
         return []
-    endpoints = session.scalars(
-        select(Endpoint).where(
-            Endpoint.id.in_(endpoint_ids),
-            Endpoint.user_id == user_id,
-            Endpoint.agent_enabled.is_(True)
+    tools = session.scalars(
+        select(Tool).where(
+            Tool.id.in_(tool_ids),
+            Tool.user_id == user_id,
+            Tool.agent_enabled.is_(True)
         )
     ).all()
     factory = schema_factory or SchemaFactory()
-    return [create_endpoint_tool(session, user_id, endpoint, factory, conversation_id=conversation_id) for endpoint in endpoints]
+    agent_tools: list[StructuredTool] = []
+    for tool in tools:
+        if getattr(tool, "tool_type", "backend") == "frontend":
+            agent_tools.append(create_frontend_tool(tool, factory))
+            continue
+        agent_tools.append(create_backend_tool(session, user_id, tool, factory, conversation_id=conversation_id))
+    return agent_tools

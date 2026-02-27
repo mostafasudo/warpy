@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { BodyFieldRow } from "./BodyFieldRow"
-import { type BodyField } from "@/stores/endpoint-builder"
+import { type BodyField } from "@/stores/tool-builder"
 
 beforeAll(() => {
   ;(HTMLElement.prototype as any).hasPointerCapture = () => false
@@ -74,19 +74,22 @@ describe("BodyFieldRow", () => {
     expect(onRemove).toHaveBeenCalledWith("f1")
   })
 
-  it("supports fixed boolean values and nested add", async () => {
+  it("supports fixed boolean values", async () => {
     const onUpdate = jest.fn()
-    const onAdd = jest.fn()
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     renderField(
       { id: "bool", name: "flag", type: "boolean", required: false, description: "", fixed: false },
-      { onUpdate, onAdd }
+      { onUpdate }
     )
 
     await user.click(screen.getByTestId("body-field-bool-fixed"))
     await user.click(await screen.findByText("true"))
     expect(onUpdate).toHaveBeenCalledWith("bool", expect.objectContaining({ fixed: true }))
+  })
 
+  it("supports nested add for object fields", async () => {
+    const onAdd = jest.fn()
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     renderField(
       {
         id: "obj",
@@ -119,6 +122,30 @@ describe("BodyFieldRow", () => {
     await user.click(itemSelect)
     await user.click(await screen.findByText("number"))
     expect(onUpdate).toHaveBeenCalledWith("arr", expect.objectContaining({ type: "array:number" }))
+  })
+
+  it("clears enum values when type changes to unsupported type", async () => {
+    const onUpdate = jest.fn()
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderField(
+      {
+        id: "enum-field",
+        name: "state",
+        type: "string",
+        required: false,
+        description: "",
+        enumValues: ["open", "closed"]
+      },
+      { onUpdate }
+    )
+
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("object"))
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      "enum-field",
+      expect.objectContaining({ type: "object", enumValues: undefined })
+    )
   })
 
   it("renders nested children for object fields", () => {

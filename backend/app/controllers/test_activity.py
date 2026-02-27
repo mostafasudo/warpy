@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.database import session_scope
 from app.main import create_app
-from app.models import Agent, Conversation, ConversationAction, Endpoint, Feature, HttpMethod, Message
+from app.models import Agent, Conversation, ConversationAction, Tool, Feature, HttpMethod, Message
 from app.schemas.auth import ClerkSession
 
 
@@ -67,7 +67,7 @@ def test_activity_summary_counts_conversations_and_top_actions(client: TestClien
         feature = Feature(user_id="user_1", name="Catalog")
         session.add(feature)
         session.flush()
-        endpoint = Endpoint(
+        tool_record = Tool(
             user_id="user_1",
             path="/products",
             method=HttpMethod.get,
@@ -78,7 +78,7 @@ def test_activity_summary_counts_conversations_and_top_actions(client: TestClien
             feature_id=feature.id,
             agent_enabled=True,
         )
-        session.add(endpoint)
+        session.add(tool_record)
         session.flush()
         conversation = Conversation(agent_id=agent.id, participant="widget")
         session.add(conversation)
@@ -87,7 +87,7 @@ def test_activity_summary_counts_conversations_and_top_actions(client: TestClien
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversation.id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_1",
                 request={"params": {}, "query": {}, "body": {}},
@@ -97,7 +97,7 @@ def test_activity_summary_counts_conversations_and_top_actions(client: TestClien
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversation.id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_2",
                 request={"params": {}, "query": {}, "body": {}},
@@ -154,7 +154,7 @@ def test_activity_conversations_paginates_and_includes_counts(client: TestClient
         feature = Feature(user_id="user_1", name="Catalog")
         session.add(feature)
         session.flush()
-        endpoint = Endpoint(
+        tool_record = Tool(
             user_id="user_1",
             path="/products",
             method=HttpMethod.get,
@@ -162,7 +162,7 @@ def test_activity_conversations_paginates_and_includes_counts(client: TestClient
             feature_id=feature.id,
             agent_enabled=True,
         )
-        session.add(endpoint)
+        session.add(tool_record)
         session.flush()
 
         conversations: list[Conversation] = []
@@ -184,7 +184,7 @@ def test_activity_conversations_paginates_and_includes_counts(client: TestClient
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversations[0].id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_1",
                 request={"params": {}, "query": {}, "body": {}},
@@ -193,7 +193,7 @@ def test_activity_conversations_paginates_and_includes_counts(client: TestClient
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversations[0].id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_2",
                 request={"params": {}, "query": {}, "body": {}},
@@ -202,7 +202,7 @@ def test_activity_conversations_paginates_and_includes_counts(client: TestClient
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversations[1].id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_3",
                 request={"params": {}, "query": {}, "body": {}},
@@ -245,7 +245,7 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
         feature = Feature(user_id="user_1", name="Catalog")
         session.add(feature)
         session.flush()
-        endpoint = Endpoint(
+        tool_record = Tool(
             user_id="user_1",
             path="/products",
             method=HttpMethod.get,
@@ -253,7 +253,7 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
             feature_id=feature.id,
             agent_enabled=True,
         )
-        session.add(endpoint)
+        session.add(tool_record)
         session.flush()
 
         conversation = Conversation(agent_id=agent.id, participant="widget")
@@ -270,7 +270,7 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversation.id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_1",
                 request={"params": {}, "query": {}, "body": {}},
@@ -280,7 +280,7 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
             ConversationAction(
                 user_id="user_1",
                 conversation_id=conversation.id,
-                endpoint_id=endpoint.id,
+                tool_id=tool_record.id,
                 feature_id=feature.id,
                 tool_call_id="tc_2",
                 request={"params": {}, "query": {}, "body": {}},
@@ -318,3 +318,126 @@ def test_activity_conversation_detail_paginates_messages_and_actions(client: Tes
     assert len(action_body["actions"]) == 1
     assert action_body["actions"][0]["action"] == "List products"
     assert action_body["nextActionCursor"] is None
+
+
+def test_activity_conversation_detail_distinguishes_frontend_tool_and_screen_autopilot(client: TestClient):
+    agent_response = client.post("/agent", headers=auth_headers())
+    assert agent_response.status_code == 201
+    agent_id = UUID(agent_response.json()["id"])
+
+    now = datetime.now(tz=UTC)
+
+    with session_scope() as session:
+        agent = session.get(Agent, agent_id)
+        assert agent
+        feature = Feature(user_id="user_1", name="UI")
+        session.add(feature)
+        session.flush()
+        frontend_tool = Tool(
+            user_id="user_1",
+            tool_type="frontend",
+            path=None,
+            method=None,
+            tool={"type": "function", "function": {"name": "open_drawer", "description": "Open drawer", "parameters": {"type": "object", "properties": {}}}},
+            feature_id=feature.id,
+            agent_enabled=True,
+        )
+        session.add(frontend_tool)
+        session.flush()
+
+        conversation = Conversation(agent_id=agent.id, participant="widget")
+        session.add(conversation)
+        session.flush()
+
+        session.add_all([
+            Message(conversation_id=conversation.id, role="user", content="Open the drawer", sequence=1, created_at=now - timedelta(minutes=2)),
+            Message(conversation_id=conversation.id, role="assistant", content="Done", sequence=2, created_at=now - timedelta(minutes=1)),
+        ])
+
+        session.add_all([
+            ConversationAction(
+                user_id="user_1",
+                conversation_id=conversation.id,
+                tool_type="frontend",
+                tool_id=frontend_tool.id,
+                feature_id=feature.id,
+                tool_call_id="tc_front_tool",
+                request={"params": {"drawer": "orders"}, "query": {}, "body": {}},
+                response_body={"ok": True, "drawer": "orders"},
+                status_code=200,
+                created_at=now - timedelta(seconds=50),
+            ),
+            ConversationAction(
+                user_id="user_1",
+                conversation_id=conversation.id,
+                tool_type="screen_autopilot",
+                tool_call_id="tc_screen",
+                request={},
+                frontend_goal="Open menu",
+                frontend_url="https://app.example.com/orders",
+                frontend_actions=[{"action": "click", "selector": "button[aria-label='Menu']", "status": "ok"}],
+                response_body={"kind": "frontend_actions", "goal": "Open menu"},
+                status_code=200,
+                created_at=now - timedelta(seconds=30),
+            ),
+        ])
+        conversation_id = conversation.id
+
+    response = client.get(f"/activity/conversations/{conversation_id}", headers=auth_headers())
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+
+    frontend_tool_action = next(item for item in actions if item["toolType"] == "frontend")
+    assert frontend_tool_action["feature"] == "UI"
+    assert frontend_tool_action["action"] == "Open drawer"
+    assert frontend_tool_action["request"]["params"] == {"drawer": "orders"}
+    assert frontend_tool_action["responseBody"] == {"ok": True, "drawer": "orders"}
+
+    screen_action = next(item for item in actions if item["toolType"] == "screen_autopilot")
+    assert screen_action["frontendGoal"] == "Open menu"
+    assert screen_action["frontendUrl"] == "https://app.example.com/orders"
+    assert screen_action["frontendActions"][0]["action"] == "click"
+    assert screen_action["responseBody"] == {"kind": "frontend_actions", "goal": "Open menu"}
+
+
+def test_activity_conversation_detail_treats_legacy_frontend_autopilot_as_screen_autopilot(client: TestClient):
+    agent_response = client.post("/agent", headers=auth_headers())
+    assert agent_response.status_code == 201
+    agent_id = UUID(agent_response.json()["id"])
+
+    now = datetime.now(tz=UTC)
+
+    with session_scope() as session:
+        agent = session.get(Agent, agent_id)
+        assert agent
+
+        conversation = Conversation(agent_id=agent.id, participant="widget")
+        session.add(conversation)
+        session.flush()
+
+        session.add_all([
+            Message(conversation_id=conversation.id, role="user", content="Open menu", sequence=1, created_at=now - timedelta(minutes=2)),
+            Message(conversation_id=conversation.id, role="assistant", content="Done", sequence=2, created_at=now - timedelta(minutes=1)),
+            ConversationAction(
+                user_id="user_1",
+                conversation_id=conversation.id,
+                tool_type="frontend",
+                tool_id=None,
+                feature_id=None,
+                tool_call_id="tc_legacy_screen",
+                request={},
+                frontend_goal="Open menu",
+                frontend_url="https://app.example.com/orders",
+                frontend_actions=[{"action": "click", "selector": "button[aria-label='Menu']", "status": "ok"}],
+                status_code=200,
+                created_at=now - timedelta(seconds=30),
+            ),
+        ])
+        conversation_id = conversation.id
+
+    response = client.get(f"/activity/conversations/{conversation_id}", headers=auth_headers())
+    assert response.status_code == 200
+    actions = response.json()["actions"]
+    assert len(actions) == 1
+    assert actions[0]["toolType"] == "screen_autopilot"
+    assert actions[0]["frontendGoal"] == "Open menu"

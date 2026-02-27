@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { type BodyField } from "@/stores/endpoint-builder"
+import { type BodyField } from "@/stores/tool-builder"
 import { EnumValuesInput } from "./EnumValuesInput"
 import type { FieldValidation } from "./validation"
 
@@ -69,10 +69,15 @@ export const BodyFieldRow = ({ field, depth, invalid, onUpdate, onAdd, onRemove,
             : type === "string"
               ? (typeof field.fixed === "string" ? field.fixed : "")
               : undefined
+    const newEnumValues =
+      type === "string" || type === "number"
+        ? field.enumValues
+        : undefined
 
     onUpdate(field.id, {
       type,
-      fixed: newFixed
+      fixed: newFixed,
+      enumValues: newEnumValues
     })
   }
 

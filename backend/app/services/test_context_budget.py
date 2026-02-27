@@ -86,7 +86,7 @@ def test_count_message_tokens_ai_without_tool_calls():
 def test_count_message_tokens_ai_with_tool_calls():
     msg = AIMessage(
         content="",
-        tool_calls=[{"id": "call-1", "name": "find_actions", "args": {"query": "test"}}],
+        tool_calls=[{"id": "call-1", "name": "find_tools", "args": {"query": "test"}}],
     )
     tokens_with = count_message_tokens(msg, "gpt-4o")
     msg_no_tools = AIMessage(content="")

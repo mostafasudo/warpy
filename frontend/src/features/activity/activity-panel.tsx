@@ -161,7 +161,7 @@ const ConversationDetailDialog = ({
 
   return (
     <Dialog open={Boolean(conversationId)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1480px] flex-col">
         <DialogHeader>
           <DialogTitle>Conversation</DialogTitle>
           <DialogDescription>
@@ -181,15 +181,15 @@ const ConversationDetailDialog = ({
         ) : null}
 
         {detail ? (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="space-y-3">
+          <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-2">
+            <div className="flex min-h-0 flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold">Messages</p>
                 {detailQuery.isFetchingNextPage ? (
                   <p className="text-xs text-muted-foreground">Loading older messages…</p>
                 ) : null}
               </div>
-              <ScrollArea className="h-[520px] rounded-xl border border-border/60 bg-muted/10 p-4">
+              <ScrollArea className="min-h-0 flex-1 rounded-xl border border-border/60 bg-muted/10 p-4">
                 <div className="space-y-3">
                   <div ref={messagesStartRef} className="h-px w-full" />
                   {messages.map((message, index) => (
@@ -216,14 +216,14 @@ const ConversationDetailDialog = ({
               </ScrollArea>
             </div>
 
-            <div className="space-y-3">
+            <div className="flex min-h-0 flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold">Actions</p>
                 {detailQuery.isFetchingNextPage ? (
                   <p className="text-xs text-muted-foreground">Loading older actions…</p>
                 ) : null}
               </div>
-              <ScrollArea className="h-[520px] rounded-xl border border-border/60 bg-muted/10 p-4">
+              <ScrollArea className="min-h-0 flex-1 rounded-xl border border-border/60 bg-muted/10 p-4">
                 <div className="space-y-3">
                   <div ref={actionsStartRef} className="h-px w-full" />
                   {actions.map((action) => (
@@ -242,34 +242,104 @@ const ConversationDetailDialog = ({
   )
 }
 
-const JsonBlock = ({ value }: { value: unknown }) => (
-  <pre className="max-h-48 overflow-auto rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-foreground">
-    {JSON.stringify(value, null, 2)}
-  </pre>
-)
+const toDetailText = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value, null, 2))
+
+const DetailBlock = ({ value }: { value: unknown }) => {
+  const [expanded, setExpanded] = useState(false)
+  const text = useMemo(() => toDetailText(value), [value])
+  const isLarge = text.length > 1200 || text.split("\n").length > 18
+
+  return (
+    <div
+      className={cn(
+        "relative rounded-lg border border-border/60 bg-muted/20",
+        isLarge && !expanded ? "max-h-56 overflow-hidden" : ""
+      )}
+    >
+      <pre className={cn("p-3 text-xs text-foreground whitespace-pre-wrap break-all", isLarge ? "pb-10" : "")}>{text}</pre>
+      {isLarge && !expanded ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-muted/20 via-muted/20 to-transparent" />
+      ) : null}
+      {isLarge ? (
+        <Button
+          type="button"
+          variant="ghost"
+          className="absolute bottom-2 right-2 z-10 h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "Show less" : "Show full details"}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+const toFrontendToolResultDisplay = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value
+  }
+  const record = value as Record<string, unknown>
+  const filtered: Record<string, unknown> = {}
+  if ("url" in record) {
+    filtered.url = record.url
+  }
+  if ("result" in record) {
+    filtered.result = record.result
+  }
+  return Object.keys(filtered).length ? filtered : value
+}
 
 const isRecordEmpty = (value: Record<string, unknown> | undefined | null) =>
   !value || Object.keys(value).length === 0
 
 const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
-  const isFrontend = action.toolType === "frontend"
-  const statusVariant = action.statusCode && action.statusCode >= 400 ? "destructive" : "secondary"
-  const hasError = Boolean(action.error) || Boolean(action.statusCode && action.statusCode >= 400)
+  const isBackendTool = action.toolType === "backend"
+  const isFrontendTool = action.toolType === "frontend"
+  const isScreenAutopilot = action.toolType === "screen_autopilot"
+  const usesStatusTag = isFrontendTool || isScreenAutopilot
+  const hasErrorText = typeof action.error === "string" ? action.error.trim().length > 0 : Boolean(action.error)
+  const hasResponseBody = action.responseBody !== null && action.responseBody !== undefined
+  const hasError = hasErrorText || Boolean(action.statusCode && action.statusCode >= 400)
+  const isPartialSuccess = isScreenAutopilot && action.statusCode === 207 && !hasError
+  const isFailedFrontendTool = isFrontendTool && hasError
+  const showResponseBodyInDetails = hasResponseBody && !isFailedFrontendTool
+  const hasResponseDetails = (isBackendTool || isFrontendTool) && (showResponseBodyInDetails || hasErrorText)
+  const statusVariant = usesStatusTag
+    ? hasError
+      ? "destructive"
+      : isPartialSuccess
+        ? "outline"
+        : "secondary"
+    : action.statusCode && action.statusCode >= 400
+      ? "destructive"
+      : "secondary"
+  const statusLabel = usesStatusTag
+    ? hasError
+      ? "Failed"
+      : isPartialSuccess
+        ? "Partial"
+        : "Success"
+    : action.statusCode
+      ? String(action.statusCode)
+      : hasError
+        ? "Failed"
+        : "Success"
 
-  const label = isFrontend
-    ? `Frontend · ${action.frontendGoal || "Page interaction"}`
+  const label = isScreenAutopilot
+    ? `Screen Autopilot · ${action.frontendGoal || "Page interaction"}`
     : action.feature
       ? `${action.action} · ${action.feature}`
       : action.action || "Action"
 
   const request = action.request ?? { params: {}, query: {}, body: {} }
   const hasRequest =
-    !isFrontend &&
+    !isScreenAutopilot &&
     (!isRecordEmpty(request.params as Record<string, unknown>) ||
       !isRecordEmpty(request.query as Record<string, unknown>) ||
       !isRecordEmpty(request.body as Record<string, unknown>))
+  const responseBodyValue = isFrontendTool ? toFrontendToolResultDisplay(action.responseBody) : action.responseBody
 
-  const hasFrontendActions = isFrontend && action.frontendActions && action.frontendActions.length > 0
+  const hasFrontendActions = isScreenAutopilot && action.frontendActions && action.frontendActions.length > 0
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-4">
@@ -277,18 +347,18 @@ const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
         <div>
           <p className="text-sm font-semibold">{label}</p>
           <p className="mt-1 text-xs text-muted-foreground">{toDisplayTime(action.createdAt)}</p>
-          {isFrontend && action.frontendUrl ? (
+          {isScreenAutopilot && action.frontendUrl ? (
             <p className="mt-0.5 text-xs text-muted-foreground/70 truncate max-w-[200px]" title={action.frontendUrl}>
               {action.frontendUrl}
             </p>
           ) : null}
         </div>
-        <Badge variant={statusVariant}>
-          {action.statusCode ? action.statusCode : hasError ? "Failed" : "Success"}
+        <Badge variant={statusVariant} className="whitespace-nowrap">
+          {statusLabel}
         </Badge>
       </div>
 
-      {action.error ? (
+      {!hasResponseDetails && action.error ? (
         <p className="mt-3 text-sm text-muted-foreground">{action.error}</p>
       ) : null}
 
@@ -324,27 +394,59 @@ const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
         <Collapsible>
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" className="mt-2 w-full justify-between" data-testid="action-details">
-              View request details
+              {isFrontendTool ? "View inputs" : "View request"}
               <ChevronDown className="h-4 w-4" />
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-3 pt-2">
             {!isRecordEmpty(request.params as Record<string, unknown>) ? (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground">Path values</p>
-                <JsonBlock value={request.params} />
+                <p className="text-xs font-semibold text-muted-foreground">
+                  {isFrontendTool ? "Information sent" : "Path values"}
+                </p>
+                <DetailBlock value={request.params} />
               </div>
             ) : null}
             {!isRecordEmpty(request.query as Record<string, unknown>) ? (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground">Search filters</p>
-                <JsonBlock value={request.query} />
+                <p className="text-xs font-semibold text-muted-foreground">URL options</p>
+                <DetailBlock value={request.query} />
               </div>
             ) : null}
             {!isRecordEmpty(request.body as Record<string, unknown>) ? (
               <div>
                 <p className="text-xs font-semibold text-muted-foreground">Information sent</p>
-                <JsonBlock value={request.body} />
+                <DetailBlock value={request.body} />
+              </div>
+            ) : null}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+
+      {hasResponseDetails ? (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="mt-2 w-full justify-between"
+              data-testid="action-response-details"
+            >
+              {isFrontendTool ? "View tool result" : "View result"}
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-2">
+            {showResponseBodyInDetails ? (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">{isFrontendTool ? "Result" : "Response"}</p>
+                <DetailBlock value={responseBodyValue} />
+              </div>
+            ) : null}
+            {hasErrorText ? (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">Issue</p>
+                <DetailBlock value={action.error} />
               </div>
             ) : null}
           </CollapsibleContent>

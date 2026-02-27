@@ -47,34 +47,34 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  buildEndpointPayload,
-  mapEndpointToBuilderState,
+  buildToolPayload,
+  mapToolToBuilderState,
 } from "@/lib/tool-schema";
-import { validateEndpointState } from "./validation";
-import { useCreateEndpoint } from "@/queries/use-create-endpoint";
-import { useDeleteEndpoint } from "@/queries/use-delete-endpoint";
-import { useUpdateEndpoint } from "@/queries/use-update-endpoint";
+import { validateToolState } from "./validation";
+import { useCreateTool } from "@/queries/use-create-tool";
+import { useDeleteTool } from "@/queries/use-delete-tool";
+import { useUpdateTool } from "@/queries/use-update-tool";
 import { useCreateFeature } from "@/queries/use-create-feature";
 import { useDeleteFeature } from "@/queries/use-delete-feature";
-import { useFeatureEndpointsQuery } from "@/queries/use-feature-endpoints";
+import { useFeatureToolsQuery } from "@/queries/use-feature-tools";
 import { useFeaturesQuery } from "@/queries/use-features";
 import { useToggleFeature } from "@/queries/use-toggle-feature";
 import { useUpdateFeature } from "@/queries/use-update-feature";
 import {
-  endpointBuilderActions,
-  useEndpointBuilderStore,
-} from "@/stores/endpoint-builder";
+  toolBuilderActions,
+  useToolBuilderStore,
+} from "@/stores/tool-builder";
 import {
-  endpointsUiSelectors,
-  useEndpointsUiStore,
-} from "@/stores/endpoints-ui";
+  toolsUiSelectors,
+  useToolsUiStore,
+} from "@/stores/tools-ui";
 import { toastSelectors, useToastStore } from "@/stores/toast";
-import { EndpointEditor } from "./EndpointEditor";
-import { methodTone } from "./constants";
+import { ToolEditor } from "./ToolEditor";
+import { frontendTone, methodTone } from "./constants";
 import type {
-  EndpointPayload,
-  EndpointResponse,
-  FeatureWithEndpoints,
+  ToolPayload,
+  ToolResponse,
+  FeatureWithTools,
   HttpMethod,
 } from "@/types";
 
@@ -86,36 +86,43 @@ const featureStateLabel: Record<string, string> = {
 
 const primaryActionButtonSize = "h-9 min-w-[9rem] max-w-[9rem]";
 
-const toEndpointPayload = (
-  endpoint: EndpointResponse,
+const toToolPayload = (
+  tool: ToolResponse,
   featureId?: string,
-): EndpointPayload => ({
-  path: endpoint.path,
-  method: endpoint.method as HttpMethod,
-  tool: endpoint.tool,
-  agentEnabled: endpoint.agentEnabled,
-  feature: { mode: "existing", id: featureId ?? endpoint.feature.id },
-});
+): ToolPayload => {
+  const toolType = tool.toolType ?? "backend";
+  const payload: ToolPayload = {
+    toolType,
+    tool: tool.tool,
+    agentEnabled: tool.agentEnabled,
+    feature: { mode: "existing", id: featureId ?? tool.feature.id },
+  };
+  if (toolType === "backend") {
+    payload.path = tool.path ?? "/";
+    payload.method = (tool.method as HttpMethod) ?? "GET";
+  }
+  return payload;
+};
 
 type FeatureCardProps = {
-  feature: FeatureWithEndpoints;
-  features: FeatureWithEndpoints[];
+  feature: FeatureWithTools;
+  features: FeatureWithTools[];
   currentPage: number;
   onPageChange: (page: number) => void;
   pendingFeatureToggles: Record<string, boolean>;
-  pendingEndpointToggles: Record<string, boolean>;
+  pendingToolToggles: Record<string, boolean>;
   isTogglingFeature: boolean;
-  isUpdatingEndpoint: boolean;
+  isUpdatingTool: boolean;
   isDeletingFeature: boolean;
-  isDeletingEndpoint: boolean;
-  onFeatureToggle: (feature: FeatureWithEndpoints, enabled: boolean) => void;
-  onEndpointToggle: (endpoint: EndpointResponse, enabled: boolean) => void;
-  onMoveEndpoint: (endpoint: EndpointResponse, targetFeatureId: string) => void;
-  onDeleteEndpoint: (endpoint: EndpointResponse) => void;
-  onDeleteFeature: (feature: FeatureWithEndpoints) => void;
-  onEditEndpoint: (endpoint: EndpointResponse) => void;
-  onCreateEndpoint: (featureId: string) => void;
-  onRenameFeature: (feature: FeatureWithEndpoints) => void;
+  isDeletingTool: boolean;
+  onFeatureToggle: (feature: FeatureWithTools, enabled: boolean) => void;
+  onToolToggle: (tool: ToolResponse, enabled: boolean) => void;
+  onMoveTool: (tool: ToolResponse, targetFeatureId: string) => void;
+  onDeleteTool: (tool: ToolResponse) => void;
+  onDeleteFeature: (feature: FeatureWithTools) => void;
+  onEditTool: (tool: ToolResponse) => void;
+  onCreateTool: (featureId: string) => void;
+  onRenameFeature: (feature: FeatureWithTools) => void;
 };
 
 const FeatureCard = ({
@@ -124,30 +131,32 @@ const FeatureCard = ({
   currentPage,
   onPageChange,
   pendingFeatureToggles,
-  pendingEndpointToggles,
+  pendingToolToggles,
   isTogglingFeature,
-  isUpdatingEndpoint,
+  isUpdatingTool,
   isDeletingFeature,
-  isDeletingEndpoint,
+  isDeletingTool,
   onFeatureToggle,
-  onEndpointToggle,
-  onMoveEndpoint,
-  onDeleteEndpoint,
+  onToolToggle,
+  onMoveTool,
+  onDeleteTool,
   onDeleteFeature,
-  onEditEndpoint,
-  onCreateEndpoint,
+  onEditTool,
+  onCreateTool,
   onRenameFeature,
 }: FeatureCardProps) => {
   const { data: paginatedData, isFetching: isFetchingPage } =
-    useFeatureEndpointsQuery(feature.id, currentPage, currentPage > 1);
+    useFeatureToolsQuery(feature.id, currentPage, currentPage > 1);
 
-  const endpoints =
-    currentPage > 1 && paginatedData ? paginatedData.items : feature.endpoints;
+  const tools =
+    currentPage > 1 && paginatedData
+      ? paginatedData.items
+      : feature.tools;
   const pagination =
     currentPage > 1 && paginatedData ? paginatedData : feature.pagination;
-  const endpointCount = feature.endpointCount;
-  const hasEndpoints = endpointCount > 0;
-  const showPagination = endpointCount > pagination.pageSize;
+  const toolCount = feature.toolCount;
+  const hasTools = toolCount > 0;
+  const showPagination = toolCount > pagination.pageSize;
 
   return (
     <div className="space-y-3 rounded-2xl border border-border/70 bg-card/40 p-4">
@@ -172,17 +181,17 @@ const FeatureCard = ({
             >
               {featureStateLabel[feature.enabledState] ?? feature.enabledState}
             </Badge>
-            {endpointCount > 0 ? (
+            {toolCount > 0 ? (
               <span className="text-xs text-muted-foreground">
-                {endpointCount} {endpointCount === 1 ? "endpoint" : "endpoints"}
+                {toolCount} {toolCount === 1 ? "tool" : "tools"}
               </span>
             ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {hasEndpoints && (
+          {hasTools && (
             <>
-              <ActionTooltip content="Enable all endpoints">
+              <ActionTooltip content="Enable all tools">
                 <Button
                   size="icon"
                   variant="outline"
@@ -190,12 +199,12 @@ const FeatureCard = ({
                   disabled={
                     pendingFeatureToggles[feature.id] || isTogglingFeature
                   }
-                  aria-label="Enable all endpoints"
+                  aria-label="Enable all tools"
                 >
                   <Power className="h-4 w-4" />
                 </Button>
               </ActionTooltip>
-              <ActionTooltip content="Disable all endpoints">
+              <ActionTooltip content="Disable all tools">
                 <Button
                   size="icon"
                   variant="outline"
@@ -203,20 +212,20 @@ const FeatureCard = ({
                   disabled={
                     pendingFeatureToggles[feature.id] || isTogglingFeature
                   }
-                  aria-label="Disable all endpoints"
+                  aria-label="Disable all tools"
                 >
                   <Ban className="h-4 w-4" />
                 </Button>
               </ActionTooltip>
             </>
           )}
-          <ActionTooltip content="New endpoint in this feature">
+          <ActionTooltip content="New tool in this feature">
             <Button
               size="icon"
               variant="secondary"
-              onClick={() => onCreateEndpoint(feature.id)}
-              data-testid={`new-endpoint-${feature.id}`}
-              aria-label="New endpoint"
+              onClick={() => onCreateTool(feature.id)}
+              data-testid={`new-tool-${feature.id}`}
+              aria-label="New tool"
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -256,7 +265,7 @@ const FeatureCard = ({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete this feature?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Deleting {feature.name} removes its endpoints.
+                    Deleting {feature.name} removes its tools.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -276,58 +285,70 @@ const FeatureCard = ({
             {Array.from({
               length: Math.min(
                 pagination.pageSize,
-                endpointCount - (currentPage - 1) * pagination.pageSize,
+                toolCount - (currentPage - 1) * pagination.pageSize,
               ),
             }).map((_, i) => (
               <Skeleton
-                key={`ep-skeleton-${i}`}
+                key={`tool-skeleton-${i}`}
                 className="h-16 w-full rounded-xl"
               />
             ))}
           </div>
-        ) : endpoints.length ? (
-          endpoints.map((endpoint) => (
+        ) : tools.length ? (
+          tools.map((tool) => (
             <div
-              key={endpoint.id}
+              key={tool.id}
               className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-3"
             >
-              <Badge
-                className={cn(
-                  "border",
-                  methodTone[endpoint.method as HttpMethod],
-                )}
-              >
-                {endpoint.method}
-              </Badge>
+              {(tool.toolType ?? "backend") === "backend" ? (
+                <Badge
+                  className={cn(
+                    "border",
+                    methodTone[(tool.method as HttpMethod) ?? "GET"],
+                  )}
+                >
+                  {(tool.method as HttpMethod) ?? "GET"}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className={cn("border", frontendTone)}>
+                  Frontend
+                </Badge>
+              )}
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <div
                     className="truncate font-medium"
-                    title={endpoint.tool.function.name}
+                    title={tool.tool.function.name}
                   >
-                    {endpoint.tool.function.name}
+                    {tool.tool.function.name}
                   </div>
                   <div
                     className="truncate font-mono text-xs text-muted-foreground"
-                    title={endpoint.path}
+                    title={
+                      (tool.toolType ?? "backend") === "backend"
+                        ? (tool.path ?? "/")
+                        : `window.warpy('${tool.tool.function.name}', vars)`
+                    }
                   >
-                    {endpoint.path}
+                    {(tool.toolType ?? "backend") === "backend"
+                      ? (tool.path ?? "/")
+                      : `window.warpy('${tool.tool.function.name}', vars)`}
                   </div>
                 </div>
                 <div
                   className="line-clamp-1 break-all text-xs text-muted-foreground"
-                  title={endpoint.tool.function.description}
+                  title={tool.tool.function.description}
                 >
-                  {endpoint.tool.function.description}
+                  {tool.tool.function.description}
                 </div>
               </div>
               <div className="min-w-[160px]">
                 <Select
-                  value={endpoint.feature.id}
-                  onValueChange={(value) => onMoveEndpoint(endpoint, value)}
+                  value={tool.feature.id}
+                  onValueChange={(value) => onMoveTool(tool, value)}
                 >
                   <SelectTrigger
-                    data-testid={`move-endpoint-${endpoint.id}`}
+                    data-testid={`move-tool-${tool.id}`}
                     className="w-48 px-3 pr-8"
                   >
                     <span className="block flex-1 min-w-0 truncate text-left">
@@ -345,38 +366,38 @@ const FeatureCard = ({
               </div>
               <div className="flex items-center gap-2">
                 <Switch
-                  checked={endpoint.agentEnabled}
+                  checked={tool.agentEnabled}
                   onCheckedChange={(checked) =>
-                    onEndpointToggle(endpoint, checked)
+                    onToolToggle(tool, checked)
                   }
                   disabled={
-                    pendingEndpointToggles[endpoint.id] || isUpdatingEndpoint
+                    pendingToolToggles[tool.id] || isUpdatingTool
                   }
-                  data-testid={`agent-toggle-${endpoint.id}`}
+                  data-testid={`agent-toggle-${tool.id}`}
                 />
                 <span className="text-xs text-muted-foreground">
-                  {endpoint.agentEnabled ? "Enabled" : "Disabled"}
+                  {tool.agentEnabled ? "Enabled" : "Disabled"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <ActionTooltip content="Edit endpoint">
+                <ActionTooltip content="Edit tool">
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => onEditEndpoint(endpoint)}
-                    data-testid={`edit-endpoint-${endpoint.id}`}
+                    onClick={() => onEditTool(tool)}
+                    data-testid={`edit-tool-${tool.id}`}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </ActionTooltip>
                 <AlertDialog>
-                  <ActionTooltip content="Delete endpoint">
+                  <ActionTooltip content="Delete tool">
                     <AlertDialogTrigger asChild>
                       <Button
                         size="icon"
                         variant="ghost"
-                        disabled={isDeletingEndpoint}
-                        data-testid={`delete-endpoint-${endpoint.id}`}
+                        disabled={isDeletingTool}
+                        data-testid={`delete-tool-${tool.id}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -387,17 +408,17 @@ const FeatureCard = ({
                       className="grid gap-4"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        if (isDeletingEndpoint) return;
-                        onDeleteEndpoint(endpoint);
+                        if (isDeletingTool) return;
+                        onDeleteTool(tool);
                       }}
                     >
                       <AlertDialogHeader>
                         <AlertDialogTitle>
-                          Delete this endpoint?
+                          Delete this tool?
                         </AlertDialogTitle>
                         <AlertDialogDescription>
                           Are you sure you want to delete{" "}
-                          {endpoint.tool.function.name}?
+                          {tool.tool.function.name}?
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -406,7 +427,7 @@ const FeatureCard = ({
                         </AlertDialogCancel>
                         <AlertDialogAction
                           type="submit"
-                          disabled={isDeletingEndpoint}
+                          disabled={isDeletingTool}
                         >
                           Delete
                         </AlertDialogAction>
@@ -419,7 +440,7 @@ const FeatureCard = ({
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-            No endpoints in this feature yet.
+            No tools in this feature yet.
           </div>
         )}
       </div>
@@ -454,29 +475,29 @@ const FeatureCard = ({
   );
 };
 
-export const FeaturesPanel = () => {
-  const search = useEndpointsUiStore(endpointsUiSelectors.search);
-  const searchDraft = useEndpointsUiStore(endpointsUiSelectors.searchDraft);
-  const setSearch = useEndpointsUiStore(endpointsUiSelectors.setSearch);
-  const setSearchDraft = useEndpointsUiStore(
-    endpointsUiSelectors.setSearchDraft,
+export const ToolsPanel = () => {
+  const search = useToolsUiStore(toolsUiSelectors.search);
+  const searchDraft = useToolsUiStore(toolsUiSelectors.searchDraft);
+  const setSearch = useToolsUiStore(toolsUiSelectors.setSearch);
+  const setSearchDraft = useToolsUiStore(
+    toolsUiSelectors.setSearchDraft,
   );
-  const openCreate = useEndpointsUiStore(endpointsUiSelectors.openCreate);
-  const openEdit = useEndpointsUiStore(endpointsUiSelectors.openEdit);
-  const closeEditor = useEndpointsUiStore(endpointsUiSelectors.closeEditor);
-  const editorOpen = useEndpointsUiStore(endpointsUiSelectors.editorOpen);
-  const editingId = useEndpointsUiStore(endpointsUiSelectors.editingId);
-  const editingEndpoint = useEndpointsUiStore(
-    endpointsUiSelectors.editingEndpoint,
+  const openCreate = useToolsUiStore(toolsUiSelectors.openCreate);
+  const openEdit = useToolsUiStore(toolsUiSelectors.openEdit);
+  const closeEditor = useToolsUiStore(toolsUiSelectors.closeEditor);
+  const editorOpen = useToolsUiStore(toolsUiSelectors.editorOpen);
+  const editingId = useToolsUiStore(toolsUiSelectors.editingId);
+  const editingTool = useToolsUiStore(
+    toolsUiSelectors.editingTool,
   );
   const { data, isPending, isFetching } = useFeaturesQuery(search);
   const features = useMemo(() => data ?? [], [data]);
-  const { mutateAsync: createEndpoint, isPending: isCreatingEndpoint } =
-    useCreateEndpoint();
-  const { mutateAsync: updateEndpoint, isPending: isUpdatingEndpoint } =
-    useUpdateEndpoint();
-  const { mutateAsync: deleteEndpoint, isPending: isDeletingEndpoint } =
-    useDeleteEndpoint();
+  const { mutateAsync: createTool, isPending: isCreatingTool } =
+    useCreateTool();
+  const { mutateAsync: updateTool, isPending: isUpdatingTool } =
+    useUpdateTool();
+  const { mutateAsync: deleteTool, isPending: isDeletingTool } =
+    useDeleteTool();
   const { mutateAsync: createFeature, isPending: isCreatingFeature } =
     useCreateFeature();
   const { mutateAsync: updateFeature, isPending: isRenamingFeature } =
@@ -485,19 +506,19 @@ export const FeaturesPanel = () => {
     useDeleteFeature();
   const { mutateAsync: toggleFeature, isPending: isTogglingFeature } =
     useToggleFeature();
-  const hydrate = useEndpointBuilderStore(endpointBuilderActions.hydrate);
-  const resetBuilder = useEndpointBuilderStore(endpointBuilderActions.reset);
-  const setFeatureMode = useEndpointBuilderStore(
-    endpointBuilderActions.setFeatureMode,
+  const hydrate = useToolBuilderStore(toolBuilderActions.hydrate);
+  const resetBuilder = useToolBuilderStore(toolBuilderActions.reset);
+  const setFeatureMode = useToolBuilderStore(
+    toolBuilderActions.setFeatureMode,
   );
-  const setFeatureId = useEndpointBuilderStore(
-    endpointBuilderActions.setFeatureId,
+  const setFeatureId = useToolBuilderStore(
+    toolBuilderActions.setFeatureId,
   );
-  const setFeatureName = useEndpointBuilderStore(
-    endpointBuilderActions.setFeatureName,
+  const setFeatureName = useToolBuilderStore(
+    toolBuilderActions.setFeatureName,
   );
   const addToast = useToastStore(toastSelectors.addToast);
-  const [pendingEndpointToggles, setPendingEndpointToggles] = useState<
+  const [pendingToolToggles, setPendingToolToggles] = useState<
     Record<string, boolean>
   >({});
   const [pendingFeatureToggles, setPendingFeatureToggles] = useState<
@@ -505,7 +526,7 @@ export const FeaturesPanel = () => {
   >({});
   const [newFeatureOpen, setNewFeatureOpen] = useState(false);
   const [newFeatureName, setNewFeatureName] = useState("");
-  const [renameTarget, setRenameTarget] = useState<FeatureWithEndpoints | null>(
+  const [renameTarget, setRenameTarget] = useState<FeatureWithTools | null>(
     null,
   );
   const [renameValue, setRenameValue] = useState("");
@@ -520,7 +541,7 @@ export const FeaturesPanel = () => {
   }, []);
 
   const showSearchLoading = isFetching && Boolean(search.trim());
-  const isSavingEndpoint = isCreatingEndpoint || isUpdatingEndpoint;
+  const isSavingTool = isCreatingTool || isUpdatingTool;
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchDraft), 250);
@@ -528,11 +549,11 @@ export const FeaturesPanel = () => {
   }, [searchDraft, setSearch]);
 
   useEffect(() => {
-    if (!editorOpen || !editingEndpoint) return;
-    hydrate(mapEndpointToBuilderState(editingEndpoint));
-  }, [editorOpen, editingEndpoint, hydrate]);
+    if (!editorOpen || !editingTool) return;
+    hydrate(mapToolToBuilderState(editingTool));
+  }, [editorOpen, editingTool, hydrate]);
 
-  const startCreateEndpoint = (featureId?: string) => {
+  const startCreateTool = (featureId?: string) => {
     resetBuilder();
     if (featureId) {
       setFeatureId(featureId);
@@ -546,8 +567,8 @@ export const FeaturesPanel = () => {
   };
 
   const handleSave = async () => {
-    const builderState = useEndpointBuilderStore.getState();
-    const validation = validateEndpointState(builderState);
+    const builderState = useToolBuilderStore.getState();
+    const validation = validateToolState(builderState);
     if (validation.errors.length) {
       addToast({
         title: "Validation failed",
@@ -556,61 +577,60 @@ export const FeaturesPanel = () => {
       });
       return;
     }
-    const payload = buildEndpointPayload(builderState);
+    const payload = buildToolPayload(builderState);
     try {
       if (editingId) {
-        await updateEndpoint({ id: editingId, payload });
+        await updateTool({ id: editingId, payload });
         addToast({
-          title: "Endpoint updated",
+          title: "Tool updated",
           description: payload.tool.function.name,
           variant: "success",
         });
       } else {
-        await createEndpoint(payload);
+        await createTool(payload);
         addToast({
-          title: "Endpoint created",
+          title: "Tool created",
           description: payload.tool.function.name,
           variant: "success",
         });
       }
+      closeEditor();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not save endpoint";
+        error instanceof Error ? error.message : "Could not save tool";
       addToast({
         title: "Save failed",
         description: message,
         variant: "error",
       });
-    } finally {
-      closeEditor();
     }
   };
 
-  const handleDeleteEndpoint = async (endpoint: EndpointResponse) => {
-    const featureId = endpoint.feature.id;
+  const handleDeleteTool = async (tool: ToolResponse) => {
+    const featureId = tool.feature.id;
     const feature = features.find((f) => f.id === featureId);
     const currentPage = getFeaturePage(featureId);
     try {
-      await deleteEndpoint(endpoint.id);
+      await deleteTool(tool.id);
       if (feature && currentPage > 1) {
-        const remainingEndpoints = feature.endpointCount - 1;
+        const remainingTools = feature.toolCount - 1;
         const pageSize = feature.pagination.pageSize;
         const newTotalPages = Math.max(
           1,
-          Math.ceil(remainingEndpoints / pageSize),
+          Math.ceil(remainingTools / pageSize),
         );
         if (currentPage > newTotalPages) {
           setFeaturePage(featureId, newTotalPages);
         }
       }
       addToast({
-        title: "Endpoint deleted",
-        description: endpoint.tool.function.name,
+        title: "Tool deleted",
+        description: tool.tool.function.name,
         variant: "success",
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not delete endpoint";
+        error instanceof Error ? error.message : "Could not delete tool";
       addToast({
         title: "Delete failed",
         description: message,
@@ -619,39 +639,39 @@ export const FeaturesPanel = () => {
     }
   };
 
-  const handleMoveEndpoint = async (
-    endpoint: EndpointResponse,
+  const handleMoveTool = async (
+    tool: ToolResponse,
     targetFeatureId: string,
   ) => {
-    if (endpoint.feature.id === targetFeatureId) return;
-    const sourceFeatureId = endpoint.feature.id;
+    if (tool.feature.id === targetFeatureId) return;
+    const sourceFeatureId = tool.feature.id;
     const sourceFeature = features.find((f) => f.id === sourceFeatureId);
     const sourcePage = getFeaturePage(sourceFeatureId);
     const payload = {
-      ...toEndpointPayload(endpoint, targetFeatureId),
-      agentEnabled: endpoint.agentEnabled,
+      ...toToolPayload(tool, targetFeatureId),
+      agentEnabled: tool.agentEnabled,
     };
     try {
-      await updateEndpoint({ id: endpoint.id, payload });
+      await updateTool({ id: tool.id, payload });
       if (sourceFeature && sourcePage > 1) {
-        const remainingEndpoints = sourceFeature.endpointCount - 1;
+        const remainingTools = sourceFeature.toolCount - 1;
         const pageSize = sourceFeature.pagination.pageSize;
         const newTotalPages = Math.max(
           1,
-          Math.ceil(remainingEndpoints / pageSize),
+          Math.ceil(remainingTools / pageSize),
         );
         if (sourcePage > newTotalPages) {
           setFeaturePage(sourceFeatureId, newTotalPages);
         }
       }
       addToast({
-        title: "Endpoint moved",
-        description: endpoint.tool.function.name,
+        title: "Tool moved",
+        description: tool.tool.function.name,
         variant: "success",
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not move endpoint";
+        error instanceof Error ? error.message : "Could not move tool";
       addToast({
         title: "Move failed",
         description: message,
@@ -660,42 +680,42 @@ export const FeaturesPanel = () => {
     }
   };
 
-  const handleEndpointToggle = async (
-    endpoint: EndpointResponse,
+  const handleToolToggle = async (
+    tool: ToolResponse,
     enabled: boolean,
   ) => {
-    if (endpoint.agentEnabled === enabled) return;
-    setPendingEndpointToggles((current) => ({
+    if (tool.agentEnabled === enabled) return;
+    setPendingToolToggles((current) => ({
       ...current,
-      [endpoint.id]: true,
+      [tool.id]: true,
     }));
-    const payload = { ...toEndpointPayload(endpoint), agentEnabled: enabled };
+    const payload = { ...toToolPayload(tool), agentEnabled: enabled };
     try {
-      await updateEndpoint({ id: endpoint.id, payload });
+      await updateTool({ id: tool.id, payload });
       addToast({
-        title: enabled ? "Endpoint enabled" : "Endpoint disabled",
-        description: endpoint.tool.function.name,
+        title: enabled ? "Tool enabled" : "Tool disabled",
+        description: tool.tool.function.name,
         variant: "success",
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not update endpoint";
+        error instanceof Error ? error.message : "Could not update tool";
       addToast({
         title: "Update failed",
         description: message,
         variant: "error",
       });
     } finally {
-      setPendingEndpointToggles((current) => {
+      setPendingToolToggles((current) => {
         const next = { ...current };
-        delete next[endpoint.id];
+        delete next[tool.id];
         return next;
       });
     }
   };
 
   const handleFeatureToggle = async (
-    feature: FeatureWithEndpoints,
+    feature: FeatureWithTools,
     enabled: boolean,
   ) => {
     setPendingFeatureToggles((current) => ({ ...current, [feature.id]: true }));
@@ -773,7 +793,7 @@ export const FeaturesPanel = () => {
     }
   };
 
-  const handleDeleteFeature = async (feature: FeatureWithEndpoints) => {
+  const handleDeleteFeature = async (feature: FeatureWithTools) => {
     try {
       await deleteFeature(feature.id);
       addToast({
@@ -795,7 +815,7 @@ export const FeaturesPanel = () => {
   return (
     <PanelShell
       title="Features"
-      description="Classify endpoints into features and manage them together."
+      description="Group and manage backend and frontend tools."
       action={
         <div className="flex gap-2">
           <Button
@@ -810,12 +830,12 @@ export const FeaturesPanel = () => {
           </Button>
           <Button
             size="sm"
-            onClick={() => startCreateEndpoint()}
+            onClick={() => startCreateTool()}
             className={primaryActionButtonSize}
-            data-testid="new-endpoint"
+            data-testid="new-tool"
           >
             <Plus className="mr-2 h-4 w-4" />
-            New endpoint
+            New tool
           </Button>
         </div>
       }
@@ -825,7 +845,7 @@ export const FeaturesPanel = () => {
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
             <div className="relative w-full md:w-80">
               <Input
-                placeholder="Search features or endpoints"
+                placeholder="Search features or tools"
                 value={searchDraft}
                 onChange={(event) => setSearchDraft(event.target.value)}
                 className="w-full pr-9 transition-shadow focus-visible:shadow-[0_0_0_2px_var(--ring)]"
@@ -843,7 +863,7 @@ export const FeaturesPanel = () => {
           </div>
         </div>
         {isPending ? (
-          <div className="space-y-3">
+          <div className="space-y-3" data-testid="tools-loading">
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={`feature-loading-${index}`}
@@ -870,18 +890,18 @@ export const FeaturesPanel = () => {
                 currentPage={getFeaturePage(feature.id)}
                 onPageChange={(page) => setFeaturePage(feature.id, page)}
                 pendingFeatureToggles={pendingFeatureToggles}
-                pendingEndpointToggles={pendingEndpointToggles}
+                pendingToolToggles={pendingToolToggles}
                 isTogglingFeature={isTogglingFeature}
-                isUpdatingEndpoint={isUpdatingEndpoint}
+                isUpdatingTool={isUpdatingTool}
                 isDeletingFeature={isDeletingFeature}
-                isDeletingEndpoint={isDeletingEndpoint}
+                isDeletingTool={isDeletingTool}
                 onFeatureToggle={handleFeatureToggle}
-                onEndpointToggle={handleEndpointToggle}
-                onMoveEndpoint={handleMoveEndpoint}
-                onDeleteEndpoint={handleDeleteEndpoint}
+                onToolToggle={handleToolToggle}
+                onMoveTool={handleMoveTool}
+                onDeleteTool={handleDeleteTool}
                 onDeleteFeature={handleDeleteFeature}
-                onEditEndpoint={openEdit}
-                onCreateEndpoint={startCreateEndpoint}
+                onEditTool={openEdit}
+                onCreateTool={startCreateTool}
                 onRenameFeature={(f) => {
                   setRenameTarget(f);
                   setRenameValue(f.name);
@@ -891,7 +911,7 @@ export const FeaturesPanel = () => {
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6 text-sm text-muted-foreground">
-            Create a feature or auto-classify a new endpoint to get started.
+            Create a feature or add a new tool to get started.
           </div>
         )}
       </div>
@@ -903,19 +923,19 @@ export const FeaturesPanel = () => {
           }
         }}
       >
-        <DialogContent className="max-w-5xl w-[min(1200px,95vw)] max-h-[90vh] overflow-hidden p-0">
+        <DialogContent className="max-w-[98vw] w-[min(1500px,98vw)] h-[94vh] max-h-[94vh] overflow-hidden p-0">
           <DialogHeader className="sr-only">
             <DialogTitle>
-              {editingId ? "Edit endpoint" : "New endpoint"}
+              {editingId ? "Edit tool" : "New tool"}
             </DialogTitle>
             <DialogDescription>
-              Configure an endpoint for your agent.
+              Configure a tool for your agent.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[90vh]">
+          <ScrollArea className="h-full">
             <div className="p-6">
-              <EndpointEditor
-                isSaving={isSavingEndpoint}
+              <ToolEditor
+                isSaving={isSavingTool}
                 onClose={() => {
                   closeEditor();
                 }}
@@ -945,7 +965,7 @@ export const FeaturesPanel = () => {
             <DialogHeader className="space-y-1">
               <DialogTitle>New feature</DialogTitle>
               <DialogDescription>
-                Create a feature to group endpoints.
+                Create a feature to group tools.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
@@ -1030,5 +1050,3 @@ export const FeaturesPanel = () => {
     </PanelShell>
   );
 };
-
-export { FeaturesPanel as EndpointsPanel };

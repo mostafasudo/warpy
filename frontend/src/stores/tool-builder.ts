@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-import type { HttpMethod } from "@/types"
+import type { ToolType, HttpMethod } from "@/types"
 
 type PrimitiveType = "string" | "number" | "boolean"
 type BodyFieldType = PrimitiveType | "object" | "array:string" | "array:number" | "array:boolean" | "array:object"
@@ -35,7 +35,8 @@ export type BodyField = {
   children?: BodyField[]
 }
 
-export type EndpointBuilderState = {
+export type ToolBuilderState = {
+  toolType: ToolType
   path: string
   method: HttpMethod
   name: string
@@ -50,7 +51,8 @@ export type EndpointBuilderState = {
   bodyFields: BodyField[]
 }
 
-type EndpointBuilderStore = EndpointBuilderState & {
+type ToolBuilderStore = ToolBuilderState & {
+  setToolType: (toolType: ToolType) => void
   setPath: (path: string) => void
   setMethod: (method: HttpMethod) => void
   setName: (name: string) => void
@@ -69,7 +71,7 @@ type EndpointBuilderStore = EndpointBuilderState & {
   updateBodyField: (id: string, payload: Partial<BodyField>) => void
   removeBodyField: (id: string) => void
   reset: () => void
-  hydrate: (state: EndpointBuilderState) => void
+  hydrate: (state: ToolBuilderState) => void
 }
 
 const createId = () => {
@@ -79,16 +81,23 @@ const createId = () => {
   return Math.random().toString(36).slice(2)
 }
 
+const normalizeFieldNameInput = (value: string) => value.replace(/ /g, "_")
+
+const normalizePathParamNames = (path: string) =>
+  path
+    .replace(/\{([^}]+)\}/g, (_match, name: string) => `:${normalizeFieldNameInput(name)}`)
+    .replace(/(^|\/):([^/]+)/g, (_match, prefix: string, name: string) => `${prefix}:${normalizeFieldNameInput(name)}`)
+
 const normalizePathInput = (path: string) => {
   const trimmed = path.trim()
   const safe = trimmed.startsWith("/") ? trimmed : `/${trimmed}`
-  const normalized = safe.replace(/\{([^}]+)\}/g, ":$1")
+  const normalized = normalizePathParamNames(safe)
   return normalized || "/"
 }
 
 const extractPathParams = (path: string) => {
-  const matches = Array.from(path.matchAll(/:([A-Za-z0-9_-]+)/g))
-  return matches.map((match) => match[1])
+  const matches = Array.from(path.matchAll(/(^|\/):([^/]+)/g))
+  return matches.map((match) => match[2])
 }
 
 const syncPathParams = (path: string, existing: PathParam[]) => {
@@ -195,7 +204,8 @@ const addChildField = (fields: BodyField[], parentId: string | null, field: Body
   })
 }
 
-const defaultState: EndpointBuilderState = {
+const defaultState: ToolBuilderState = {
+  toolType: "backend",
   path: "/",
   method: "GET",
   name: "",
@@ -210,8 +220,9 @@ const defaultState: EndpointBuilderState = {
   bodyFields: []
 }
 
-export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
+export const useToolBuilderStore = create<ToolBuilderStore>((set) => ({
   ...defaultState,
+  setToolType: (toolType) => set({ toolType }),
   setPath: (path) =>
     set((state) => {
       const normalized = normalizePathInput(path)
@@ -278,15 +289,18 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
         if (field.id !== id) {
           return field
         }
-        const nextType = payload.type ?? field.type
-        const updated: FlatField = { ...field, ...payload, type: nextType }
-        if (payload.enumValues !== undefined || payload.type !== undefined) {
+        const normalizedPayload: Partial<FlatField> = payload.name === undefined
+          ? payload
+          : { ...payload, name: normalizeFieldNameInput(payload.name) }
+        const nextType = normalizedPayload.type ?? field.type
+        const updated: FlatField = { ...field, ...normalizedPayload, type: nextType }
+        if (normalizedPayload.enumValues !== undefined || normalizedPayload.type !== undefined) {
           updated.enumValues =
             nextType === "boolean"
               ? undefined
-              : coerceEnumValues(payload.enumValues ?? field.enumValues, nextType)
+              : coerceEnumValues(normalizedPayload.enumValues ?? field.enumValues, nextType)
         }
-        if (payload.type !== undefined && payload.type !== field.type) {
+        if (normalizedPayload.type !== undefined && normalizedPayload.type !== field.type) {
           updated.fixed = undefined
         }
         if (updated.fixed !== undefined) {
@@ -306,11 +320,14 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
   updateBodyField: (id, payload) =>
     set((state) => ({
       bodyFields: mapBodyFields(state.bodyFields, id, (field) => {
-        const nextType = payload.type ?? field.type
-        const typeChanged = payload.type !== undefined && payload.type !== field.type
+        const normalizedPayload: Partial<BodyField> = payload.name === undefined
+          ? payload
+          : { ...payload, name: normalizeFieldNameInput(payload.name) }
+        const nextType = normalizedPayload.type ?? field.type
+        const typeChanged = normalizedPayload.type !== undefined && normalizedPayload.type !== field.type
         const base: BodyField = {
           ...field,
-          ...payload,
+          ...normalizedPayload,
           type: nextType
         }
         if (!canHaveChildren(nextType)) {
@@ -318,12 +335,12 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
         } else {
           base.children = base.children ?? []
         }
-        if (!isPrimitiveType(nextType) || (typeChanged && payload.fixed === undefined)) {
+        if (!isPrimitiveType(nextType) || (typeChanged && normalizedPayload.fixed === undefined)) {
           base.fixed = undefined
         }
-        if (payload.enumValues !== undefined || typeChanged) {
+        if (normalizedPayload.enumValues !== undefined || typeChanged) {
           base.enumValues = isEnumSupported(nextType)
-            ? coerceEnumValues(payload.enumValues ?? field.enumValues, nextType as PrimitiveType)
+            ? coerceEnumValues(normalizedPayload.enumValues ?? field.enumValues, nextType as PrimitiveType)
             : undefined
         }
         if (base.fixed !== undefined) {
@@ -340,46 +357,49 @@ export const useEndpointBuilderStore = create<EndpointBuilderStore>((set) => ({
   hydrate: (state) => set(state)
 }))
 
-export const endpointBuilderSelectors = {
-  path: (state: EndpointBuilderState) => state.path,
-  method: (state: EndpointBuilderState) => state.method,
-  name: (state: EndpointBuilderState) => state.name,
-  description: (state: EndpointBuilderState) => state.description,
-  agentEnabled: (state: EndpointBuilderState) => state.agentEnabled,
-  featureMode: (state: EndpointBuilderState) => state.featureMode,
-  featureId: (state: EndpointBuilderState) => state.featureId,
-  featureName: (state: EndpointBuilderState) => state.featureName,
-  pathParams: (state: EndpointBuilderState) => state.pathParams,
-  headers: (state: EndpointBuilderState) => state.headers,
-  queryParams: (state: EndpointBuilderState) => state.queryParams,
-  bodyFields: (state: EndpointBuilderState) => state.bodyFields
+export const toolBuilderSelectors = {
+  toolType: (state: ToolBuilderState) => state.toolType,
+  path: (state: ToolBuilderState) => state.path,
+  method: (state: ToolBuilderState) => state.method,
+  name: (state: ToolBuilderState) => state.name,
+  description: (state: ToolBuilderState) => state.description,
+  agentEnabled: (state: ToolBuilderState) => state.agentEnabled,
+  featureMode: (state: ToolBuilderState) => state.featureMode,
+  featureId: (state: ToolBuilderState) => state.featureId,
+  featureName: (state: ToolBuilderState) => state.featureName,
+  pathParams: (state: ToolBuilderState) => state.pathParams,
+  headers: (state: ToolBuilderState) => state.headers,
+  queryParams: (state: ToolBuilderState) => state.queryParams,
+  bodyFields: (state: ToolBuilderState) => state.bodyFields
 }
 
-export const endpointBuilderActions = {
-  setPath: (state: EndpointBuilderStore) => state.setPath,
-  setMethod: (state: EndpointBuilderStore) => state.setMethod,
-  setName: (state: EndpointBuilderStore) => state.setName,
-  setDescription: (state: EndpointBuilderStore) => state.setDescription,
-  setAgentEnabled: (state: EndpointBuilderStore) => state.setAgentEnabled,
-  setFeatureMode: (state: EndpointBuilderStore) => state.setFeatureMode,
-  setFeatureId: (state: EndpointBuilderStore) => state.setFeatureId,
-  setFeatureName: (state: EndpointBuilderStore) => state.setFeatureName,
-  setPathParamFixed: (state: EndpointBuilderStore) => state.setPathParamFixed,
-  setPathParamDescription: (state: EndpointBuilderStore) => state.setPathParamDescription,
-  setPathParamEnumValues: (state: EndpointBuilderStore) => state.setPathParamEnumValues,
-  addFlatField: (state: EndpointBuilderStore) => state.addFlatField,
-  updateFlatField: (state: EndpointBuilderStore) => state.updateFlatField,
-  removeFlatField: (state: EndpointBuilderStore) => state.removeFlatField,
-  addBodyField: (state: EndpointBuilderStore) => state.addBodyField,
-  updateBodyField: (state: EndpointBuilderStore) => state.updateBodyField,
-  removeBodyField: (state: EndpointBuilderStore) => state.removeBodyField,
-  reset: (state: EndpointBuilderStore) => state.reset,
-  hydrate: (state: EndpointBuilderStore) => state.hydrate
+export const toolBuilderActions = {
+  setToolType: (state: ToolBuilderStore) => state.setToolType,
+  setPath: (state: ToolBuilderStore) => state.setPath,
+  setMethod: (state: ToolBuilderStore) => state.setMethod,
+  setName: (state: ToolBuilderStore) => state.setName,
+  setDescription: (state: ToolBuilderStore) => state.setDescription,
+  setAgentEnabled: (state: ToolBuilderStore) => state.setAgentEnabled,
+  setFeatureMode: (state: ToolBuilderStore) => state.setFeatureMode,
+  setFeatureId: (state: ToolBuilderStore) => state.setFeatureId,
+  setFeatureName: (state: ToolBuilderStore) => state.setFeatureName,
+  setPathParamFixed: (state: ToolBuilderStore) => state.setPathParamFixed,
+  setPathParamDescription: (state: ToolBuilderStore) => state.setPathParamDescription,
+  setPathParamEnumValues: (state: ToolBuilderStore) => state.setPathParamEnumValues,
+  addFlatField: (state: ToolBuilderStore) => state.addFlatField,
+  updateFlatField: (state: ToolBuilderStore) => state.updateFlatField,
+  removeFlatField: (state: ToolBuilderStore) => state.removeFlatField,
+  addBodyField: (state: ToolBuilderStore) => state.addBodyField,
+  updateBodyField: (state: ToolBuilderStore) => state.updateBodyField,
+  removeBodyField: (state: ToolBuilderStore) => state.removeBodyField,
+  reset: (state: ToolBuilderStore) => state.reset,
+  hydrate: (state: ToolBuilderStore) => state.hydrate
 }
 
-export const endpointBuilderUtils = {
+export const toolBuilderUtils = {
   normalizePathInput,
   extractPathParams,
+  normalizeFieldNameInput,
   isPrimitiveType,
   isEnumSupported,
   coerceEnumValues

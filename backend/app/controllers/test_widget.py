@@ -45,7 +45,7 @@ class FakeExecutor:
         self.calls = []
         self.responses = []
 
-    async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+    async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
         self.calls.append({
             "user_message": user_message,
             "history": conversation_history,
@@ -53,7 +53,7 @@ class FakeExecutor:
         })
         if self.responses:
             return self.responses.pop(0)
-        return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
+        return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
 
 
 @pytest.fixture
@@ -123,7 +123,7 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
 
     tool_call = ToolCallPayload(
         id="tc_1",
-        endpoint_id=uuid4(),
+        tool_id=uuid4(),
         name="get_item",
         tool_type="backend",
         method="GET",
@@ -138,10 +138,10 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
             if tool_results:
-                return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
-            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+                return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolCalls)
 
@@ -186,10 +186,10 @@ def test_widget_js_exec_consumes_billing_action(client: TestClient, monkeypatch:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
             if tool_results:
-                return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
-            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+                return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithJsExec)
 
@@ -225,7 +225,7 @@ def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient
 
     tool_call = ToolCallPayload(
         id="tc_1",
-        endpoint_id=uuid4(),
+        tool_id=uuid4(),
         name="get_item",
         tool_type="backend",
         method="GET",
@@ -240,10 +240,10 @@ def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
             if tool_results:
-                return StepResult(response="done", done=True, messages=[], active_endpoint_ids=[])
-            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+                return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolCalls)
 
@@ -332,7 +332,7 @@ def test_widget_chat_returns_tool_calls(client: TestClient, monkeypatch: pytest.
 
     tool_call = ToolCallPayload(
         id="tc_1",
-        endpoint_id=uuid4(),
+        tool_id=uuid4(),
         name="get_user",
         method="GET",
         path="/users/{id}",
@@ -346,10 +346,10 @@ def test_widget_chat_returns_tool_calls(client: TestClient, monkeypatch: pytest.
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
             if tool_results:
-                return StepResult(response="done with tools", done=True, messages=[], active_endpoint_ids=[])
-            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_endpoint_ids=[])
+                return StepResult(response="done with tools", done=True, messages=[], active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithTools)
 
@@ -374,14 +374,14 @@ def test_widget_chat_accepts_tool_results(client: TestClient, monkeypatch: pytes
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
             call_count["count"] += 1
             if tool_results:
                 assert len(tool_results) == 1
                 assert tool_results[0].id == "tc_1"
                 assert tool_results[0].status_code == 200
-                return StepResult(response="result processed", done=True, messages=[], active_endpoint_ids=[])
-            return StepResult(response="no tools", done=True, messages=[], active_endpoint_ids=[])
+                return StepResult(response="result processed", done=True, messages=[], active_tool_ids=[])
+            return StepResult(response="no tools", done=True, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolResults)
 
@@ -532,8 +532,8 @@ def test_widget_chat_caps_tool_context_on_done(client: TestClient, monkeypatch: 
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
-            return StepResult(response="done", done=True, messages=large_messages, active_endpoint_ids=[])
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            return StepResult(response="done", done=True, messages=large_messages, active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeMessages)
 
@@ -575,7 +575,7 @@ def test_widget_chat_caps_pending_state_on_tool_calls(client: TestClient, monkey
     ]
     tool_call = ToolCallPayload(
         id="tc_1",
-        endpoint_id=uuid4(),
+        tool_id=uuid4(),
         name="do_thing",
         tool_type="backend",
         method="GET",
@@ -590,8 +590,8 @@ def test_widget_chat_caps_pending_state_on_tool_calls(client: TestClient, monkey
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_endpoint_ids=None):
-            return StepResult(tool_calls=[tool_call], done=False, messages=large_messages, active_endpoint_ids=[])
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            return StepResult(tool_calls=[tool_call], done=False, messages=large_messages, active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeState)
 

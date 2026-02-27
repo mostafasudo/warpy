@@ -18,11 +18,11 @@ class LLMConfig:
     max_cached_tools: int = 24
     tool_cache_ttl: int = 86400
 
-    def calculate_top_k(self, total_endpoints: int) -> int:
-        if total_endpoints <= 0:
+    def calculate_top_k(self, total_tools: int) -> int:
+        if total_tools <= 0:
             return 0
-        calculated = int(total_endpoints * self.top_k_ratio)
-        return min(total_endpoints, max(self.top_k_min, min(calculated, self.top_k_max)))
+        calculated = int(total_tools * self.top_k_ratio)
+        return min(total_tools, max(self.top_k_min, min(calculated, self.top_k_max)))
 
 
 def build_llm_config(environment: str, use_good_models: bool = False) -> LLMConfig:

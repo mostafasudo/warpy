@@ -67,7 +67,7 @@ class ToolCallPayload(BaseModel):
     id: str
     tool_type: str = Field(default="backend", alias="type")
     name: str
-    endpoint_id: UUID | None = Field(default=None, alias="endpointId")
+    tool_id: UUID | None = Field(default=None, alias="toolId")
     method: str | None = None
     path: str | None = None
     params: dict[str, Any] = {}

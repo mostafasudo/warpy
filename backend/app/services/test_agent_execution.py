@@ -5,14 +5,14 @@ import pytest
 from app.core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
 from app.models import HttpMethod
 from app.services import agent_execution
-from app.services.agent_execution import execute_endpoint, substitute_path_params
+from app.services.agent_execution import execute_backend_tool, substitute_path_params
 
 
-class DummyEndpoint:
-    def __init__(self, path: str, method: HttpMethod, endpoint_id: str = "endpoint-1"):
+class DummyBackendTool:
+    def __init__(self, path: str, method: HttpMethod, tool_id: str = "tool-1"):
         self.path = path
         self.method = method
-        self.id = endpoint_id
+        self.id = tool_id
 
 
 class DummyEnvironment:
@@ -62,14 +62,14 @@ def test_substitute_path_params_tracks_remaining():
     assert remaining == {}
 
 
-def test_execute_endpoint_requires_environment():
+def test_execute_backend_tool_requires_environment():
     session = DummySession(environment=None)
-    endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=False)
+    tool_record = DummyBackendTool("/users", HttpMethod.get)
+    result = execute_backend_tool(session, "user", tool_record, {}, enforce_billing=False)
     assert result["error"]
 
 
-def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
+def test_execute_backend_tool_uses_http_client(monkeypatch: pytest.MonkeyPatch):
     calls: list = []
     dummy_response = DummyResponse(200, RuntimeError("no json"))
     client = DummyHttpClient(dummy_response, calls)
@@ -81,11 +81,11 @@ def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
     )
 
     session = DummySession(environment=DummyEnvironment("http://api.test"))
-    endpoint = DummyEndpoint("/users/{id}", HttpMethod.post)
-    result = execute_endpoint(
+    tool_record = DummyBackendTool("/users/{id}", HttpMethod.post)
+    result = execute_backend_tool(
         session,
         "user",
-        endpoint,
+        tool_record,
         {"params": {"id": 9}, "query": {"q": "x"}, "body": {"k": "v"}, "headers": {"H": "1"}},
         enforce_billing=True,
     )
@@ -98,7 +98,7 @@ def test_execute_endpoint_uses_http_client(monkeypatch: pytest.MonkeyPatch):
     assert calls[0]["kwargs"]["headers"] == {"H": "1"}
 
 
-def test_execute_endpoint_blocks_when_no_actions(monkeypatch: pytest.MonkeyPatch):
+def test_execute_backend_tool_blocks_when_no_actions(monkeypatch: pytest.MonkeyPatch):
     calls: list = []
     client = DummyHttpClient(DummyResponse(200, {"ok": True}), calls)
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
@@ -109,14 +109,14 @@ def test_execute_endpoint_blocks_when_no_actions(monkeypatch: pytest.MonkeyPatch
     )
 
     session = DummySession(environment=DummyEnvironment("http://api.test"))
-    endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=True)
+    tool_record = DummyBackendTool("/users", HttpMethod.get)
+    result = execute_backend_tool(session, "user", tool_record, {}, enforce_billing=True)
 
     assert result == {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
     assert calls == []
 
 
-def test_execute_endpoint_handles_billing_error(monkeypatch: pytest.MonkeyPatch):
+def test_execute_backend_tool_handles_billing_error(monkeypatch: pytest.MonkeyPatch):
     calls: list = []
     client = DummyHttpClient(DummyResponse(200, {"ok": True}), calls)
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
@@ -127,21 +127,21 @@ def test_execute_endpoint_handles_billing_error(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(agent_execution, "consume_action_for_server_execution", raise_error)
 
     session = DummySession(environment=DummyEnvironment("http://api.test"))
-    endpoint = DummyEndpoint("/users", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {}, enforce_billing=True)
+    tool_record = DummyBackendTool("/users", HttpMethod.get)
+    result = execute_backend_tool(session, "user", tool_record, {}, enforce_billing=True)
 
     assert result == {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
     assert calls == []
 
 
-def test_execute_endpoint_rejects_get_body(monkeypatch: pytest.MonkeyPatch):
+def test_execute_backend_tool_rejects_get_body(monkeypatch: pytest.MonkeyPatch):
     calls: list = []
     client = DummyHttpClient(DummyResponse(200, {"ok": True}), calls)
     monkeypatch.setattr(agent_execution, "httpx", types.SimpleNamespace(Client=lambda: client, TimeoutException=Exception))
 
     session = DummySession(environment=DummyEnvironment("http://api.test"))
-    endpoint = DummyEndpoint("/products", HttpMethod.get)
-    result = execute_endpoint(session, "user", endpoint, {"body": {"ping": "pong"}})
+    tool_record = DummyBackendTool("/products", HttpMethod.get)
+    result = execute_backend_tool(session, "user", tool_record, {"body": {"ping": "pong"}})
 
     assert result["error"] == "GET requests cannot include a body"
     assert calls == []

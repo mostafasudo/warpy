@@ -9,7 +9,7 @@ import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
 import { ActivityPanel } from "@/features/activity/activity-panel"
 import { ApiConfigPanel } from "@/features/api-config/api-config-panel"
 import { ContactPanel } from "@/features/contact/contact-panel"
-import { EndpointsPanel } from "@/features/endpoints/EndpointsPanel"
+import { ToolsPanel } from "@/features/tools/ToolsPanel"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -264,7 +264,7 @@ export const Shell = () => {
           {section === "dashboard" && <DashboardPanel />}
           {section === "activity" && <ActivityPanel />}
           {section === "api" && <ApiConfigPanel />}
-          {section === "features" && <EndpointsPanel />}
+          {section === "features" && <ToolsPanel />}
           {section === "agent" && <AgentPanel />}
           {section === "billing" && <BillingPanel />}
           {section === "contact" && <ContactPanel />}

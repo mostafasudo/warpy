@@ -911,7 +911,7 @@ describe("AgentPanel", () => {
     expect(mutateAsync).not.toHaveBeenCalled()
   })
 
-  it("shows frontend capability panel with enabled toggle", () => {
+  it("shows screen autopilot panel with enabled toggle", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
@@ -925,11 +925,11 @@ describe("AgentPanel", () => {
 
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    expect(screen.getByText("Frontend Capability")).not.toBeNull()
-    expect(screen.getByLabelText("Toggle frontend capability")).not.toBeNull()
+    expect(screen.getByText("Screen Autopilot")).not.toBeNull()
+    expect(screen.getByLabelText("Toggle screen autopilot")).not.toBeNull()
   })
 
-  it("toggles frontend capability off and shows toast", async () => {
+  it("toggles screen autopilot off and shows toast", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
@@ -950,19 +950,19 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByLabelText("Toggle frontend capability"))
+    await user.click(screen.getByLabelText("Toggle screen autopilot"))
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({ enabled: false })
       expect(getAddToast()).toHaveBeenCalledWith({
         title: "Saved",
-        description: "Frontend capability disabled.",
+        description: "Screen autopilot disabled.",
         variant: "success"
       })
     })
   })
 
-  it("shows error toast when frontend capability update fails", async () => {
+  it("shows error toast when screen autopilot update fails", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
@@ -983,7 +983,7 @@ describe("AgentPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     render(<AgentPanel />, { wrapper: createWrapper() })
 
-    await user.click(screen.getByLabelText("Toggle frontend capability"))
+    await user.click(screen.getByLabelText("Toggle screen autopilot"))
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalled()
@@ -995,7 +995,7 @@ describe("AgentPanel", () => {
     })
   })
 
-  it("shows frontend capability loading state", () => {
+  it("shows screen autopilot loading state", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false

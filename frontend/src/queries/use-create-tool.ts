@@ -3,15 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/api/client"
 import { featuresQueryKey } from "@/queries/use-features"
 import { toolsQueryKey } from "@/queries/use-tools"
-import type { FeaturePayload } from "@/types"
 
-export const useCreateFeature = () => {
+export const useCreateTool = () => {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: FeaturePayload) => apiClient.createFeature(payload),
+    mutationFn: apiClient.createTool,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: featuresQueryKey })
       queryClient.invalidateQueries({ queryKey: toolsQueryKey })
+      queryClient.invalidateQueries({ queryKey: featuresQueryKey })
     }
   })
 }

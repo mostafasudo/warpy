@@ -28,8 +28,8 @@ jest.mock("@/features/api-config/api-config-panel", () => ({
   ApiConfigPanel: () => <div data-testid="api-panel" />
 }))
 
-jest.mock("@/features/endpoints/EndpointsPanel", () => ({
-  EndpointsPanel: () => <div data-testid="endpoints-panel" />
+jest.mock("@/features/tools/ToolsPanel", () => ({
+  ToolsPanel: () => <div data-testid="tools-panel" />
 }))
 
 jest.mock("@/features/agent/agent-panel", () => ({
@@ -111,7 +111,7 @@ describe("Shell", () => {
       renderShell()
     })
 
-    expect(await screen.findByTestId("endpoints-panel")).not.toBeNull()
+    expect(await screen.findByTestId("tools-panel")).not.toBeNull()
   })
 
   it("shows mobile guard when viewport is small", async () => {
@@ -162,7 +162,7 @@ describe("Shell", () => {
     await user.click(screen.getByRole("button", { name: "API config" }))
     expect(screen.getByTestId("api-panel")).not.toBeNull()
     await user.click(screen.getByRole("button", { name: "Features" }))
-    expect(screen.getByTestId("endpoints-panel")).not.toBeNull()
+    expect(screen.getByTestId("tools-panel")).not.toBeNull()
 
     await act(async () => {
       listeners[0]?.({ matches: true })

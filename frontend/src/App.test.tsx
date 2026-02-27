@@ -26,7 +26,7 @@ jest.mock("@/queries/use-config", () => ({
 jest.mock("@/queries/use-features", () => ({
   useFeaturesQuery: jest.fn(() => ({
     data: [
-      { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 0, endpoints: [] }
+      { id: "f1", name: "Users", enabledState: "enabled", toolCount: 0, tools: [] }
     ],
     isPending: false,
     isFetching: false

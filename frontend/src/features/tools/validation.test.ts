@@ -1,11 +1,12 @@
 import { describe, expect, it } from "@jest/globals"
 
-import type { EndpointBuilderState } from "@/stores/endpoint-builder"
-import { validateEndpointState } from "./validation"
+import type { ToolBuilderState } from "@/stores/tool-builder"
+import { validateToolState } from "./validation"
 
-describe("validateEndpointState", () => {
+describe("validateToolState", () => {
   it("flags empty names and descriptions", () => {
-    const state: EndpointBuilderState = {
+    const state: ToolBuilderState = {
+      toolType: "backend",
       path: "/",
       method: "POST",
       name: "",
@@ -31,13 +32,13 @@ describe("validateEndpointState", () => {
       ]
     }
 
-    const result = validateEndpointState(state)
+    const result = validateToolState(state)
 
     expect(result.errors).toEqual(
       expect.arrayContaining([
         "Path cannot be empty",
-        "Endpoint name cannot be empty",
-        "Endpoint description cannot be empty",
+        "Tool name cannot be empty",
+        "Tool description cannot be empty",
         "id description cannot be empty",
         "Header 1 name cannot be empty",
         "Header 1 description cannot be empty",
@@ -59,7 +60,8 @@ describe("validateEndpointState", () => {
   })
 
   it("requires fixed values when enabled and ignores valid booleans", () => {
-    const state: EndpointBuilderState = {
+    const state: ToolBuilderState = {
+      toolType: "backend",
       path: "/users/:id",
       method: "POST",
       name: "get_user",
@@ -77,7 +79,7 @@ describe("validateEndpointState", () => {
       ]
     }
 
-    const result = validateEndpointState(state)
+    const result = validateToolState(state)
 
     expect(result.errors).toEqual(
       expect.arrayContaining([
@@ -94,7 +96,8 @@ describe("validateEndpointState", () => {
   })
 
   it("requires feature name when creating a new feature", () => {
-    const state: EndpointBuilderState = {
+    const state: ToolBuilderState = {
+      toolType: "backend",
       path: "/users",
       method: "POST",
       name: "get_user",
@@ -109,14 +112,15 @@ describe("validateEndpointState", () => {
       bodyFields: []
     }
 
-    const result = validateEndpointState(state)
+    const result = validateToolState(state)
 
     expect(result.errors).toContain("Feature name cannot be empty")
     expect(result.invalid.feature.name).toBe(true)
   })
 
   it("rejects bodies when method is GET", () => {
-    const state: EndpointBuilderState = {
+    const state: ToolBuilderState = {
+      toolType: "backend",
       path: "/users",
       method: "GET",
       name: "get_user",
@@ -131,13 +135,14 @@ describe("validateEndpointState", () => {
       bodyFields: [{ id: "b1", name: "payload", type: "object", required: false, description: "desc", children: [] }]
     }
 
-    const result = validateEndpointState(state)
+    const result = validateToolState(state)
 
-    expect(result.errors).toContain("GET endpoints cannot include a body")
+    expect(result.errors).toContain("GET backend tools cannot include a body")
   })
 
   it("validates enum selections when enabled", () => {
-    const state: EndpointBuilderState = {
+    const state: ToolBuilderState = {
+      toolType: "backend",
       path: "/users/:id",
       method: "POST",
       name: "get_user",
@@ -158,7 +163,7 @@ describe("validateEndpointState", () => {
       ]
     }
 
-    const result = validateEndpointState(state)
+    const result = validateToolState(state)
 
     expect(result.errors).toEqual(
       expect.arrayContaining([
@@ -172,5 +177,119 @@ describe("validateEndpointState", () => {
     expect(result.invalid.queryParams["query-1"].enum).toBe(true)
     expect(result.invalid.bodyFields["body-1"].description).toBe(true)
     expect(result.invalid.bodyFields["body-1"].enum).toBeUndefined()
+  })
+
+  it("validates frontend tool parameter fields", () => {
+    const state: ToolBuilderState = {
+      toolType: "frontend",
+      path: "/",
+      method: "POST",
+      name: "open_drawer",
+      description: "Open drawer",
+      agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
+      pathParams: [],
+      headers: [],
+      queryParams: [],
+      bodyFields: [{ id: "p1", name: "", type: "string", required: true, description: "" }]
+    }
+
+    const result = validateToolState(state)
+
+    expect(result.errors).toContain("field 1 name cannot be empty")
+    expect(result.errors).toContain("field 1 description cannot be empty")
+    expect(result.invalid.bodyFields["p1"]).toEqual({ name: true, description: true })
+  })
+
+  it("rejects reserved tool names", () => {
+    const state: ToolBuilderState = {
+      toolType: "frontend",
+      path: "/",
+      method: "POST",
+      name: "frontend",
+      description: "desc",
+      agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
+      pathParams: [],
+      headers: [],
+      queryParams: [],
+      bodyFields: []
+    }
+
+    const result = validateToolState(state)
+
+    expect(result.errors).toContain("Tool name is reserved. Choose a different name.")
+    expect(result.invalid.name).toBe(true)
+  })
+
+  it("enforces variable/input naming pattern across backend and frontend fields", () => {
+    const backendState: ToolBuilderState = {
+      toolType: "backend",
+      path: "/users/:id",
+      method: "POST",
+      name: "get_user",
+      description: "Fetch",
+      agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
+      pathParams: [{ name: "user id", description: "User id" }],
+      headers: [{ id: "header-1", name: "x api", type: "string", required: false, description: "Header" }],
+      queryParams: [{ id: "query-1", name: "page.size", type: "number", required: false, description: "Count" }],
+      bodyFields: [
+        {
+          id: "body-1",
+          name: "line item",
+          type: "object",
+          required: false,
+          description: "Body",
+          children: [{ id: "child-1", name: "note field", type: "string", required: false, description: "Note" }]
+        }
+      ]
+    }
+
+    const backendResult = validateToolState(backendState)
+
+    expect(backendResult.errors).toEqual(
+      expect.arrayContaining([
+        "user id name must use letters, numbers, underscores, or dashes (max 64)",
+        "x api name must use letters, numbers, underscores, or dashes (max 64)",
+        "page.size name must use letters, numbers, underscores, or dashes (max 64)",
+        "line item name must use letters, numbers, underscores, or dashes (max 64)",
+        "line item.note field name must use letters, numbers, underscores, or dashes (max 64)"
+      ])
+    )
+    expect(backendResult.invalid.pathParams[0].name).toBe(true)
+    expect(backendResult.invalid.headers["header-1"].name).toBe(true)
+    expect(backendResult.invalid.queryParams["query-1"].name).toBe(true)
+    expect(backendResult.invalid.bodyFields["body-1"]?.name).toBe(true)
+    expect(backendResult.invalid.bodyFields["child-1"]?.name).toBe(true)
+
+    const frontendState: ToolBuilderState = {
+      toolType: "frontend",
+      path: "/",
+      method: "POST",
+      name: "open_drawer",
+      description: "Open drawer",
+      agentEnabled: true,
+      featureMode: "auto",
+      featureId: null,
+      featureName: "",
+      pathParams: [],
+      headers: [],
+      queryParams: [],
+      bodyFields: [{ id: "param-1", name: "drawer state", type: "string", required: true, description: "state" }]
+    }
+
+    const frontendResult = validateToolState(frontendState)
+
+    expect(frontendResult.errors).toContain(
+      "drawer state name must use letters, numbers, underscores, or dashes (max 64)"
+    )
+    expect(frontendResult.invalid.bodyFields["param-1"]?.name).toBe(true)
   })
 })

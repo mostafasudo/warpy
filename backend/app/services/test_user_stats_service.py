@@ -4,8 +4,8 @@ import pytest
 
 from app.core import database
 from app.core.config import get_settings
-from app.models import Base, Endpoint, Feature, HttpMethod
-from app.services.user_stats_service import adjust_endpoint_count, get_endpoint_count
+from app.models import Base, Tool, Feature, HttpMethod
+from app.services.user_stats_service import adjust_tool_count, get_tool_count
 
 
 @pytest.fixture(autouse=True)
@@ -30,20 +30,20 @@ def test_counts_seed_and_adjust():
         feature = Feature(user_id="user-1", name="General")
         session.add(feature)
         session.flush()
-        endpoint = Endpoint(
+        tool_record = Tool(
             user_id="user-1",
             path="/ping",
             method=HttpMethod.get,
             tool={"function": {"name": "ping", "description": "Ping", "parameters": {}}},
             feature_id=feature.id
         )
-        session.add(endpoint)
+        session.add(tool_record)
         session.flush()
 
-        assert get_endpoint_count(session, "user-1") == 1
-        assert adjust_endpoint_count(session, "user-1", 2) == 3
-        assert adjust_endpoint_count(session, "user-1", -5) == 0
-        assert adjust_endpoint_count(session, "user-2", -1) == 0
+        assert get_tool_count(session, "user-1") == 1
+        assert adjust_tool_count(session, "user-1", 2) == 3
+        assert adjust_tool_count(session, "user-1", -5) == 0
+        assert adjust_tool_count(session, "user-2", -1) == 0
 
 
 def test_insert_factory_prefers_postgres():

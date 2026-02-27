@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import Agent, Conversation, ConversationAction, Endpoint, Message
+from ..models import Agent, Conversation, ConversationAction, Tool, Message
 
 
 def resolve_activity_range(
@@ -77,8 +77,8 @@ def _humanize_action_from_name(value: str) -> str:
     return f"{verb} {rest}".strip()
 
 
-def action_label(endpoint: Endpoint) -> str:
-    tool = endpoint.tool or {}
+def action_label(tool_record: Tool) -> str:
+    tool = tool_record.tool or {}
     function = tool.get("function") or {}
     name = str(function.get("name") or "").strip()
     if name:
@@ -132,32 +132,33 @@ def get_activity_summary(
     ) or 0)
 
     top_rows = session.execute(
-        select(ConversationAction.endpoint_id, func.count().label("count"))
+        select(ConversationAction.tool_id, func.count().label("count"))
         .where(
             ConversationAction.user_id == user_id,
             ConversationAction.created_at >= start,
             ConversationAction.created_at < end,
+            ConversationAction.tool_id.is_not(None),
         )
-        .group_by(ConversationAction.endpoint_id)
+        .group_by(ConversationAction.tool_id)
         .order_by(func.count().desc())
         .limit(top_actions_limit)
     ).all()
 
-    endpoint_ids = [row.endpoint_id for row in top_rows]
-    endpoints = session.scalars(
-        select(Endpoint)
-        .where(Endpoint.user_id == user_id, Endpoint.id.in_(endpoint_ids))
-        .options(selectinload(Endpoint.feature))
+    tool_ids = [row.tool_id for row in top_rows]
+    tools = session.scalars(
+        select(Tool)
+        .where(Tool.user_id == user_id, Tool.id.in_(tool_ids))
+        .options(selectinload(Tool.feature))
     ).all()
-    endpoint_map = {endpoint.id: endpoint for endpoint in endpoints}
+    tool_map = {tool.id: tool for tool in tools}
 
     top_actions: list[tuple[str, str, int]] = []
     for row in top_rows:
-        endpoint = endpoint_map.get(row.endpoint_id)
-        if not endpoint:
+        tool = tool_map.get(row.tool_id)
+        if not tool:
             continue
-        feature_name = getattr(endpoint.feature, "name", "") or ""
-        top_actions.append((feature_name, action_label(endpoint), int(row.count)))
+        feature_name = getattr(tool.feature, "name", "") or ""
+        top_actions.append((feature_name, action_label(tool), int(row.count)))
 
     return conversation_count, action_count, top_actions, has_any_conversation
 
@@ -230,7 +231,7 @@ def get_activity_conversation_detail(
     message_cursor: str | None,
     action_limit: int,
     action_cursor: str | None,
-) -> tuple[Conversation | None, list[Message], str | None, list[ConversationAction], str | None, dict[UUID, Endpoint]]:
+) -> tuple[Conversation | None, list[Message], str | None, list[ConversationAction], str | None, dict[UUID, Tool]]:
     conversation = session.scalar(
         select(Conversation)
         .join(Agent)
@@ -276,15 +277,15 @@ def get_activity_conversation_detail(
         next_action_cursor = _encode_cursor(actions[-1].created_at, actions[-1].id)
     actions.reverse()
 
-    endpoint_ids = list({action.endpoint_id for action in actions if action.endpoint_id is not None})
-    if endpoint_ids:
-        endpoints = session.scalars(
-            select(Endpoint)
-            .where(Endpoint.user_id == user_id, Endpoint.id.in_(endpoint_ids))
-            .options(selectinload(Endpoint.feature))
+    tool_ids = list({action.tool_id for action in actions if action.tool_id is not None})
+    if tool_ids:
+        tools = session.scalars(
+            select(Tool)
+            .where(Tool.user_id == user_id, Tool.id.in_(tool_ids))
+            .options(selectinload(Tool.feature))
         ).all()
-        endpoint_map = {endpoint.id: endpoint for endpoint in endpoints}
+        tool_map = {tool.id: tool for tool in tools}
     else:
-        endpoint_map = {}
+        tool_map = {}
 
-    return conversation, messages, next_message_cursor, actions, next_action_cursor, endpoint_map
+    return conversation, messages, next_message_cursor, actions, next_action_cursor, tool_map

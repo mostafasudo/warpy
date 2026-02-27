@@ -7,9 +7,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core.logger import log_error
 from ..core.constants import SENSITIVE_KEY_FRAGMENTS
-from ..models import ConversationAction, Endpoint
+from ..core.logger import log_error
+from ..models import ConversationAction, Tool
 from ..schemas.widget import ToolResultPayload
 
 
@@ -56,7 +56,7 @@ def _sanitize(value: Any) -> Any:
 class ToolCallForLog:
     id: str
     tool_type: str
-    endpoint_id: UUID | None = None
+    tool_id: UUID | None = None
     params: dict[str, Any] | None = None
     query: dict[str, Any] | None = None
     body: dict[str, Any] | None = None
@@ -79,17 +79,17 @@ def record_widget_tool_results(
         return
 
     call_map = _tool_call_map(tool_calls)
-    endpoint_ids = list({call_map[item_id].endpoint_id for item_id in tool_call_ids if item_id in call_map})
-    if not endpoint_ids:
+    tool_ids = [tool_id for tool_id in {call_map[item_id].tool_id for item_id in tool_call_ids if item_id in call_map} if tool_id]
+    if not tool_ids:
         return
 
-    endpoint_rows = session.scalars(
-        select(Endpoint).where(
-            Endpoint.user_id == user_id,
-            Endpoint.id.in_(endpoint_ids),
+    tool_rows = session.scalars(
+        select(Tool).where(
+            Tool.user_id == user_id,
+            Tool.id.in_(tool_ids),
         )
     ).all()
-    endpoints = {endpoint.id: endpoint for endpoint in endpoint_rows}
+    tools = {tool.id: tool for tool in tool_rows}
 
     existing = set(session.scalars(
         select(ConversationAction.tool_call_id).where(
@@ -107,22 +107,23 @@ def record_widget_tool_results(
         call = call_map.get(tool_call_id)
         if not call:
             continue
-        endpoint = endpoints.get(call.endpoint_id)
-        if not endpoint:
+        tool = tools.get(call.tool_id)
+        if not tool:
             continue
         try:
             session.add(ConversationAction(
                 user_id=user_id,
                 conversation_id=conversation_id,
-                tool_type="backend",
-                endpoint_id=endpoint.id,
-                feature_id=endpoint.feature_id,
+                tool_type=call.tool_type or "backend",
+                tool_id=tool.id,
+                feature_id=tool.feature_id,
                 tool_call_id=tool_call_id,
                 request={
                     "params": _sanitize(call.params or {}),
                     "query": _sanitize(call.query or {}),
                     "body": _sanitize(call.body or {}),
                 },
+                response_body=_sanitize(result.body),
                 status_code=result.status_code,
                 error=result.error,
             ))
@@ -140,7 +141,7 @@ def record_widget_tool_results(
         session.flush()
 
 
-def record_frontend_action(
+def record_screen_autopilot_action(
     session: Session,
     user_id: str,
     conversation_id: UUID,
@@ -165,7 +166,7 @@ def record_frontend_action(
         session.add(ConversationAction(
             user_id=user_id,
             conversation_id=conversation_id,
-            tool_type="frontend",
+            tool_type="screen_autopilot",
             frontend_goal=goal,
             frontend_url=url,
             frontend_actions=[_sanitize_frontend_action(a) for a in actions],
@@ -178,8 +179,8 @@ def record_frontend_action(
     except Exception as exc:
         log_error(
             "ConversationActionsService",
-            "record_frontend_action",
-            "Failed to record frontend action",
+            "record_screen_autopilot_action",
+            "Failed to record screen autopilot action",
             exc=exc,
             conversation_id=str(conversation_id),
             tool_call_id=tool_call_id,

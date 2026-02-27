@@ -44,6 +44,10 @@
     --chart-3: 190 100% 35%;
     --chart-4: 150 80% 35%;
     --chart-5: 24 95% 55%;
+
+    --tool-tag-frontend-bg: 190 88% 95%;
+    --tool-tag-frontend-border: 190 72% 66%;
+    --tool-tag-frontend-text: 193 88% 30%;
   }
 
  .dark {
@@ -86,6 +90,10 @@
     --chart-3: 190 90% 40%;
     --chart-4: 150 80% 40%;
     --chart-5: 280 65% 60%;
+
+    --tool-tag-frontend-bg: 192 50% 17%;
+    --tool-tag-frontend-border: 192 66% 49%;
+    --tool-tag-frontend-text: 191 91% 89%;
   }
 }
 
@@ -106,6 +114,14 @@
 
   code, pre {
     font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .tool-tag-frontend {
+    background-color: hsl(var(--tool-tag-frontend-bg));
+    border-color: hsl(var(--tool-tag-frontend-border));
+    color: hsl(var(--tool-tag-frontend-text));
   }
 }
 

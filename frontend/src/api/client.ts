@@ -11,15 +11,15 @@ import type {
   BillingPortalResponse,
   BillingSummaryResponse,
   ConfigResponse,
-  EndpointPayload,
-  EndpointResponse,
-  FeatureEndpointsResponse,
+  ToolPayload,
+  ToolResponse,
+  FeatureToolsResponse,
   FeaturePayload,
   FeatureTogglePayload,
-  FeatureWithEndpoints,
+  FeatureWithTools,
   FrontendCapabilityResponse,
   FrontendCapabilityUpdate,
-  PaginatedEndpoints,
+  PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
   WidgetApiKeyCreateResponse,
@@ -156,15 +156,15 @@ export type {
   BillingPortalResponse,
   BillingSummaryResponse,
   ConfigResponse,
-  EndpointPayload,
-  EndpointResponse,
-  FeatureEndpointsResponse,
+  ToolPayload,
+  ToolResponse,
+  FeatureToolsResponse,
   FeaturePayload,
   FeatureTogglePayload,
-  FeatureWithEndpoints,
+  FeatureWithTools,
   FrontendCapabilityResponse,
   FrontendCapabilityUpdate,
-  PaginatedEndpoints,
+  PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
   WidgetApiKeyCreateResponse,
@@ -180,7 +180,7 @@ export const apiClient = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
-  listEndpoints: (page: number, pageSize: number, search = "") => {
+  listTools: (page: number, pageSize: number, search = "") => {
     const params = new URLSearchParams({
       page: String(page),
       page_size: String(pageSize),
@@ -189,20 +189,20 @@ export const apiClient = {
     if (term) {
       params.set("search", term);
     }
-    return request<PaginatedEndpoints>(`/endpoints?${params.toString()}`);
+    return request<PaginatedTools>(`/tools?${params.toString()}`);
   },
-  createEndpoint: (payload: EndpointPayload) =>
-    request<EndpointResponse>("/endpoints", {
+  createTool: (payload: ToolPayload) =>
+    request<ToolResponse>("/tools", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateEndpoint: (id: string, payload: EndpointPayload) =>
-    request<EndpointResponse>(`/endpoints/${id}`, {
+  updateTool: (id: string, payload: ToolPayload) =>
+    request<ToolResponse>(`/tools/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
-  deleteEndpoint: (id: string) =>
-    request<void>(`/endpoints/${id}`, {
+  deleteTool: (id: string) =>
+    request<void>(`/tools/${id}`, {
       method: "DELETE",
     }),
   listFeatures: (search = "") => {
@@ -213,20 +213,20 @@ export const apiClient = {
     }
     const query = params.toString();
     const path = query ? `/features?${query}` : "/features";
-    return request<FeatureWithEndpoints[]>(path);
+    return request<FeatureWithTools[]>(path);
   },
   createFeature: (payload: FeaturePayload) =>
-    request<FeatureWithEndpoints>("/features", {
+    request<FeatureWithTools>("/features", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
   updateFeature: (id: string, payload: FeaturePayload) =>
-    request<FeatureWithEndpoints>(`/features/${id}`, {
+    request<FeatureWithTools>(`/features/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
   toggleFeature: (id: string, payload: FeatureTogglePayload) =>
-    request<FeatureWithEndpoints>(`/features/${id}/enabled`, {
+    request<FeatureWithTools>(`/features/${id}/enabled`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -234,10 +234,10 @@ export const apiClient = {
     request<void>(`/features/${id}`, {
       method: "DELETE",
     }),
-  listFeatureEndpoints: (featureId: string, page: number) => {
+  listFeatureTools: (featureId: string, page: number) => {
     const params = new URLSearchParams({ page: String(page) });
-    return request<FeatureEndpointsResponse>(
-      `/features/${encodeURIComponent(featureId)}/endpoints?${params.toString()}`,
+    return request<FeatureToolsResponse>(
+      `/features/${encodeURIComponent(featureId)}/tools?${params.toString()}`,
     );
   },
   getAgent: () => request<AgentResponse>("/agent"),

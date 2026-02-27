@@ -1,6 +1,8 @@
-import type { BodyField, EndpointBuilderState, FlatField } from "@/stores/endpoint-builder"
-import { endpointBuilderUtils } from "@/stores/endpoint-builder"
-import { endpointNamePattern } from "./constants"
+import type { BodyField, FlatField, ToolBuilderState } from "@/stores/tool-builder"
+import { toolBuilderUtils } from "@/stores/tool-builder"
+import { toolNamePattern } from "./constants"
+
+const reservedToolNames = new Set(["find_tools", "find_actions", "read_page", "find_elements", "frontend", "js_exec"])
 
 export type FieldValidation = {
   name?: boolean
@@ -9,13 +11,9 @@ export type FieldValidation = {
   enum?: boolean
 }
 
-type PathParamValidation = {
-  description?: boolean
-  fixed?: boolean
-  enum?: boolean
-}
+type PathParamValidation = FieldValidation
 
-export type EndpointValidationResult = {
+export type ToolValidationResult = {
   errors: string[]
   invalid: {
     path: boolean
@@ -35,6 +33,7 @@ export type EndpointValidationResult = {
 }
 
 const isTextEmpty = (value?: string) => !value?.trim()
+const invalidNameMessage = "must use letters, numbers, underscores, or dashes (max 64)"
 
 const isPrimitiveFixedMissing = (
   value: FlatField["fixed"] | BodyField["fixed"],
@@ -70,7 +69,7 @@ const validateEnumValues = (
     entry.enum = true
     return
   }
-  const normalized = endpointBuilderUtils.coerceEnumValues(values, type)
+  const normalized = toolBuilderUtils.coerceEnumValues(values, type)
   if (!normalized || normalized.length !== values.length) {
     errors.push(`${label} enum contains invalid or duplicate values`)
     entry.enum = true
@@ -89,6 +88,9 @@ const validateFlatFields = (fields: FlatField[], label: "Header" | "Query param"
     if (!trimmedName) {
       errors.push(`${label} ${index + 1} name cannot be empty`)
       entry.name = true
+    } else if (!toolNamePattern.test(trimmedName)) {
+      errors.push(`${displayName} name ${invalidNameMessage}`)
+      entry.name = true
     }
 
     const fixedEnabled = field.fixed !== undefined
@@ -102,7 +104,7 @@ const validateFlatFields = (fields: FlatField[], label: "Header" | "Query param"
         errors.push(`${displayName} description cannot be empty`)
         entry.description = true
       }
-      if (endpointBuilderUtils.isEnumSupported(field.type)) {
+      if (toolBuilderUtils.isEnumSupported(field.type)) {
         validateEnumValues(field.enumValues, field.type, displayName, entry, errors)
       }
     }
@@ -131,9 +133,12 @@ const validateBodyFields = (
     if (!trimmedName) {
       errors.push(`${label} name cannot be empty`)
       entry.name = true
+    } else if (!toolNamePattern.test(trimmedName)) {
+      errors.push(`${label} name ${invalidNameMessage}`)
+      entry.name = true
     }
 
-    if (endpointBuilderUtils.isPrimitiveType(field.type)) {
+    if (toolBuilderUtils.isPrimitiveType(field.type)) {
       const fixedEnabled = field.fixed !== undefined
       if (fixedEnabled) {
         if (isPrimitiveFixedMissing(field.fixed, field.type)) {
@@ -145,7 +150,7 @@ const validateBodyFields = (
           errors.push(`${label} description cannot be empty`)
           entry.description = true
         }
-        if (endpointBuilderUtils.isEnumSupported(field.type)) {
+        if (toolBuilderUtils.isEnumSupported(field.type)) {
           validateEnumValues(field.enumValues, field.type, label, entry, errors)
         }
       }
@@ -164,11 +169,11 @@ const validateBodyFields = (
   })
 }
 
-export const validateEndpointState = (state: EndpointBuilderState): EndpointValidationResult => {
+export const validateToolState = (state: ToolBuilderState): ToolValidationResult => {
   const errors: string[] = []
   const pathParams: PathParamValidation[] = state.pathParams.map(() => ({}))
 
-  const invalid: EndpointValidationResult["invalid"] = {
+  const invalid: ToolValidationResult["invalid"] = {
     path: false,
     name: false,
     namePattern: false,
@@ -180,23 +185,28 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
     bodyFields: {}
   }
 
-  if (!state.path.replace(/\//g, "").trim()) {
-    errors.push("Path cannot be empty")
-    invalid.path = true
+  if (state.toolType === "backend") {
+    if (!state.path.replace(/\//g, "").trim()) {
+      errors.push("Path cannot be empty")
+      invalid.path = true
+    }
   }
 
   const trimmedName = state.name?.trim()
   if (!trimmedName) {
-    errors.push("Endpoint name cannot be empty")
+    errors.push("Tool name cannot be empty")
     invalid.name = true
-  } else if (!endpointNamePattern.test(trimmedName)) {
-    errors.push("Endpoint name must use letters, numbers, underscores, or dashes")
+  } else if (!toolNamePattern.test(trimmedName)) {
+    errors.push("Tool name must use letters, numbers, underscores, or dashes")
     invalid.name = true
     invalid.namePattern = true
+  } else if (reservedToolNames.has(trimmedName.toLowerCase())) {
+    errors.push("Tool name is reserved. Choose a different name.")
+    invalid.name = true
   }
 
   if (!state.description?.trim()) {
-    errors.push("Endpoint description cannot be empty")
+    errors.push("Tool description cannot be empty")
     invalid.description = true
   }
 
@@ -210,37 +220,49 @@ export const validateEndpointState = (state: EndpointBuilderState): EndpointVali
     }
   }
 
-  state.pathParams.forEach((param, index) => {
-    const trimmedName = param.name.trim()
-    const label = trimmedName || `Path parameter ${index + 1}`
-    const entry = invalid.pathParams[index]
-    const fixedEnabled = param.fixed !== undefined
-
-    if (fixedEnabled) {
-      if (!param.fixed?.toString().trim()) {
-        errors.push(`${label} fixed value cannot be empty`)
-        entry.fixed = true
-      }
-    } else {
-      if (isTextEmpty(param.description)) {
-        errors.push(`${label} description cannot be empty`)
-        entry.description = true
-      }
-      validateEnumValues(param.enumValues, "string", label, entry, errors)
-    }
-  })
-
-  const headerResult = validateFlatFields(state.headers, "Header")
-  const queryResult = validateFlatFields(state.queryParams, "Query param")
-  headerResult.errors.forEach((error) => errors.push(error))
-  queryResult.errors.forEach((error) => errors.push(error))
-  invalid.headers = headerResult.issues
-  invalid.queryParams = queryResult.issues
-
-  if (state.method === "GET" && state.bodyFields.length) {
-    errors.push("GET endpoints cannot include a body")
-  } else {
+  if (state.toolType === "frontend") {
     validateBodyFields(state.bodyFields, [], invalid.bodyFields, errors)
+  } else {
+    state.pathParams.forEach((param, index) => {
+      const trimmedName = param.name.trim()
+      const label = trimmedName || `Path parameter ${index + 1}`
+      const entry = invalid.pathParams[index]
+      const fixedEnabled = param.fixed !== undefined
+
+      if (!trimmedName) {
+        errors.push(`Path parameter ${index + 1} name cannot be empty`)
+        entry.name = true
+      } else if (!toolNamePattern.test(trimmedName)) {
+        errors.push(`${label} name ${invalidNameMessage}`)
+        entry.name = true
+      }
+
+      if (fixedEnabled) {
+        if (!param.fixed?.toString().trim()) {
+          errors.push(`${label} fixed value cannot be empty`)
+          entry.fixed = true
+        }
+      } else {
+        if (isTextEmpty(param.description)) {
+          errors.push(`${label} description cannot be empty`)
+          entry.description = true
+        }
+        validateEnumValues(param.enumValues, "string", label, entry, errors)
+      }
+    })
+
+    const headerResult = validateFlatFields(state.headers, "Header")
+    const queryResult = validateFlatFields(state.queryParams, "Query param")
+    headerResult.errors.forEach((error) => errors.push(error))
+    queryResult.errors.forEach((error) => errors.push(error))
+    invalid.headers = headerResult.issues
+    invalid.queryParams = queryResult.issues
+
+    if (state.method === "GET" && state.bodyFields.length) {
+      errors.push("GET backend tools cannot include a body")
+    } else {
+      validateBodyFields(state.bodyFields, [], invalid.bodyFields, errors)
+    }
   }
 
   return { errors, invalid }

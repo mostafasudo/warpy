@@ -48,7 +48,7 @@ def mint_widget_token(
 async def test_widget_token(request: Request) -> Response:
     settings = get_settings()
     if settings.environment.strip().lower() == "production":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not available")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not available")
     if not settings.test_widget_token_api_key:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TEST_WIDGET_TOKEN_API_KEY missing")
     log_warning("WidgetTokenController", "test_widget_token", "Using test widget token endpoint")

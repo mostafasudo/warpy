@@ -671,11 +671,11 @@ const FrontendCapabilityPanel = () => {
       await updateMutation.mutateAsync({ enabled: checked })
       addToast({
         title: "Saved",
-        description: checked ? "Frontend capability enabled." : "Frontend capability disabled.",
+        description: checked ? "Screen autopilot enabled." : "Screen autopilot disabled.",
         variant: "success",
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not update frontend capability"
+      const message = error instanceof Error ? error.message : "Could not update screen autopilot"
       addToast({ title: "Save failed", description: message, variant: "error" })
     }
   }
@@ -703,21 +703,21 @@ const FrontendCapabilityPanel = () => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold">Frontend Capability</h3>
+              <h3 className="text-lg font-semibold">Screen Autopilot</h3>
               <Badge variant={enabled ? "default" : "secondary"}>
                 {enabled ? "Enabled" : "Disabled"}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Allow the agent to read and interact with UI elements on the page.
+              Let the agent read page context and complete actions on the page for the user. It can do this directly and does not need to rely on your defined frontend tools.
             </p>
           </div>
           <Switch
-            id="frontend-capability-toggle"
+            id="screen-autopilot-toggle"
             checked={enabled}
             onCheckedChange={(checked) => void handleToggle(checked)}
             disabled={updateMutation.isPending}
-            aria-label="Toggle frontend capability"
+            aria-label="Toggle screen autopilot"
           />
         </div>
       </div>

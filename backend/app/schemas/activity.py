@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -73,13 +73,14 @@ class ActivityActionEvent(BaseModel):
 
     id: UUID
     created_at: datetime = Field(alias="createdAt")
-    tool_type: str = Field(default="backend", alias="toolType")
+    tool_type: Literal["backend", "frontend", "screen_autopilot"] = Field(default="backend", alias="toolType")
     feature: str | None = None
     action: str | None = None
     request: ActivityActionRequest | None = None
     frontend_goal: str | None = Field(default=None, alias="frontendGoal")
     frontend_url: str | None = Field(default=None, alias="frontendUrl")
     frontend_actions: list[ActivityFrontendAction] | None = Field(default=None, alias="frontendActions")
+    response_body: Any = Field(default=None, alias="responseBody")
     status_code: int | None = Field(default=None, alias="statusCode")
     error: str | None = None
 

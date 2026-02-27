@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, jest } from "@jest/globals"
 
 import { apiClient, configureApiClient, getApiUrl } from "@/api/client"
-import type { EndpointPayload } from "@/types"
+import type { ToolPayload } from "@/types"
 import { jsonResponse, mockFetch, textResponse } from "@/test/http"
 
 describe("apiClient", () => {
@@ -72,7 +72,7 @@ describe("apiClient", () => {
     expect(getToken).toHaveBeenCalled()
   })
 
-  it("supports config and endpoint operations", async () => {
+  it("supports config and tool operations", async () => {
     const responses = [
       jsonResponse({ baseUrl: { local: "http://localhost", production: "https://api" }, headers: {} }),
       jsonResponse({
@@ -81,7 +81,7 @@ describe("apiClient", () => {
       }),
       jsonResponse({ items: [], page: 2, pageSize: 10, total: 0 }),
       jsonResponse({
-        id: "endpoint-1",
+        id: "tool-1",
         path: "/users",
         method: "GET",
         agentEnabled: true,
@@ -89,10 +89,10 @@ describe("apiClient", () => {
           type: "function",
           function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
         },
-        feature: { id: "feature-1", name: "Users", enabledState: "enabled", endpointCount: 1 }
+        feature: { id: "feature-1", name: "Users", enabledState: "enabled", toolCount: 1 }
       }),
       jsonResponse({
-        id: "endpoint-1",
+        id: "tool-1",
         path: "/users",
         method: "GET",
         agentEnabled: true,
@@ -100,7 +100,7 @@ describe("apiClient", () => {
           type: "function",
           function: { name: "list_users", description: "List users", parameters: { type: "object", properties: {}, required: [] } }
         },
-        feature: { id: "feature-1", name: "Users", enabledState: "enabled", endpointCount: 1 }
+        feature: { id: "feature-1", name: "Users", enabledState: "enabled", toolCount: 1 }
       }),
       textResponse("", 204)
     ]
@@ -119,14 +119,14 @@ describe("apiClient", () => {
     })
     expect(updatedConfig.baseUrl.staging).toBe("https://staging")
 
-    const listed = await apiClient.listEndpoints(2, 10)
+    const listed = await apiClient.listTools(2, 10)
     expect(listed.page).toBe(2)
     expect(fetchSpy).toHaveBeenCalledWith(
-      new URL("/endpoints?page=2&page_size=10", "http://api.test"),
+      new URL("/tools?page=2&page_size=10", "http://api.test"),
       expect.any(Object)
     )
 
-    const payload: EndpointPayload = {
+    const payload: ToolPayload = {
       path: "/users",
       method: "GET",
       tool: {
@@ -137,16 +137,16 @@ describe("apiClient", () => {
       feature: { mode: "auto" }
     }
 
-    const created = await apiClient.createEndpoint(payload)
+    const created = await apiClient.createTool(payload)
     expect(created.tool.function.name).toBe("list_users")
 
-    const updated = await apiClient.updateEndpoint("endpoint-1", payload)
+    const updated = await apiClient.updateTool("tool-1", payload)
     expect(updated.path).toBe("/users")
 
-    const deleted = await apiClient.deleteEndpoint("endpoint-1")
+    const deleted = await apiClient.deleteTool("tool-1")
     expect(deleted).toBeUndefined()
     expect(fetchSpy).toHaveBeenCalledWith(
-      new URL("/endpoints/endpoint-1", "http://api.test"),
+      new URL("/tools/tool-1", "http://api.test"),
       expect.objectContaining({ method: "DELETE" })
     )
   })
@@ -155,20 +155,20 @@ describe("apiClient", () => {
     const fetchSpy = jest.spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
     fetchSpy.mockImplementation(() => Promise.resolve(jsonResponse({ items: [], page: 1, pageSize: 10, total: 0 })))
 
-    await apiClient.listEndpoints(1, 10, "  users ")
+    await apiClient.listTools(1, 10, "  users ")
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      new URL("/endpoints?page=1&page_size=10&search=users", "http://api.test"),
+      new URL("/tools?page=1&page_size=10&search=users", "http://api.test"),
       expect.any(Object)
     )
   })
 
   it("supports feature operations", async () => {
     const responses = [
-      jsonResponse([{ id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }]),
-      jsonResponse({ id: "f2", name: "Billing", enabledState: "enabled", endpointCount: 0, endpoints: [] }),
-      jsonResponse({ id: "f2", name: "Billing v2", enabledState: "enabled", endpointCount: 0, endpoints: [] }),
-      jsonResponse({ id: "f2", name: "Billing v2", enabledState: "disabled", endpointCount: 0, endpoints: [] }),
+      jsonResponse([{ id: "f1", name: "Users", enabledState: "enabled", toolCount: 1, tools: [] }]),
+      jsonResponse({ id: "f2", name: "Billing", enabledState: "enabled", toolCount: 0, tools: [] }),
+      jsonResponse({ id: "f2", name: "Billing v2", enabledState: "enabled", toolCount: 0, tools: [] }),
+      jsonResponse({ id: "f2", name: "Billing v2", enabledState: "disabled", toolCount: 0, tools: [] }),
       textResponse("", 204)
     ]
 

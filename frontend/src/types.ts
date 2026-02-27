@@ -21,7 +21,7 @@ export type ToolParameters = {
   required?: string[];
 };
 
-export type EndpointTool = {
+export type ToolDefinition = {
   type: "function";
   function: {
     name: string;
@@ -29,6 +29,8 @@ export type EndpointTool = {
     parameters: ToolParameters;
   };
 };
+
+export type ToolType = "backend" | "frontend";
 
 export type FeatureEnabledState = "enabled" | "disabled" | "partial";
 
@@ -42,10 +44,10 @@ export type FeatureSummary = {
   id: string;
   name: string;
   enabledState: FeatureEnabledState;
-  endpointCount: number;
+  toolCount: number;
 };
 
-export type EndpointPagination = {
+export type ToolPagination = {
   page: number;
   pageSize: number;
   total: number;
@@ -53,13 +55,13 @@ export type EndpointPagination = {
   hasMore: boolean;
 };
 
-export type FeatureWithEndpoints = FeatureSummary & {
-  endpoints: EndpointResponse[];
-  pagination: EndpointPagination;
+export type FeatureWithTools = FeatureSummary & {
+  tools: ToolResponse[];
+  pagination: ToolPagination;
 };
 
-export type FeatureEndpointsResponse = EndpointPagination & {
-  items: EndpointResponse[];
+export type FeatureToolsResponse = ToolPagination & {
+  items: ToolResponse[];
 };
 
 export type FeaturePayload = {
@@ -70,25 +72,27 @@ export type FeatureTogglePayload = {
   agentEnabled: boolean;
 };
 
-export type EndpointPayload = {
-  path: string;
-  method: HttpMethod;
-  tool: EndpointTool;
+export type ToolPayload = {
+  toolType?: ToolType;
+  path?: string;
+  method?: HttpMethod;
+  tool: ToolDefinition;
   agentEnabled: boolean;
   feature: FeatureSelector;
 };
 
-export type EndpointResponse = {
+export type ToolResponse = {
   id: string;
-  path: string;
-  method: HttpMethod;
-  tool: EndpointTool;
+  toolType?: ToolType;
+  path?: string | null;
+  method?: HttpMethod | null;
+  tool: ToolDefinition;
   agentEnabled: boolean;
   feature: FeatureSummary;
 };
 
-export type PaginatedEndpoints = {
-  items: EndpointResponse[];
+export type PaginatedTools = {
+  items: ToolResponse[];
   page: number;
   pageSize: number;
   total: number;
@@ -225,13 +229,14 @@ export type ActivityFrontendAction = {
 export type ActivityActionEvent = {
   id: string;
   createdAt: string;
-  toolType: "backend" | "frontend";
+  toolType: "backend" | "frontend" | "screen_autopilot";
   feature: string | null;
   action: string | null;
   request: ActivityActionRequest | null;
   frontendGoal: string | null;
   frontendUrl: string | null;
   frontendActions: ActivityFrontendAction[] | null;
+  responseBody: unknown | null;
   statusCode: number | null;
   error: string | null;
 };

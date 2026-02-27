@@ -36,7 +36,7 @@ def test_tool_cache_load_from_redis():
     tools = cache.load()
 
     assert len(tools) == 1
-    assert tools[0].endpoint_id == eid
+    assert tools[0].tool_id == eid
     assert tools[0].last_used == 1000.0
 
 
@@ -155,7 +155,7 @@ def test_tool_cache_no_redis():
     tools = cache.load()
     cache.save()
 
-    assert len(cache.get_endpoint_ids()) == 1
+    assert len(cache.get_tool_ids()) == 1
 
 
 def test_tool_cache_clear():
@@ -182,7 +182,7 @@ def test_tool_cache_clear_redis_error():
     assert len(cache._tools) == 0
 
 
-def test_tool_cache_get_endpoint_ids():
+def test_tool_cache_get_tool_ids():
     redis = MagicMock()
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
@@ -191,7 +191,7 @@ def test_tool_cache_get_endpoint_ids():
     eid2 = uuid4()
     cache._tools = {eid1: 100.0, eid2: 200.0}
 
-    ids = cache.get_endpoint_ids()
+    ids = cache.get_tool_ids()
 
     assert set(ids) == {eid1, eid2}
 
@@ -218,5 +218,4 @@ def test_tool_cache_enforce_cap_no_eviction_needed():
     cache.enforce_cap(10)
 
     assert eid in cache._tools
-
 

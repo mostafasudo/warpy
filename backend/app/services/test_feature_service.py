@@ -5,11 +5,12 @@ from sqlalchemy import select
 
 from app.core import database
 from app.core.config import get_settings
-from app.models import Base, Endpoint, Feature, HttpMethod
-from app.schemas.endpoint import EndpointPayload
+from app.models import Base, Tool, Feature, HttpMethod
+from app.schemas.tool import ToolPayload
 from app.schemas.feature import FeatureSelector
 from app.services import feature_service
 from app.services.feature_service import (
+    _escape_like,
     create_feature,
     delete_feature_if_empty,
     list_features,
@@ -40,8 +41,8 @@ def test_list_features_returns_enabled_state(configure_db):
         feature = create_feature(session, "user-1", "Users")
         other = create_feature(session, "user-1", "Billing")
         session.add_all([
-            Endpoint(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=True, feature_id=feature.id),
-            Endpoint(user_id="user-1", path="/users/:id", method=HttpMethod.get, tool={"function": {"name": "get", "description": "get", "parameters": {}}}, agent_enabled=False, feature_id=feature.id)
+            Tool(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=True, feature_id=feature.id),
+            Tool(user_id="user-1", path="/users/:id", method=HttpMethod.get, tool={"function": {"name": "get", "description": "get", "parameters": {}}}, agent_enabled=False, feature_id=feature.id)
         ])
         session.flush()
 
@@ -52,21 +53,21 @@ def test_list_features_returns_enabled_state(configure_db):
         assert states["Billing"] == "disabled"
 
 
-def test_set_feature_enabled_updates_endpoints(configure_db, monkeypatch: pytest.MonkeyPatch):
+def test_set_feature_enabled_updates_tools(configure_db, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
 
     calls: list[str] = []
-    monkeypatch.setattr(feature_service, "enqueue_endpoint_embedding", lambda _i, _u: calls.append("enqueue"))
-    monkeypatch.setattr(feature_service, "delete_endpoint_embedding", lambda _s, _i: calls.append("delete"))
+    monkeypatch.setattr(feature_service, "enqueue_tool_embedding", lambda _i, _u: calls.append("enqueue"))
+    monkeypatch.setattr(feature_service, "delete_tool_embedding", lambda _s, _i: calls.append("delete"))
 
     with session_scope() as session:
         feature = create_feature(session, "user-1", "Users")
-        session.add(Endpoint(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=False, feature_id=feature.id))
+        session.add(Tool(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=False, feature_id=feature.id))
         session.flush()
 
         updated = set_feature_enabled(session, feature.id, "user-1", True)
-        assert len(updated.endpoints) > 0
-        assert updated.endpoints[0].agent_enabled is True
+        assert len(updated.tools) > 0
+        assert updated.tools[0].agent_enabled is True
         assert calls == ["enqueue"]
 
 
@@ -77,7 +78,7 @@ def test_resolve_feature_auto_reuses_existing(configure_db, monkeypatch: pytest.
 
     with session_scope() as session:
         feature = create_feature(session, "user-1", "Users")
-        payload = EndpointPayload(
+        payload = ToolPayload(
           path="/users",
           method=HttpMethod.get,
           tool={"function": {"name": "get_users", "description": "desc", "parameters": {"type": "object", "properties": {}}}},
@@ -99,13 +100,17 @@ def test_delete_feature_if_empty_removes_feature(configure_db, monkeypatch: pyte
         assert remaining is None
 
 
-def test_delete_feature_if_empty_keeps_feature_with_endpoints(configure_db, monkeypatch: pytest.MonkeyPatch):
+def test_delete_feature_if_empty_keeps_feature_with_tools(configure_db, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
 
     with session_scope() as session:
         feature = create_feature(session, "user-1", "Users")
-        session.add(Endpoint(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=True, feature_id=feature.id))
+        session.add(Tool(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=True, feature_id=feature.id))
         session.flush()
         delete_feature_if_empty(session, feature.id, "user-1")
         remaining = session.scalar(select(Feature).where(Feature.id == feature.id))
         assert remaining is not None
+
+
+def test_feature_search_escape_like():
+    assert _escape_like("a%b_c\\d") == "a\\%b\\_c\\\\d"

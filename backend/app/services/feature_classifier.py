@@ -8,7 +8,7 @@ from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
 
 
-SYSTEM_PROMPT = """Context: You label one API endpoint with a product feature.
+SYSTEM_PROMPT = """Context: You label one tool with a product feature.
 
 Task: Pick the best feature name.
 
@@ -25,8 +25,9 @@ def _get_openai_client() -> OpenAI:
     return OpenAI(api_key=settings.openai_api_key)
 
 
-def _fallback_feature_name(endpoint: dict[str, Any]) -> str:
-    function = endpoint.get("tool", {}).get("function", {}) if isinstance(endpoint, dict) else {}
+def _fallback_feature_name(tool_payload: dict[str, Any]) -> str:
+    tool = tool_payload.get("tool") if isinstance(tool_payload, dict) else None
+    function = tool.get("function") if isinstance(tool, dict) else None
     name = function.get("name") if isinstance(function, dict) else None
     description = function.get("description") if isinstance(function, dict) else None
     if isinstance(name, str) and name.strip():
@@ -37,7 +38,7 @@ def _fallback_feature_name(endpoint: dict[str, Any]) -> str:
         words = description.split()
         if words:
             return " ".join(words[:4]).title()
-    path = endpoint.get("path") if isinstance(endpoint, dict) else None
+    path = tool_payload.get("path") if isinstance(tool_payload, dict) else None
     if isinstance(path, str):
         parts = [segment for segment in path.split("/") if segment and not segment.startswith("{")]
         if parts:
@@ -45,17 +46,20 @@ def _fallback_feature_name(endpoint: dict[str, Any]) -> str:
     return "General"
 
 
-def classify_feature_name(endpoint: dict[str, Any], features: list[str]) -> str:
+def classify_feature_name(tool_payload: dict[str, Any], features: list[str]) -> str:
     if not features:
-        return _fallback_feature_name(endpoint)
+        return _fallback_feature_name(tool_payload)
     try:
         client = _get_openai_client()
+        payload_source = tool_payload if isinstance(tool_payload, dict) else {}
+        tool_info = payload_source.get("tool")
+        function_info = tool_info.get("function") if isinstance(tool_info, dict) else None
         payload = {
-            "endpoint": {
-                "path": endpoint.get("path"),
-                "method": endpoint.get("method"),
-                "name": endpoint.get("tool", {}).get("function", {}).get("name"),
-                "description": endpoint.get("tool", {}).get("function", {}).get("description")
+            "tool": {
+                "path": payload_source.get("path"),
+                "method": payload_source.get("method"),
+                "name": function_info.get("name") if isinstance(function_info, dict) else None,
+                "description": function_info.get("description") if isinstance(function_info, dict) else None
             },
             "features": features
         }
@@ -78,4 +82,4 @@ def classify_feature_name(endpoint: dict[str, Any], features: list[str]) -> str:
             return normalized[:128]
     except Exception as error:
         log_error("FeatureClassifier", "classify_feature_name", "Classification failed", exc=error)
-    return _fallback_feature_name(endpoint)
+    return _fallback_feature_name(tool_payload)

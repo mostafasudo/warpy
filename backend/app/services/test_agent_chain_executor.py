@@ -35,30 +35,30 @@ def build_tool(name: str, payload: str):
 
 def test_agent_executor_runs_with_tool_calls(monkeypatch):
     responses = [
-        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_actions", "args": {"query": "test"}}]),
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_tools", "args": {"query": "test"}}]),
         AIMessage(content="done", tool_calls=[])
     ]
     llm = DummyLLM(responses)
 
-    endpoint_id = UUID("33333333-3333-3333-3333-333333333333")
-    tool_result = json.dumps([{"id": str(endpoint_id)}])
-    get_tool = build_tool("find_actions", tool_result)
+    tool_id = UUID("33333333-3333-3333-3333-333333333333")
+    tool_result = json.dumps([{"id": str(tool_id)}])
+    get_tool = build_tool("find_tools", tool_result)
 
-    endpoint_calls: list[list[UUID]] = []
+    tool_calls_seen: list[list[UUID]] = []
 
-    def fake_get_endpoint_tools(_session, _user_id, endpoint_ids, _schema_factory, conversation_id=None):
-        endpoint_calls.append(list(endpoint_ids))
+    def fake_get_agent_tools(_session, _user_id, tool_ids, _schema_factory, conversation_id=None):
+        tool_calls_seen.append(list(tool_ids))
         return []
 
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: get_tool)
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", fake_get_endpoint_tools)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: get_tool)
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", fake_get_agent_tools)
 
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", []))
     assert result == "done"
-    assert endpoint_id in executor.active_endpoint_ids
-    assert endpoint_calls[0] == []
-    assert endpoint_calls[1] == [endpoint_id]
+    assert tool_id in executor.active_tool_ids
+    assert tool_calls_seen[0] == []
+    assert tool_calls_seen[1] == [tool_id]
 
 
 def test_agent_executor_handles_tool_error(monkeypatch):
@@ -73,8 +73,8 @@ def test_agent_executor_handles_tool_error(monkeypatch):
         description="broken",
         args_schema=DummyArgs
     )
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: broken_tool)
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: broken_tool)
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", []))
     assert result == "final"
@@ -94,17 +94,17 @@ def test_agent_executor_parses_history_and_missing_tool(monkeypatch):
             self.calls += 1
             return AIMessage(content="", tool_calls=[{"id": f"call-{self.calls}", "name": "missing", "args": {}}])
     llm = LoopLLM()
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", history))
     assert result.startswith("I've reached the maximum number of steps")
 
 
-def test_parse_endpoint_ids_handles_invalid_json():
+def test_parse_tool_ids_handles_invalid_json():
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]))
-    assert executor._parse_endpoint_ids_from_response("not-json") == []
-    assert executor._parse_endpoint_ids_from_response("{}") == []
+    assert executor._parse_tool_ids_from_response("not-json") == []
+    assert executor._parse_tool_ids_from_response("{}") == []
 
 
 def test_run_step_handles_read_page_tool(monkeypatch):
@@ -112,8 +112,8 @@ def test_run_step_handles_read_page_tool(monkeypatch):
         AIMessage(content="", tool_calls=[{"id": "call-1", "name": "read_page", "args": {"filter": "interactive"}}]),
     ]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run_step("Read the page", []))
     assert result.done is False
@@ -128,8 +128,8 @@ def test_run_step_handles_find_tool(monkeypatch):
         AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_elements", "args": {"query": "save button"}}]),
     ]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run_step("Find save button", []))
     assert result.done is False
@@ -144,8 +144,8 @@ def test_run_step_handles_js_exec_tool(monkeypatch):
         AIMessage(content="", tool_calls=[{"id": "call-1", "name": "js_exec", "args": {"code": "document.title"}}]),
     ]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run_step("Get page title", []))
     assert result.done is False
@@ -155,11 +155,63 @@ def test_run_step_handles_js_exec_tool(monkeypatch):
     assert call.js_code == "document.title"
 
 
+def test_run_step_routes_frontend_feature_tool_calls(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "open_drawer", "args": {"orderId": "ord_1"}}]),
+    ]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
+
+    tool_record = type(
+        "ToolStub",
+        (),
+        {"id": UUID("99999999-9999-9999-9999-999999999999"), "tool_type": "frontend", "agent_enabled": True},
+    )()
+    setattr(executor, "_get_tool_by_name", lambda _name: tool_record)
+
+    result = asyncio.run(executor.run_step("Open drawer", []))
+    assert result.done is False
+    assert len(result.tool_calls) == 1
+    call = result.tool_calls[0]
+    assert call.tool_type == "frontend"
+    assert call.name == "open_drawer"
+    assert call.tool_id == tool_record.id
+    assert call.params == {"orderId": "ord_1"}
+
+
+def test_run_handles_frontend_feature_tool_without_widget(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "open_drawer", "args": {}}]),
+        AIMessage(content="done", tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
+
+    tool_record = type(
+        "ToolStub",
+        (),
+        {"id": UUID("99999999-9999-9999-9999-999999999999"), "tool_type": "frontend", "agent_enabled": True},
+    )()
+    setattr(executor, "_get_tool_by_name", lambda _name: tool_record)
+
+    result = asyncio.run(executor.run("Open drawer", []))
+    assert result == "done"
+    second_call_messages = llm.invocations[1]
+    assert any(
+        isinstance(message, ToolMessage) and "Frontend tools require the widget runtime" in str(message.content)
+        for message in second_call_messages
+    )
+
+
 def test_run_step_returns_response_directly(monkeypatch):
     responses = [AIMessage(content="I've created the user.", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run_step("Create a user", []))
     assert result.done is True
@@ -183,8 +235,8 @@ def test_sanitize_localized_reply_strips_language_name_prefix():
 def test_run_step_uses_history_for_pending_messages(monkeypatch):
     responses = [AIMessage(content="response", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     history = [{"role": "user", "content": "previous message"}]
     result = asyncio.run(executor.run_step(None, history))
@@ -195,13 +247,13 @@ def test_run_step_uses_history_for_pending_messages(monkeypatch):
 def test_frontend_capability_disabled_excludes_tools(monkeypatch):
     responses = [AIMessage(content="ok", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm, frontend_capability_enabled=False)
     result = asyncio.run(executor.run_step("hello", []))
     assert result.response == "ok"
     tool_names = {t.name for t in llm.bound_tools}
-    assert "find_actions" in tool_names
+    assert "find_tools" in tool_names
     assert "read_page" not in tool_names
     assert "find_elements" not in tool_names
     assert "frontend" not in tool_names
@@ -210,13 +262,14 @@ def test_frontend_capability_disabled_excludes_tools(monkeypatch):
 
 def test_frontend_capability_disabled_excludes_prompt_section(monkeypatch):
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), frontend_capability_enabled=False)
-    assert "Frontend Tips" not in executor._system_prompt
+    assert "Screen Autopilot Tips" not in executor._system_prompt
     assert "read_page" not in executor._system_prompt
 
 
 def test_frontend_capability_enabled_includes_prompt_section(monkeypatch):
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), frontend_capability_enabled=True)
-    assert "Frontend Tips" in executor._system_prompt
+    assert "Screen Autopilot Tips" in executor._system_prompt
+    assert "find_tools" in executor._system_prompt
     assert "read_page" in executor._system_prompt
     assert "layered UIs" in executor._system_prompt
     assert "ref IDs" in executor._system_prompt
@@ -253,15 +306,15 @@ def test_build_frontend_recovery_note_when_element_not_found():
     )
     note = executor._build_frontend_recovery_note(payload)
     assert note is not None
-    assert "Frontend retry directive" in note
+    assert "Screen autopilot retry directive" in note
     assert "text=Email" in note
 
 
 def test_run_step_injects_frontend_recovery_system_note(monkeypatch):
     responses = [AIMessage(content="retrying now", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     tool_results = [
         ToolResultPayload(
@@ -286,7 +339,7 @@ def test_run_step_injects_frontend_recovery_system_note(monkeypatch):
     messages = llm.invocations[0]
     recovery_messages = [
         message for message in messages
-        if isinstance(message, SystemMessage) and "Frontend retry directive" in (message.content or "")
+        if isinstance(message, SystemMessage) and "Screen autopilot retry directive" in (message.content or "")
     ]
     assert len(recovery_messages) == 1
 
@@ -309,15 +362,15 @@ def test_build_frontend_recovery_note_for_suspicious_text_click_success():
     )
     note = executor._build_frontend_recovery_note(payload)
     assert note is not None
-    assert "Frontend verification directive" in note
+    assert "Screen autopilot verification directive" in note
     assert "read_page" in note
 
 
 def test_run_step_truncates_large_tool_results(monkeypatch):
     responses = [AIMessage(content="processed", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     large_body = {"kind": "read_page", "elements": [{"id": i} for i in range(500)], "screenshot": "data:image/webp;base64," + "A" * 200_000}
     tool_results = [
@@ -401,8 +454,8 @@ def test_build_tool_message_error_ignores_screenshot():
 def test_run_step_prunes_messages_before_invoke(monkeypatch):
     responses = [AIMessage(content="ok", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run_step("hello", []))
     assert result.done is True
@@ -412,16 +465,16 @@ def test_run_step_prunes_messages_before_invoke(monkeypatch):
     assert total <= get_token_budget("gpt-4o")
 
 
-def test_run_truncates_endpoint_tool_results(monkeypatch):
+def test_run_truncates_tool_results(monkeypatch):
     large_result = {"data": [{"id": i, "name": f"item_{i}" * 100} for i in range(1000)]}
     responses = [
-        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_actions", "args": {"query": "test"}}]),
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_tools", "args": {"query": "test"}}]),
         AIMessage(content="done", tool_calls=[])
     ]
     llm = DummyLLM(responses)
-    tool = build_tool("find_actions", json.dumps(large_result))
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: tool)
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    tool = build_tool("find_tools", json.dumps(large_result))
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: tool)
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", []))
     assert result == "done"
@@ -435,8 +488,8 @@ def test_run_truncates_endpoint_tool_results(monkeypatch):
 def test_build_messages_limits_history(monkeypatch):
     responses = [AIMessage(content="ok", tool_calls=[])]
     llm = DummyLLM(responses)
-    monkeypatch.setattr("app.services.agent_chain.create_find_actions_tool", lambda *_args, **_kwargs: build_tool("find_actions", "[]"))
-    monkeypatch.setattr("app.services.agent_chain.get_endpoint_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     from app.services.context_budget import MAX_HISTORY_PAIRS
     history = []

@@ -34,8 +34,8 @@ describe("DashboardPanel", () => {
     })
     mockedUseFeaturesQuery.mockReturnValue({
       data: [
-        { id: "f1", name: "Users", enabledState: "enabled", endpointCount: 2, endpoints: [] },
-        { id: "f2", name: "Billing", enabledState: "partial", endpointCount: 1, endpoints: [] }
+        { id: "f1", name: "Users", enabledState: "enabled", toolCount: 2, tools: [] },
+        { id: "f2", name: "Billing", enabledState: "partial", toolCount: 1, tools: [] }
       ],
       isPending: false
     })
@@ -51,7 +51,7 @@ describe("DashboardPanel", () => {
     const featuresCard = featuresLabel.closest("div")?.parentElement?.parentElement
     expect(featuresCard).not.toBeNull()
     expect(within(featuresCard as HTMLElement).getByText("2")).not.toBeNull()
-    expect(screen.getByText("3 endpoints mapped.")).not.toBeNull()
+    expect(screen.getByText("3 tools mapped.")).not.toBeNull()
 
     await user.click(screen.getByRole("button", { name: "View all" }))
     expect(useNavigationStore.getState().section).toBe("activity")
@@ -64,13 +64,13 @@ describe("DashboardPanel", () => {
     expect(useNavigationStore.getState().section).toBe("agent")
   })
 
-  it("uses singular endpoint when only one mapped", () => {
+  it("uses singular tool when only one mapped", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: {}, headers: {} },
       isPending: false
     })
     mockedUseFeaturesQuery.mockReturnValue({
-      data: [{ id: "f1", name: "Users", enabledState: "enabled", endpointCount: 1, endpoints: [] }],
+      data: [{ id: "f1", name: "Users", enabledState: "enabled", toolCount: 1, tools: [] }],
       isPending: false
     })
     mockedUseActivitySummaryQuery.mockReturnValue({
@@ -80,7 +80,7 @@ describe("DashboardPanel", () => {
 
     render(<DashboardPanel />)
 
-    expect(screen.getByText("1 endpoint mapped.")).not.toBeNull()
+    expect(screen.getByText("1 tool mapped.")).not.toBeNull()
   })
 
   it("renders loading skeletons when pending", () => {

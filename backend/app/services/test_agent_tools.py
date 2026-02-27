@@ -6,8 +6,8 @@ import pytest
 from app.models import HttpMethod
 from app.services import agent_tools
 from app.services.agent_tools import (
-    create_endpoint_tool,
-    create_find_actions_tool,
+    create_backend_tool,
+    create_find_tools_tool,
     create_find_elements_tool,
     create_js_exec_tool,
     create_read_page_tool,
@@ -19,55 +19,62 @@ class DummyFeature:
         self.name = name
 
 
-class DummyEndpoint:
-    def __init__(self, endpoint_id: str, path: str, method: HttpMethod, tool: dict, agent_enabled: bool = True, feature: DummyFeature | None = None):
-        self.id = UUID(endpoint_id)
+class DummyTool:
+    def __init__(
+        self,
+        tool_id: str,
+        path: str | None,
+        method: HttpMethod | None,
+        tool: dict,
+        agent_enabled: bool = True,
+        feature: DummyFeature | None = None,
+        tool_type: str = "backend",
+    ):
+        self.id = UUID(tool_id)
         self.path = path
         self.method = method
         self.tool = tool
+        self.tool_type = tool_type
         self.user_id = "user"
         self.agent_enabled = agent_enabled
         self.feature = feature
 
 
 class DummySession:
-    def __init__(self, endpoints: list[DummyEndpoint]):
-        self._endpoints = endpoints
+    def __init__(self, tools: list[DummyTool]):
+        self._tools = tools
 
     def scalars(self, _query):
         class Result:
-            def __init__(self, endpoints):
-                self._endpoints = endpoints
+            def __init__(self, tools):
+                self._tools = tools
             def all(self):
-                return self._endpoints
+                return self._tools
             def __iter__(self):
-                return iter(self._endpoints)
-        enabled = [endpoint for endpoint in self._endpoints if getattr(endpoint, "agent_enabled", True)]
+                return iter(self._tools)
+        enabled = [tool for tool in self._tools if getattr(tool, "agent_enabled", True)]
         return Result(enabled)
 
     def all(self):
-        return self._endpoints
+        return self._tools
 
     def __iter__(self):
-        return iter([endpoint for endpoint in self._endpoints if getattr(endpoint, "agent_enabled", True)])
-
-    def __iter__(self):
-        return iter(self._endpoints)
+        return iter(self._tools)
 
 
-def test_create_endpoint_tool_invokes_executor(monkeypatch: pytest.MonkeyPatch):
+def test_create_backend_tool_invokes_executor(monkeypatch: pytest.MonkeyPatch):
     captured = {}
 
-    def fake_execute(session, user_id, endpoint, args, conversation_id=None):
+    def fake_execute(session, user_id, tool_record, args, conversation_id=None):
         captured["session"] = session
         captured["user_id"] = user_id
-        captured["endpoint"] = endpoint
+        captured["tool"] = tool_record
         captured["args"] = args
         return {"ok": True}
 
-    monkeypatch.setattr(agent_tools, "execute_endpoint", fake_execute)
+    monkeypatch.setattr(agent_tools, "execute_backend_tool", fake_execute)
 
-    endpoint = DummyEndpoint(
+    tool_record = DummyTool(
         "11111111-1111-1111-1111-111111111111",
         "/users/{id}",
         HttpMethod.get,
@@ -89,43 +96,44 @@ def test_create_endpoint_tool_invokes_executor(monkeypatch: pytest.MonkeyPatch):
             }
         }
     )
-    session = DummySession([endpoint])
-    tool = create_endpoint_tool(session, "user_1", endpoint)
+    session = DummySession([tool_record])
+    tool = create_backend_tool(session, "user_1", tool_record)
     result = tool.invoke({"params": {"id": "9"}})
     assert json.loads(result) == {"ok": True}
-    assert captured["endpoint"] is endpoint
+    assert captured["tool"] is tool_record
     assert captured["args"] == {"params": {"id": "9"}}
 
 
-def test_create_find_actions_tool_formats_results(monkeypatch: pytest.MonkeyPatch):
-    endpoint = DummyEndpoint(
+def test_create_find_tools_tool_formats_results(monkeypatch: pytest.MonkeyPatch):
+    tool_record = DummyTool(
         "22222222-2222-2222-2222-222222222222",
         "/orders",
         HttpMethod.post,
         {"function": {"name": "createOrder", "description": "Create order"}},
         feature=DummyFeature("Orders")
     )
-    session = DummySession([endpoint])
-    monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [endpoint.id])
+    session = DummySession([tool_record])
+    monkeypatch.setattr(agent_tools, "search_similar_tools", lambda _s, _u, _q: [tool_record.id])
 
-    tool = create_find_actions_tool(session, "user_1")
+    tool = create_find_tools_tool(session, "user_1")
     response = json.loads(tool.invoke("order"))
-    assert response[0]["id"] == str(endpoint.id)
+    assert response[0]["id"] == str(tool_record.id)
+    assert response[0]["toolType"] == "backend"
     assert response[0]["name"] == "createOrder"
     assert response[0]["description"] == "Create order"
     assert response[0]["feature"] == "Orders"
 
 
-def test_create_find_actions_tool_handles_empty(monkeypatch: pytest.MonkeyPatch):
+def test_create_find_tools_tool_handles_empty(monkeypatch: pytest.MonkeyPatch):
     session = DummySession([])
-    monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [])
-    tool = create_find_actions_tool(session, "user_1")
+    monkeypatch.setattr(agent_tools, "search_similar_tools", lambda _s, _u, _q: [])
+    tool = create_find_tools_tool(session, "user_1")
     response = json.loads(tool.invoke("none"))
     assert response == []
 
 
-def test_create_find_actions_tool_returns_empty_when_all_disabled(monkeypatch: pytest.MonkeyPatch):
-    disabled = DummyEndpoint(
+def test_create_find_tools_tool_returns_empty_when_all_disabled(monkeypatch: pytest.MonkeyPatch):
+    disabled = DummyTool(
         "99999999-9999-9999-9999-999999999999",
         "/disabled",
         HttpMethod.get,
@@ -133,21 +141,21 @@ def test_create_find_actions_tool_returns_empty_when_all_disabled(monkeypatch: p
         agent_enabled=False
     )
     session = DummySession([disabled])
-    monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [disabled.id])
-    tool = create_find_actions_tool(session, "user_1")
+    monkeypatch.setattr(agent_tools, "search_similar_tools", lambda _s, _u, _q: [disabled.id])
+    tool = create_find_tools_tool(session, "user_1")
     response = json.loads(tool.invoke("anything"))
     assert response == []
 
 
-def test_create_find_actions_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch):
-    enabled = DummyEndpoint(
+def test_create_find_tools_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch):
+    enabled = DummyTool(
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "/active",
         HttpMethod.get,
         {"function": {"name": "active", "description": "enabled"}},
         agent_enabled=True
     )
-    disabled = DummyEndpoint(
+    disabled = DummyTool(
         "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         "/inactive",
         HttpMethod.get,
@@ -155,40 +163,57 @@ def test_create_find_actions_tool_ignores_disabled(monkeypatch: pytest.MonkeyPat
         agent_enabled=False
     )
     session = DummySession([enabled, disabled])
-    monkeypatch.setattr(agent_tools, "search_similar_endpoints", lambda _s, _u, _q: [enabled.id, disabled.id])
+    monkeypatch.setattr(agent_tools, "search_similar_tools", lambda _s, _u, _q: [enabled.id, disabled.id])
 
-    tool = create_find_actions_tool(session, "user_1")
+    tool = create_find_tools_tool(session, "user_1")
     response = json.loads(tool.invoke("anything"))
     assert len(response) == 1
     assert response[0]["id"] == str(enabled.id)
 
 
-def test_get_endpoint_tools_empty_list():
+def test_get_agent_tools_empty_list():
     session = DummySession([])
-    tools = agent_tools.get_endpoint_tools(session, "user", [], None)
+    tools = agent_tools.get_agent_tools(session, "user", [], None)
     assert tools == []
 
 
-def test_get_endpoint_tools_returns_tools(monkeypatch: pytest.MonkeyPatch):
-    endpoint = DummyEndpoint(
+def test_get_agent_tools_returns_tools(monkeypatch: pytest.MonkeyPatch):
+    tool_record = DummyTool(
         "33333333-3333-3333-3333-333333333333",
         "/things",
         HttpMethod.get,
         {"function": {"name": "listThings", "description": "List", "parameters": {"type": "object", "properties": {}, "required": []}}}
     )
-    session = DummySession([endpoint])
-    tools = agent_tools.get_endpoint_tools(session, "user", [endpoint.id], None)
+    session = DummySession([tool_record])
+    tools = agent_tools.get_agent_tools(session, "user", [tool_record.id], None)
     assert len(tools) == 1
 
 
-def test_get_endpoint_tools_skips_disabled():
-    enabled = DummyEndpoint(
+def test_get_agent_tools_returns_frontend_tool():
+    tool_record = DummyTool(
+        "77777777-7777-7777-7777-777777777777",
+        "",
+        HttpMethod.post,
+        {"function": {"name": "openDrawer", "description": "Open drawer", "parameters": {"type": "object", "properties": {}, "required": []}}},
+        tool_type="frontend"
+    )
+    tool_record.path = None
+    tool_record.method = None
+    session = DummySession([tool_record])
+    tools = agent_tools.get_agent_tools(session, "user", [tool_record.id], None)
+    assert len(tools) == 1
+    assert tools[0].name == "openDrawer"
+    assert json.loads(tools[0].invoke({})) == {"status": "queued"}
+
+
+def test_get_agent_tools_skips_disabled():
+    enabled = DummyTool(
         "44444444-4444-4444-4444-444444444444",
         "/enabled",
         HttpMethod.get,
         {"function": {"name": "enabledTool", "description": "Enabled", "parameters": {"type": "object", "properties": {}, "required": []}}}
     )
-    disabled = DummyEndpoint(
+    disabled = DummyTool(
         "55555555-5555-5555-5555-555555555555",
         "/disabled",
         HttpMethod.get,
@@ -196,7 +221,7 @@ def test_get_endpoint_tools_skips_disabled():
         agent_enabled=False
     )
     session = DummySession([enabled, disabled])
-    tools = agent_tools.get_endpoint_tools(session, "user", [enabled.id, disabled.id], None)
+    tools = agent_tools.get_agent_tools(session, "user", [enabled.id, disabled.id], None)
     assert len(tools) == 1
     assert tools[0].name == "enabledTool"
 

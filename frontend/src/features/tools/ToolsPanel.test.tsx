@@ -11,18 +11,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { FeaturesPanel } from "./EndpointsPanel";
+import { ToolsPanel } from "./ToolsPanel";
 import {
-  endpointsUiSelectors,
-  useEndpointsUiStore,
-} from "@/stores/endpoints-ui";
+  toolsUiSelectors,
+  useToolsUiStore,
+} from "@/stores/tools-ui";
 
 jest.mock("@/queries/use-features", () => ({
   useFeaturesQuery: jest.fn(),
 }));
 
-jest.mock("@/queries/use-feature-endpoints", () => ({
-  useFeatureEndpointsQuery: jest.fn(),
+jest.mock("@/queries/use-feature-tools", () => ({
+  useFeatureToolsQuery: jest.fn(),
 }));
 
 jest.mock("@/queries/use-create-feature", () => ({
@@ -41,20 +41,21 @@ jest.mock("@/queries/use-toggle-feature", () => ({
   useToggleFeature: jest.fn(),
 }));
 
-jest.mock("@/queries/use-delete-endpoint", () => ({
-  useDeleteEndpoint: jest.fn(),
+jest.mock("@/queries/use-delete-tool", () => ({
+  useDeleteTool: jest.fn(),
 }));
 
-jest.mock("@/queries/use-create-endpoint", () => ({
-  useCreateEndpoint: jest.fn(),
+jest.mock("@/queries/use-create-tool", () => ({
+  useCreateTool: jest.fn(),
 }));
 
-jest.mock("@/queries/use-update-endpoint", () => ({
-  useUpdateEndpoint: jest.fn(),
+jest.mock("@/queries/use-update-tool", () => ({
+  useUpdateTool: jest.fn(),
 }));
 
-jest.mock("@/stores/endpoint-builder", () => {
+jest.mock("@/stores/tool-builder", () => {
   const state: any = {
+    toolType: "backend",
     path: "/users",
     method: "GET",
     name: "get_users",
@@ -67,6 +68,7 @@ jest.mock("@/stores/endpoint-builder", () => {
     headers: [],
     queryParams: [],
     bodyFields: [],
+    setToolType: jest.fn(),
     setPath: jest.fn(),
     setMethod: jest.fn(),
     setName: jest.fn(),
@@ -94,8 +96,9 @@ jest.mock("@/stores/endpoint-builder", () => {
     Object.assign(state, next);
   };
   return {
-    useEndpointBuilderStore: hook,
-    endpointBuilderSelectors: {
+    useToolBuilderStore: hook,
+    toolBuilderSelectors: {
+      toolType: (s: any) => s.toolType,
       path: (s: any) => s.path,
       method: (s: any) => s.method,
       name: (s: any) => s.name,
@@ -109,9 +112,10 @@ jest.mock("@/stores/endpoint-builder", () => {
       queryParams: (s: any) => s.queryParams,
       bodyFields: (s: any) => s.bodyFields,
     },
-    endpointBuilderActions: {
+    toolBuilderActions: {
       hydrate: (s: any) => s.hydrate,
       reset: (s: any) => s.reset,
+      setToolType: (s: any) => s.setToolType,
       addFlatField: (s: any) => s.addFlatField,
       updateFlatField: (s: any) => s.updateFlatField,
       removeFlatField: (s: any) => s.removeFlatField,
@@ -130,7 +134,7 @@ jest.mock("@/stores/endpoint-builder", () => {
       setFeatureId: (s: any) => s.setFeatureId,
       setFeatureName: (s: any) => s.setFeatureName,
     },
-    endpointBuilderUtils: {
+    toolBuilderUtils: {
       isPrimitiveType: jest.fn(() => true),
       normalizePathInput: jest.fn((value: string) => value),
       extractPathParams: jest.fn(() => []),
@@ -148,7 +152,8 @@ jest.mock("@/stores/toast", () => {
 });
 
 jest.mock("@/lib/tool-schema", () => ({
-  buildEndpointPayload: jest.fn(() => ({
+  buildToolPayload: jest.fn(() => ({
+    toolType: "backend",
     path: "/users",
     method: "GET",
     tool: {
@@ -162,7 +167,8 @@ jest.mock("@/lib/tool-schema", () => ({
     agentEnabled: true,
     feature: { mode: "existing", id: "feature-1" },
   })),
-  mapEndpointToBuilderState: jest.fn(() => ({
+  mapToolToBuilderState: jest.fn(() => ({
+    toolType: "backend",
     path: "/users",
     method: "GET",
     name: "get_users",
@@ -179,7 +185,7 @@ jest.mock("@/lib/tool-schema", () => ({
 }));
 
 jest.mock("./validation", () => ({
-  validateEndpointState: jest.fn(() => ({
+  validateToolState: jest.fn(() => ({
     errors: [],
     invalid: {
       path: false,
@@ -195,8 +201,8 @@ jest.mock("./validation", () => ({
   })),
 }));
 
-jest.mock("./EndpointEditor", () => ({
-  EndpointEditor: ({ onSave, onClose, editing }: any) => (
+jest.mock("./ToolEditor", () => ({
+  ToolEditor: ({ onSave, onClose, editing }: any) => (
     <div>
       <button data-testid="editor-save" onClick={onSave}>
         Save editor
@@ -211,15 +217,15 @@ jest.mock("./EndpointEditor", () => ({
 
 const mockedUseFeaturesQuery = require("@/queries/use-features")
   .useFeaturesQuery as jest.Mock;
-const mockedUseFeatureEndpointsQuery =
-  require("@/queries/use-feature-endpoints")
-    .useFeatureEndpointsQuery as jest.Mock;
-const mockedUseCreateEndpoint = require("@/queries/use-create-endpoint")
-  .useCreateEndpoint as jest.Mock;
-const mockedUseUpdateEndpoint = require("@/queries/use-update-endpoint")
-  .useUpdateEndpoint as jest.Mock;
-const mockedUseDeleteEndpoint = require("@/queries/use-delete-endpoint")
-  .useDeleteEndpoint as jest.Mock;
+const mockedUseFeatureToolsQuery =
+  require("@/queries/use-feature-tools")
+    .useFeatureToolsQuery as jest.Mock;
+const mockedUseCreateTool = require("@/queries/use-create-tool")
+  .useCreateTool as jest.Mock;
+const mockedUseUpdateTool = require("@/queries/use-update-tool")
+  .useUpdateTool as jest.Mock;
+const mockedUseDeleteTool = require("@/queries/use-delete-tool")
+  .useDeleteTool as jest.Mock;
 const mockedUseCreateFeature = require("@/queries/use-create-feature")
   .useCreateFeature as jest.Mock;
 const mockedUseUpdateFeature = require("@/queries/use-update-feature")
@@ -229,13 +235,13 @@ const mockedUseDeleteFeature = require("@/queries/use-delete-feature")
 const mockedUseToggleFeature = require("@/queries/use-toggle-feature")
   .useToggleFeature as jest.Mock;
 const validationModule = require("./validation") as {
-  validateEndpointState: jest.Mock;
+  validateToolState: jest.Mock;
 };
 
 const renderPanel = () =>
   render(
     <TooltipProvider>
-      <FeaturesPanel />
+      <ToolsPanel />
     </TooltipProvider>,
   );
 
@@ -252,11 +258,11 @@ const baseFeatures = [
     id: "feature-1",
     name: "User Management",
     enabledState: "enabled",
-    endpointCount: 1,
+    toolCount: 1,
     pagination: basePagination,
-    endpoints: [
+    tools: [
       {
-        id: "endpoint-1",
+        id: "tool-1",
         path: "/users/{id}",
         method: "GET",
         agentEnabled: true,
@@ -272,16 +278,16 @@ const baseFeatures = [
           id: "feature-1",
           name: "User Management",
           enabledState: "enabled",
-          endpointCount: 1,
+          toolCount: 1,
         },
       },
     ],
   },
 ];
 
-describe("FeaturesPanel", () => {
+describe("ToolsPanel", () => {
   beforeEach(() => {
-    validationModule.validateEndpointState.mockReturnValue({
+    validationModule.validateToolState.mockReturnValue({
       errors: [],
       invalid: {
         path: false,
@@ -300,19 +306,19 @@ describe("FeaturesPanel", () => {
       isPending: false,
       isFetching: false,
     });
-    mockedUseFeatureEndpointsQuery.mockReturnValue({
+    mockedUseFeatureToolsQuery.mockReturnValue({
       data: null,
       isFetching: false,
     });
-    mockedUseCreateEndpoint.mockReturnValue({
+    mockedUseCreateTool.mockReturnValue({
       mutateAsync: jest.fn(async () => undefined),
       isPending: false,
     });
-    mockedUseUpdateEndpoint.mockReturnValue({
+    mockedUseUpdateTool.mockReturnValue({
       mutateAsync: jest.fn(async () => undefined),
       isPending: false,
     });
-    mockedUseDeleteEndpoint.mockReturnValue({
+    mockedUseDeleteTool.mockReturnValue({
       mutateAsync: jest.fn(async () => undefined),
       isPending: false,
     });
@@ -332,28 +338,28 @@ describe("FeaturesPanel", () => {
       mutateAsync: jest.fn(async () => undefined),
       isPending: false,
     });
-    useEndpointsUiStore.setState({
+    useToolsUiStore.setState({
       page: 1,
       pageSize: 5,
       editorOpen: false,
       editingId: null,
-      editingEndpoint: null,
+      editingTool: null,
       search: "",
       searchDraft: "",
-      setPage: endpointsUiSelectors.setPage(useEndpointsUiStore.getState()),
-      setPageSize: endpointsUiSelectors.setPageSize(
-        useEndpointsUiStore.getState(),
+      setPage: toolsUiSelectors.setPage(useToolsUiStore.getState()),
+      setPageSize: toolsUiSelectors.setPageSize(
+        useToolsUiStore.getState(),
       ),
-      setSearch: endpointsUiSelectors.setSearch(useEndpointsUiStore.getState()),
-      setSearchDraft: endpointsUiSelectors.setSearchDraft(
-        useEndpointsUiStore.getState(),
+      setSearch: toolsUiSelectors.setSearch(useToolsUiStore.getState()),
+      setSearchDraft: toolsUiSelectors.setSearchDraft(
+        useToolsUiStore.getState(),
       ),
-      openCreate: endpointsUiSelectors.openCreate(
-        useEndpointsUiStore.getState(),
+      openCreate: toolsUiSelectors.openCreate(
+        useToolsUiStore.getState(),
       ),
-      openEdit: endpointsUiSelectors.openEdit(useEndpointsUiStore.getState()),
-      closeEditor: endpointsUiSelectors.closeEditor(
-        useEndpointsUiStore.getState(),
+      openEdit: toolsUiSelectors.openEdit(useToolsUiStore.getState()),
+      closeEditor: toolsUiSelectors.closeEditor(
+        useToolsUiStore.getState(),
       ),
     });
   });
@@ -372,20 +378,18 @@ describe("FeaturesPanel", () => {
 
     renderPanel();
 
-    expect(document.querySelectorAll(".animate-pulse").length).toBeGreaterThan(
-      0,
-    );
+    expect(screen.getByTestId("tools-loading")).not.toBeNull();
   });
 
-  it("hides feature toggles when no endpoints exist", () => {
+  it("hides feature toggles when no tools exist", () => {
     mockedUseFeaturesQuery.mockReturnValue({
       data: [
         {
           id: "feature-empty",
           name: "Empty",
           enabledState: "disabled",
-          endpointCount: 0,
-          endpoints: [],
+          toolCount: 0,
+          tools: [],
           pagination: {
             page: 1,
             pageSize: 5,
@@ -401,19 +405,19 @@ describe("FeaturesPanel", () => {
 
     renderPanel();
 
-    expect(screen.queryByLabelText("Enable all endpoints")).toBeNull();
-    expect(screen.queryByLabelText("Disable all endpoints")).toBeNull();
-    expect(screen.queryByText("0 endpoints")).toBeNull();
+    expect(screen.queryByLabelText("Enable all tools")).toBeNull();
+    expect(screen.queryByLabelText("Disable all tools")).toBeNull();
+    expect(screen.queryByText("0 tools")).toBeNull();
   });
 
-  it("shows singular label for one endpoint", () => {
+  it("shows singular label for one tool", () => {
     mockedUseFeaturesQuery.mockReturnValue({
       data: [
         {
           id: "feature-single",
           name: "Single",
           enabledState: "enabled",
-          endpointCount: 1,
+          toolCount: 1,
           pagination: {
             page: 1,
             pageSize: 5,
@@ -421,9 +425,9 @@ describe("FeaturesPanel", () => {
             totalPages: 1,
             hasMore: false,
           },
-          endpoints: [
+          tools: [
             {
-              id: "endpoint-1",
+              id: "tool-1",
               path: "/one",
               method: "GET",
               agentEnabled: true,
@@ -439,7 +443,7 @@ describe("FeaturesPanel", () => {
                 id: "feature-single",
                 name: "Single",
                 enabledState: "enabled",
-                endpointCount: 1,
+                toolCount: 1,
               },
             },
           ],
@@ -451,17 +455,73 @@ describe("FeaturesPanel", () => {
 
     renderPanel();
 
-    expect(screen.getByText("1 endpoint")).toBeTruthy();
+    expect(screen.getByText("1 tool")).toBeTruthy();
   });
 
-  it("creates and updates endpoints", async () => {
+  it("renders frontend tools and sends frontend payload shape on toggle", async () => {
+    const mutateUpdate = jest.fn(async (_payload: any) => undefined);
+    mockedUseUpdateTool.mockReturnValue({
+      mutateAsync: mutateUpdate,
+      isPending: false,
+    });
+    mockedUseFeaturesQuery.mockReturnValue({
+      data: [
+        {
+          id: "feature-frontend",
+          name: "Frontend",
+          enabledState: "enabled",
+          toolCount: 1,
+          pagination: basePagination,
+          tools: [
+            {
+              id: "frontend-tool-1",
+              toolType: "frontend",
+              agentEnabled: true,
+              tool: {
+                type: "function",
+                function: {
+                  name: "open_drawer",
+                  description: "Open drawer",
+                  parameters: { type: "object", properties: {} },
+                },
+              },
+              feature: {
+                id: "feature-frontend",
+                name: "Frontend",
+                enabledState: "enabled",
+                toolCount: 1,
+              },
+            },
+          ],
+        },
+      ],
+      isPending: false,
+      isFetching: false,
+    });
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderPanel();
+
+    expect(screen.getByTestId("feature-name-feature-frontend")).toBeTruthy();
+    expect(screen.getByText("window.warpy('open_drawer', vars)")).toBeTruthy();
+
+    await user.click(screen.getByTestId("agent-toggle-frontend-tool-1"));
+
+    await waitFor(() => expect(mutateUpdate).toHaveBeenCalled());
+    const payload = mutateUpdate.mock.calls[0][0].payload;
+    expect(payload.toolType).toBe("frontend");
+    expect("path" in payload).toBe(false);
+    expect("method" in payload).toBe(false);
+  });
+
+  it("creates and updates tools", async () => {
     const mutateCreate = jest.fn(async (_payload: any) => undefined);
     const mutateUpdate = jest.fn(async (_payload: any) => undefined);
-    mockedUseCreateEndpoint.mockReturnValue({
+    mockedUseCreateTool.mockReturnValue({
       mutateAsync: mutateCreate,
       isPending: false,
     });
-    mockedUseUpdateEndpoint.mockReturnValue({
+    mockedUseUpdateTool.mockReturnValue({
       mutateAsync: mutateUpdate,
       isPending: false,
     });
@@ -469,16 +529,35 @@ describe("FeaturesPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     renderPanel();
 
-    await user.click(screen.getByTestId("new-endpoint"));
+    await user.click(screen.getByTestId("new-tool"));
     await user.click(screen.getByTestId("editor-save"));
     expect(mutateCreate).toHaveBeenCalled();
 
-    await user.click(screen.getByTestId("edit-endpoint-endpoint-1"));
+    await user.click(screen.getByTestId("edit-tool-tool-1"));
     await waitFor(() =>
       expect(screen.getByTestId("editor-editing").textContent).toBe("true"),
     );
     await user.click(screen.getByTestId("editor-save"));
     expect(mutateUpdate).toHaveBeenCalled();
+  });
+
+  it("keeps editor open when save fails", async () => {
+    const mutateCreate = jest.fn(async () => {
+      throw new Error("save failed");
+    });
+    mockedUseCreateTool.mockReturnValue({
+      mutateAsync: mutateCreate,
+      isPending: false,
+    });
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderPanel();
+
+    await user.click(screen.getByTestId("new-tool"));
+    await user.click(screen.getByTestId("editor-save"));
+
+    await waitFor(() => expect(mutateCreate).toHaveBeenCalled());
+    expect(screen.getByTestId("editor-save")).not.toBeNull();
   });
 
   it("defaults to new feature when no features exist", async () => {
@@ -489,27 +568,27 @@ describe("FeaturesPanel", () => {
     });
 
     const setFeatureModeMock =
-      require("@/stores/endpoint-builder").useEndpointBuilderStore.getState()
+      require("@/stores/tool-builder").useToolBuilderStore.getState()
         .setFeatureMode as jest.Mock;
     setFeatureModeMock.mockClear();
 
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     renderPanel();
 
-    await user.click(screen.getByTestId("new-endpoint"));
+    await user.click(screen.getByTestId("new-tool"));
 
     expect(setFeatureModeMock).toHaveBeenCalledWith("new");
   });
 
-  it("deletes features and endpoints", async () => {
+  it("deletes features and tools", async () => {
     const mutateDeleteFeature = jest.fn(async (_id: string) => undefined);
-    const mutateDeleteEndpoint = jest.fn(async (_id: string) => undefined);
+    const mutateDeleteTool = jest.fn(async (_id: string) => undefined);
     mockedUseDeleteFeature.mockReturnValue({
       mutateAsync: mutateDeleteFeature,
       isPending: false,
     });
-    mockedUseDeleteEndpoint.mockReturnValue({
-      mutateAsync: mutateDeleteEndpoint,
+    mockedUseDeleteTool.mockReturnValue({
+      mutateAsync: mutateDeleteTool,
       isPending: false,
     });
 
@@ -520,9 +599,9 @@ describe("FeaturesPanel", () => {
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     expect(mutateDeleteFeature).toHaveBeenCalledWith("feature-1");
 
-    await user.click(screen.getByTestId("delete-endpoint-endpoint-1"));
+    await user.click(screen.getByTestId("delete-tool-tool-1"));
     await user.click(await screen.findByRole("button", { name: "Delete" }));
-    expect(mutateDeleteEndpoint).toHaveBeenCalledWith("endpoint-1");
+    expect(mutateDeleteTool).toHaveBeenCalledWith("tool-1");
   });
 
   it("creates a feature from the dialog", async () => {
@@ -542,7 +621,7 @@ describe("FeaturesPanel", () => {
     expect(mutateCreateFeature).toHaveBeenCalledWith({ name: "Billing" });
   });
 
-  it("disables endpoint toggles while updating", async () => {
+  it("disables tool toggles while updating", async () => {
     let resolveToggle = () => {};
     const mutateUpdate = jest.fn(
       () =>
@@ -550,7 +629,7 @@ describe("FeaturesPanel", () => {
           resolveToggle = resolve;
         }),
     );
-    mockedUseUpdateEndpoint.mockReturnValue({
+    mockedUseUpdateTool.mockReturnValue({
       mutateAsync: mutateUpdate,
       isPending: false,
     });
@@ -558,7 +637,7 @@ describe("FeaturesPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     renderPanel();
 
-    const toggle = screen.getByTestId("agent-toggle-endpoint-1");
+    const toggle = screen.getByTestId("agent-toggle-tool-1");
     await user.click(toggle);
 
     await waitFor(() =>
@@ -587,8 +666,8 @@ describe("FeaturesPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     renderPanel();
 
-    const enableAll = screen.getByLabelText("Enable all endpoints");
-    const disableAll = screen.getByLabelText("Disable all endpoints");
+    const enableAll = screen.getByLabelText("Enable all tools");
+    const disableAll = screen.getByLabelText("Disable all tools");
 
     await user.click(enableAll);
 

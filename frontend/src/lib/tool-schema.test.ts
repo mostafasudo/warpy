@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@jest/globals"
 
-import { buildEndpointPayload, mapEndpointToBuilderState } from "./tool-schema"
-import type { EndpointBuilderState, BodyField } from "@/stores/endpoint-builder"
-import type { EndpointResponse } from "@/types"
+import { buildToolPayload, mapToolToBuilderState } from "./tool-schema"
+import type { ToolBuilderState, BodyField } from "@/stores/tool-builder"
+import type { ToolResponse } from "@/types"
 
-const baseState: EndpointBuilderState = {
+const baseState: ToolBuilderState = {
+  toolType: "backend",
   path: "/users/:id",
   method: "POST",
   name: "get_user",
@@ -41,8 +42,8 @@ const complexBody: BodyField[] = [
 ]
 
 describe("tool-schema", () => {
-  it("builds endpoint payload with params, headers, query, and body", () => {
-    const payload = buildEndpointPayload({ ...baseState, bodyFields: complexBody })
+  it("builds backend tool payload with params, headers, query, and body", () => {
+    const payload = buildToolPayload({ ...baseState, bodyFields: complexBody })
 
     expect(payload.path).toBe("/users/{id}")
     expect(payload.tool.function.name).toBe("get_user")
@@ -55,8 +56,8 @@ describe("tool-schema", () => {
     expect(parameters.required).toContain("params")
   })
 
-  it("maps endpoint response to builder state with fixed values", () => {
-    const { feature: _feature, ...payload } = buildEndpointPayload({
+  it("maps tool response to builder state with fixed values", () => {
+    const { feature: _feature, ...payload } = buildToolPayload({
       ...baseState,
       pathParams: [{ name: "id", fixed: "42" }],
       headers: [{ id: "h1", name: "auth", type: "string", required: false, description: "", fixed: "token" }],
@@ -64,14 +65,14 @@ describe("tool-schema", () => {
       bodyFields: []
     })
 
-    const state = mapEndpointToBuilderState({
-      id: "endpoint-1",
+    const state = mapToolToBuilderState({
+      id: "tool-1",
       ...payload,
       feature: {
         id: "feature-1",
         name: "Feature 1",
         enabledState: "enabled",
-        endpointCount: 1
+        toolCount: 1
       }
     })
 
@@ -82,7 +83,7 @@ describe("tool-schema", () => {
   })
 
   it("preserves enum values across build and parse", () => {
-    const { feature: _feature, ...payload } = buildEndpointPayload({
+    const { feature: _feature, ...payload } = buildToolPayload({
       ...baseState,
       pathParams: [{ name: "id", description: "User id", enumValues: ["one", "two"] }],
       headers: [
@@ -102,14 +103,14 @@ describe("tool-schema", () => {
     expect(parameters.properties.body.properties.status.enum).toEqual(["open", "closed"])
     expect(parameters.properties.body.properties.score.enum).toEqual([1, 2])
 
-    const state = mapEndpointToBuilderState({
-      id: "endpoint-enum",
+    const state = mapToolToBuilderState({
+      id: "tool-enum",
       ...payload,
       feature: {
         id: "feature-1",
         name: "Feature",
         enabledState: "enabled",
-        endpointCount: 1
+        toolCount: 1
       }
     })
 
@@ -121,7 +122,7 @@ describe("tool-schema", () => {
   })
 
   it("normalizes paths and builds nested schemas", () => {
-    const payload = buildEndpointPayload({
+    const payload = buildToolPayload({
       ...baseState,
       path: "users//{id}//",
       description: "  ",
@@ -172,9 +173,9 @@ describe("tool-schema", () => {
     expect(payload.agentEnabled).toBe(true)
   })
 
-  it("parses endpoint payloads with fixed and nested values", () => {
-    const endpoint: EndpointResponse = {
-      id: "endpoint-2",
+  it("parses tool payloads with fixed and nested values", () => {
+    const tool: ToolResponse = {
+      id: "tool-2",
       path: "/users/{id}",
       method: "POST",
       agentEnabled: false,
@@ -182,7 +183,7 @@ describe("tool-schema", () => {
         id: "feature-2",
         name: "Feature 2",
         enabledState: "enabled",
-        endpointCount: 2
+        toolCount: 2
       },
       tool: {
         type: "function",
@@ -243,7 +244,7 @@ describe("tool-schema", () => {
       }
     }
 
-    const state = mapEndpointToBuilderState(endpoint)
+    const state = mapToolToBuilderState(tool)
 
     expect(state.path).toBe("/users/:id")
     expect(state.agentEnabled).toBe(false)
@@ -259,8 +260,8 @@ describe("tool-schema", () => {
   })
 
   it("keeps existing feature selection when backend omits mode", () => {
-    const endpoint: EndpointResponse = {
-      id: "endpoint-3",
+    const tool: ToolResponse = {
+      id: "tool-3",
       path: "/orders/{id}",
       method: "GET",
       agentEnabled: true,
@@ -280,12 +281,12 @@ describe("tool-schema", () => {
         id: "feature-1",
         name: "Orders",
         enabledState: "enabled",
-        endpointCount: 4
+        toolCount: 4
       }
     }
 
-    const state = mapEndpointToBuilderState(endpoint)
-    const payload = buildEndpointPayload(state)
+    const state = mapToolToBuilderState(tool)
+    const payload = buildToolPayload(state)
 
     expect(state.featureMode).toBe("existing")
     expect(state.featureId).toBe("feature-1")
@@ -294,8 +295,69 @@ describe("tool-schema", () => {
   })
 
   it("omits body when method is GET", () => {
-    const payload = buildEndpointPayload({ ...baseState, method: "GET", bodyFields: complexBody })
+    const payload = buildToolPayload({ ...baseState, method: "GET", bodyFields: complexBody })
     const parameters = payload.tool.function.parameters as any
     expect(parameters.properties.body).toBeUndefined()
+  })
+
+  it("builds frontend payload from structured parameter fields", () => {
+    const payload = buildToolPayload({
+      ...baseState,
+      toolType: "frontend",
+      name: "open_drawer",
+      description: "Open order drawer",
+      bodyFields: [
+        { id: "order-id", name: "orderId", type: "string", required: true, description: "Order id" },
+        { id: "new-tab", name: "openInNewTab", type: "boolean", required: false, description: "Open in new tab" }
+      ]
+    })
+
+    expect(payload.toolType).toBe("frontend")
+    expect(payload.path).toBeUndefined()
+    expect(payload.method).toBeUndefined()
+    expect((payload.tool.function.parameters as any).properties.orderId.type).toBe("string")
+    expect((payload.tool.function.parameters as any).properties.openInNewTab.type).toBe("boolean")
+    expect((payload.tool.function.parameters as any).required).toEqual(["orderId"])
+  })
+
+  it("maps frontend tool payloads to frontend builder state", () => {
+    const state = mapToolToBuilderState({
+      id: "tool-frontend",
+      toolType: "frontend",
+      path: null,
+      method: null,
+      agentEnabled: true,
+      feature: {
+        id: "feature-1",
+        name: "Orders",
+        enabledState: "enabled",
+        toolCount: 1
+      },
+      tool: {
+        type: "function",
+        function: {
+          name: "open_drawer",
+          description: "Open drawer",
+          parameters: {
+            type: "object",
+            properties: {
+              orderId: { type: "string" },
+              openInNewTab: { type: "boolean" }
+            },
+            required: ["orderId", "openInNewTab"]
+          }
+        }
+      }
+    })
+
+    expect(state.toolType).toBe("frontend")
+    expect(state.pathParams).toEqual([])
+    expect(state.headers).toEqual([])
+    expect(state.queryParams).toEqual([])
+    expect(state.bodyFields).toHaveLength(2)
+    expect(state.bodyFields.find((field) => field.name === "orderId")?.type).toBe("string")
+    expect(state.bodyFields.find((field) => field.name === "orderId")?.required).toBe(true)
+    expect(state.bodyFields.find((field) => field.name === "openInNewTab")?.type).toBe("boolean")
+    expect(state.bodyFields.find((field) => field.name === "openInNewTab")?.required).toBe(true)
   })
 })

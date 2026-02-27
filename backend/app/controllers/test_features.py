@@ -21,8 +21,8 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     engine = database.get_engine()
     Base.metadata.create_all(engine)
     try:
-        monkeypatch.setattr("app.services.endpoint_service.enqueue_endpoint_embedding", lambda *_args, **_kwargs: None)
-        monkeypatch.setattr("app.services.feature_service.enqueue_endpoint_embedding", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("app.services.tool_service.enqueue_tool_embedding", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("app.services.feature_service.enqueue_tool_embedding", lambda *_args, **_kwargs: None)
         yield get_settings()
     finally:
         Base.metadata.drop_all(engine)
@@ -59,31 +59,31 @@ def test_feature_crud_and_toggle(configure_settings, client: TestClient):
     assert create_feature.status_code == 201
     feature_id = create_feature.json()["id"]
 
-    endpoint_payload = {
+    tool_payload = {
         "path": "/users/{id}",
         "method": "GET",
         "tool": build_tool("getUser", "Fetch user"),
         "feature": {"mode": "existing", "id": feature_id},
         "agentEnabled": True
     }
-    create_endpoint = client.post("/endpoints", json=endpoint_payload, headers=auth_headers())
-    assert create_endpoint.status_code == 201
+    create_tool = client.post("/tools", json=tool_payload, headers=auth_headers())
+    assert create_tool.status_code == 201
 
     features_response = client.get("/features", headers=auth_headers())
     assert features_response.status_code == 200
     data = features_response.json()
-    assert data[0]["endpointCount"] == 1
-    assert data[0]["endpoints"][0]["feature"]["id"] == feature_id
+    assert data[0]["toolCount"] == 1
+    assert data[0]["tools"][0]["feature"]["id"] == feature_id
 
     toggle = client.post(f"/features/{feature_id}/enabled", json={"agentEnabled": False}, headers=auth_headers())
     assert toggle.status_code == 200
     assert toggle.json()["enabledState"] in ["disabled", "partial"]
 
-    delete_endpoint = client.delete(f"/endpoints/{create_endpoint.json()['id']}", headers=auth_headers())
-    assert delete_endpoint.status_code == 204
+    delete_tool = client.delete(f"/tools/{create_tool.json()['id']}", headers=auth_headers())
+    assert delete_tool.status_code == 204
 
     after_delete = client.get("/features", headers=auth_headers())
     assert after_delete.status_code == 200
     data_after = after_delete.json()
     assert len(data_after) == 1
-    assert data_after[0]["endpointCount"] == 0
+    assert data_after[0]["toolCount"] == 0

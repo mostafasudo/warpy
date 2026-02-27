@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..core.logger import log_error, log_info
 from ..core.constants import SENSITIVE_KEY_FRAGMENTS
 from ..core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
-from ..models import ConversationAction, Endpoint, Environment
+from ..models import ConversationAction, Tool, Environment
 from .billing_service import consume_action_for_server_execution
 
 
@@ -48,10 +48,11 @@ def _record_action(
     session: Session,
     user_id: str,
     conversation_id: UUID,
-    endpoint: Endpoint,
+    tool: Tool,
     *,
     tool_call_id: str,
     request: dict[str, Any],
+    response_body: Any,
     status_code: int | None,
     error: str | None,
 ) -> None:
@@ -59,37 +60,40 @@ def _record_action(
         session.add(ConversationAction(
             user_id=user_id,
             conversation_id=conversation_id,
-            endpoint_id=endpoint.id,
-            feature_id=endpoint.feature_id,
+            tool_type="backend",
+            tool_id=tool.id,
+            feature_id=tool.feature_id,
             tool_call_id=tool_call_id,
             request=request,
+            response_body=response_body,
             status_code=status_code,
             error=error,
         ))
     except Exception as exc:
-        log_error("AgentChain", "execute_endpoint", "Failed to record action", exc=exc, endpoint_id=str(endpoint.id))
+        log_error("AgentChain", "execute_backend_tool", "Failed to record action", exc=exc, tool_id=str(tool.id))
 
 
-def execute_endpoint(
+def execute_backend_tool(
     session: Session,
     user_id: str,
-    endpoint: Endpoint,
+    tool: Tool,
     args: dict[str, Any],
     *,
     enforce_billing: bool = True,
     conversation_id: UUID | None = None,
     tool_call_id: str | None = None,
 ) -> dict[str, Any]:
-    def record_action(request: dict[str, Any], status_code: int | None, error: str | None) -> None:
+    def record_action(request: dict[str, Any], response_body: Any, status_code: int | None, error: str | None) -> None:
         if not conversation_id or not tool_call_id:
             return
         _record_action(
             session,
             user_id,
             conversation_id,
-            endpoint,
+            tool,
             tool_call_id=tool_call_id,
             request=request,
+            response_body=response_body,
             status_code=status_code,
             error=error,
         )
@@ -97,7 +101,7 @@ def execute_endpoint(
     environment = session.scalar(select(Environment).where(Environment.user_id == user_id).limit(1))
     if not environment:
         error = "No environment configured. Please set up an environment with a base URL first."
-        record_action({"params": {}, "query": {}, "body": {}}, None, error)
+        record_action({"params": {}, "query": {}, "body": {}}, None, None, error)
         return {"error": error}
 
     path_params = args.get("params", {})
@@ -105,14 +109,14 @@ def execute_endpoint(
     body_data = args.get("body", {})
     header_data = args.get("headers", {})
 
-    path, remaining_path_params = substitute_path_params(endpoint.path, path_params)
+    path, remaining_path_params = substitute_path_params(tool.path or "", path_params)
     if remaining_path_params:
         log_info(
             "AgentChain",
-            "execute_endpoint",
+            "execute_backend_tool",
             "Unused path parameters",
             unused=list(remaining_path_params.keys()),
-            endpoint_id=str(endpoint.id)
+            tool_id=str(tool.id)
         )
 
     url = f"{environment.base_url.rstrip('/')}/{path.lstrip('/')}"
@@ -126,13 +130,14 @@ def execute_endpoint(
                 "body": _sanitize_request(body_data),
             },
             None,
+            None,
             error,
         )
         return {"error": error}
 
-    method = endpoint.method.value.upper()
+    method = (tool.method.value if tool.method else "GET").upper()
     if method == "GET" and body_data:
-        log_error("AgentChain", "execute_endpoint", "GET request cannot include a body", endpoint_id=str(endpoint.id))
+        log_error("AgentChain", "execute_backend_tool", "GET request cannot include a body", tool_id=str(tool.id))
         error = "GET requests cannot include a body"
         record_action(
             {
@@ -140,6 +145,7 @@ def execute_endpoint(
                 "query": _sanitize_request(query_params),
                 "body": _sanitize_request(body_data),
             },
+            None,
             None,
             error,
         )
@@ -158,7 +164,7 @@ def execute_endpoint(
             if consume_result.consumed <= 0:
                 return {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
         except Exception as error:
-            log_error("AgentChain", "execute_endpoint", "Failed to consume action", exc=error, endpoint_id=str(endpoint.id))
+            log_error("AgentChain", "execute_backend_tool", "Failed to consume action", exc=error, tool_id=str(tool.id))
             return {"error": ASSISTANT_UNAVAILABLE_MESSAGE}
 
     try:
@@ -170,9 +176,9 @@ def execute_endpoint(
                 body = response.text
             log_info(
                 "AgentChain",
-                "execute_endpoint",
-                "Endpoint executed",
-                endpoint_id=str(endpoint.id),
+                "execute_backend_tool",
+                "Tool executed",
+                tool_id=str(tool.id),
                 status=response.status_code
             )
             record_action(
@@ -181,12 +187,13 @@ def execute_endpoint(
                     "query": _sanitize_request(query_params),
                     "body": _sanitize_request(body_data),
                 },
+                _sanitize_request(body),
                 response.status_code,
                 None,
             )
             return {"status_code": response.status_code, "body": body}
     except httpx.TimeoutException:
-        log_error("AgentChain", "execute_endpoint", "Request timeout", endpoint_id=str(endpoint.id))
+        log_error("AgentChain", "execute_backend_tool", "Request timeout", tool_id=str(tool.id))
         error = "Request timed out"
         record_action(
             {
@@ -195,11 +202,12 @@ def execute_endpoint(
                 "body": _sanitize_request(body_data),
             },
             None,
+            None,
             error,
         )
         return {"error": error}
     except Exception as error:
-        log_error("AgentChain", "execute_endpoint", "Request failed", exc=error, endpoint_id=str(endpoint.id))
+        log_error("AgentChain", "execute_backend_tool", "Request failed", exc=error, tool_id=str(tool.id))
         error_text = str(error)
         record_action(
             {
@@ -207,6 +215,7 @@ def execute_endpoint(
                 "query": _sanitize_request(query_params),
                 "body": _sanitize_request(body_data),
             },
+            None,
             None,
             error_text,
         )

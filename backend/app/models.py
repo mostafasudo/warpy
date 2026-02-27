@@ -36,16 +36,16 @@ class Feature(Base):
     name = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    endpoints = relationship(
-        "Endpoint",
+    tools = relationship(
+        "Tool",
         back_populates="feature",
         cascade="all, delete-orphan",
-        order_by="Endpoint.created_at"
+        order_by="Tool.created_at"
     )
 
     @property
     def enabled_state(self):
-        enabled_flags = [endpoint.agent_enabled for endpoint in self.endpoints]
+        enabled_flags = [tool.agent_enabled for tool in self.tools]
         if not enabled_flags:
             return "disabled"
         if all(enabled_flags):
@@ -55,8 +55,8 @@ class Feature(Base):
         return "disabled"
 
     @property
-    def endpoint_count(self):
-        return len(self.endpoints)
+    def tool_count(self):
+        return len(self.tools)
 
 
 class HttpMethod(str, enum.Enum):
@@ -101,7 +101,7 @@ class UserStats(Base):
     __tablename__ = "user_stats"
 
     user_id = Column(Text, primary_key=True)
-    endpoint_count = Column(Integer, nullable=False, server_default="0")
+    tool_count = Column(Integer, nullable=False, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -159,40 +159,41 @@ class BillingActionConsumption(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class Endpoint(Base):
-    __tablename__ = "endpoints"
+class Tool(Base):
+    __tablename__ = "tools"
     __table_args__ = (
-        UniqueConstraint("user_id", "path", "method", name="uq_endpoint_user_path_method"),
+        UniqueConstraint("user_id", "path", "method", name="uq_tool_user_path_method"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Text, nullable=False, index=True)
-    path = Column(Text, nullable=False)
-    method = Column(Enum(HttpMethod, name="http_method", native_enum=True, validate_strings=True), nullable=False)
+    tool_type = Column(Text, nullable=False, server_default="backend", default="backend")
+    path = Column(Text, nullable=True)
+    method = Column(Enum(HttpMethod, name="http_method", native_enum=True, validate_strings=True), nullable=True)
     tool = Column(json_type, nullable=False)
     feature_id = Column(UUID(as_uuid=True), ForeignKey("features.id", ondelete="CASCADE"), nullable=False, index=True)
     agent_enabled = Column(Boolean, nullable=False, server_default=func.true(), default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    feature = relationship("Feature", back_populates="endpoints")
-    embedding = relationship("EndpointEmbedding", back_populates="endpoint", uselist=False, cascade="all, delete-orphan")
+    feature = relationship("Feature", back_populates="tools")
+    embedding = relationship("ToolEmbedding", back_populates="tool", uselist=False, cascade="all, delete-orphan")
 
 
-class EndpointEmbedding(Base):
-    __tablename__ = "endpoint_embeddings"
+class ToolEmbedding(Base):
+    __tablename__ = "tool_embeddings"
     __table_args__ = (
-        UniqueConstraint("endpoint_id", name="uq_endpoint_embedding_endpoint"),
+        UniqueConstraint("tool_id", name="uq_tool_embedding_tool"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    endpoint_id = Column(UUID(as_uuid=True), ForeignKey("endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    tool_id = Column(UUID(as_uuid=True), ForeignKey("tools.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Text, nullable=False, index=True)
     embedding = Column(Vector(llm_config.embedding_dimensions), nullable=False)
     content_hash = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    endpoint = relationship("Endpoint", back_populates="embedding")
+    tool = relationship("Tool", back_populates="embedding")
 
 
 class Agent(Base):
@@ -272,20 +273,21 @@ class ConversationAction(Base):
         UniqueConstraint("user_id", "conversation_id", "tool_call_id", name="uq_conversation_actions_key"),
         Index("ix_conversation_actions_user_created_at", "user_id", "created_at"),
         Index("ix_conversation_actions_conversation_created_at", "conversation_id", "created_at"),
-        Index("ix_conversation_actions_user_endpoint_created_at", "user_id", "endpoint_id", "created_at"),
+        Index("ix_conversation_actions_user_tool_created_at", "user_id", "tool_id", "created_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Text, nullable=False, index=True)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     tool_type = Column(Text, nullable=False, server_default="backend", default="backend")
-    endpoint_id = Column(UUID(as_uuid=True), ForeignKey("endpoints.id", ondelete="CASCADE"), nullable=True, index=True)
+    tool_id = Column(UUID(as_uuid=True), ForeignKey("tools.id", ondelete="CASCADE"), nullable=True, index=True)
     feature_id = Column(UUID(as_uuid=True), ForeignKey("features.id", ondelete="CASCADE"), nullable=True, index=True)
     frontend_goal = Column(Text, nullable=True)
     frontend_url = Column(Text, nullable=True)
     frontend_actions = Column(json_type, nullable=True)
     tool_call_id = Column(Text, nullable=False)
     request = Column(json_type, nullable=False)
+    response_body = Column(json_type, nullable=True)
     status_code = Column(Integer, nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

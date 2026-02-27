@@ -34,7 +34,7 @@ from ..services.widget_service import (
     save_tool_context,
     save_widget_message,
 )
-from ..services.conversation_actions_service import ToolCallForLog, record_frontend_action, record_widget_tool_results
+from ..services.conversation_actions_service import ToolCallForLog, record_screen_autopilot_action, record_widget_tool_results
 from ..services.widget_auth_service import WidgetJwtError, verify_widget_jwt
 from ..services.user_rate_limit_service import (
     extract_client_ip,
@@ -57,15 +57,15 @@ def deserialize_messages(data: str) -> list:
         return []
 
 
-def serialize_state(messages: list, active_endpoint_ids: list[UUID], tool_calls: list[ToolCallForLog]) -> str:
+def serialize_state(messages: list, active_tool_ids: list[UUID], tool_calls: list[ToolCallForLog]) -> str:
     return json.dumps({
         "messages": messages_to_dict(messages),
-        "endpoint_ids": [str(eid) for eid in active_endpoint_ids],
+        "tool_ids": [str(tool_id) for tool_id in active_tool_ids],
         "tool_calls": [
             {
                 "id": call.id,
                 "tool_type": call.tool_type,
-                "endpoint_id": str(call.endpoint_id) if call.endpoint_id else None,
+                "tool_id": str(call.tool_id) if call.tool_id else None,
                 "params": call.params,
                 "query": call.query,
                 "body": call.body,
@@ -79,7 +79,7 @@ def deserialize_state(state: str) -> tuple[list, list[UUID], list[ToolCallForLog
     try:
         data = json.loads(state)
         messages = messages_from_dict(data["messages"])
-        endpoint_ids = [UUID(eid) for eid in data["endpoint_ids"]]
+        tool_ids = [UUID(tool_id) for tool_id in data["tool_ids"]]
         tool_calls: list[ToolCallForLog] = []
         for call in data.get("tool_calls") or []:
             try:
@@ -89,19 +89,19 @@ def deserialize_state(state: str) -> tuple[list, list[UUID], list[ToolCallForLog
                 if not call_id:
                     continue
                 tool_type = str(call.get("tool_type") or "backend")
-                endpoint_id_str = call.get("endpoint_id")
-                endpoint_id = UUID(endpoint_id_str) if endpoint_id_str else None
+                tool_id_str = call.get("tool_id")
+                tool_id = UUID(tool_id_str) if tool_id_str else None
                 tool_calls.append(ToolCallForLog(
                     id=call_id,
                     tool_type=tool_type,
-                    endpoint_id=endpoint_id,
+                    tool_id=tool_id,
                     params=call.get("params") or {},
                     query=call.get("query") or {},
                     body=call.get("body") or {},
                 ))
             except Exception:
                 continue
-        return messages, endpoint_ids, tool_calls
+        return messages, tool_ids, tool_calls
     except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
         log_error("WidgetController", "deserialize_state", "Failed to deserialize", exc=exc)
         return [], [], []
@@ -202,7 +202,7 @@ async def widget_chat(
             conversation = create_widget_conversation(session, payload.agent_id)
 
         pending_messages = None
-        active_endpoint_ids = None
+        active_tool_ids = None
         pending_tool_calls: list[ToolCallForLog] = []
         tool_results: list[ToolResultPayload] | None = None
 
@@ -210,7 +210,7 @@ async def widget_chat(
             tool_results = payload.tool_results
             pending_state = get_pending_state(session, conversation.id)
             if pending_state:
-                pending_messages, active_endpoint_ids, pending_tool_calls = deserialize_state(pending_state)
+                pending_messages, active_tool_ids, pending_tool_calls = deserialize_state(pending_state)
 
             tool_call_type_map = {tc.id: tc.tool_type for tc in pending_tool_calls}
             billable_ids = [
@@ -241,7 +241,9 @@ async def widget_chat(
                     tool_call = tool_call_type_map.get(result.id)
                     if tool_call in ("frontend", "js_exec") and result.body:
                         body = result.body if isinstance(result.body, dict) else {}
-                        record_frontend_action(
+                        if tool_call == "frontend" and body.get("kind") != "frontend_actions":
+                            continue
+                        record_screen_autopilot_action(
                             session,
                             agent.user_id,
                             conversation.id,
@@ -317,7 +319,7 @@ async def widget_chat(
             conversation_history=history,
             tool_results=tool_results,
             pending_messages=pending_messages,
-            active_endpoint_ids=active_endpoint_ids
+            active_tool_ids=active_tool_ids
         )
 
         response_messages: list[WidgetMessagePayload] = []
@@ -342,12 +344,12 @@ async def widget_chat(
             capped_for_state = prune_messages(result.messages, model=llm_config.chat_model)
             state = serialize_state(
                 capped_for_state,
-                result.active_endpoint_ids,
+                result.active_tool_ids,
                 [
                     ToolCallForLog(
                         id=call.id,
                         tool_type=call.tool_type,
-                        endpoint_id=call.endpoint_id if call.tool_type == "backend" else None,
+                        tool_id=call.tool_id if call.tool_type in ("backend", "frontend") else None,
                         params=call.params or {},
                         query=call.query or {},
                         body=call.body or {},
