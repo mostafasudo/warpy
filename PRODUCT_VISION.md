@@ -35,7 +35,7 @@ Frontend: Vite, React, Typescript, pnpm, shadcdn, zustand, jest, tanstack/react 
 - Widget `<script>`
 - Dashboard
 
-Backend: Python FastAPI, Langchain, Postgres/PGVector, SQLAlchemy, Cohere, Redis, Python RQ, Pytest
+Backend: Python FastAPI, Langchain, Postgres/PGVector, SQLAlchemy, Redis, Python RQ, Pytest
 
 Auth: Clerk
 
