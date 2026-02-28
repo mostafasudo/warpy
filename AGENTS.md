@@ -62,6 +62,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - **Ask first:** package installs; deleting files; git push; full builds; e2e suites; DB-affecting scripts.
 
 ## Frontend specifics
+- **Validation:** when work involves frontend, validate it using real browser tools (e.g. Chrome) rather than relying solely on tests or static checks.
 - **React Query:** stable array keys; cache boundaries per feature; granular invalidation; retries/timeouts set; one mutation per file.
 - **Zustand:** tiny stores; selectors to avoid re-renders; no business logic in components.
 - **shadcdn:** use official components and patterns (built on Radix and Lucide); don't re-implement primitives.
