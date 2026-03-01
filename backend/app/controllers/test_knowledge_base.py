@@ -26,6 +26,7 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     try:
         monkeypatch.setattr("app.services.tool_service.enqueue_tool_embedding", lambda *_args, **_kwargs: None)
         monkeypatch.setattr("app.workers.knowledge_base_jobs.enqueue_document_processing", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("app.controllers.knowledge_base.enqueue_document_processing", lambda *_args, **_kwargs: None)
         yield get_settings()
     finally:
         engine.dispose()
