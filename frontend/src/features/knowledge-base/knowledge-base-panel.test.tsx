@@ -174,9 +174,7 @@ describe("KnowledgeBasePanel", () => {
     });
     render(<KnowledgeBasePanel />, { wrapper: createWrapper() });
     expect(await screen.findByTestId("kb-toggle-card")).toBeTruthy();
-    expect(
-      screen.getByText("Use uploaded documents in agent answers"),
-    ).toBeTruthy();
+    expect(screen.getByText("Enable knowledge base")).toBeTruthy();
   });
 
   it("renders document list with ready document", async () => {

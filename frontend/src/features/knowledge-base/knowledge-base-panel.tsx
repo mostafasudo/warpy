@@ -290,16 +290,7 @@ export const KnowledgeBasePanel = () => {
             data-testid="kb-toggle-card"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold">
-                  Use uploaded documents in agent answers
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {canEnable
-                    ? "Turn this on so your agent can answer with your documentation."
-                    : "Upload at least one document, then enable this."}
-                </p>
-              </div>
+              <p className="text-sm font-semibold">Enable knowledge base</p>
               {toggleSwitch}
             </div>
           </div>
