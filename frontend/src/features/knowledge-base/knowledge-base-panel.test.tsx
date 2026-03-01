@@ -163,6 +163,22 @@ describe("KnowledgeBasePanel", () => {
     expect(screen.getByText("No documents yet")).toBeTruthy();
   });
 
+  it("renders a prominent activation card for the toggle", async () => {
+    mockedUseKnowledgeBaseStatusQuery.mockReturnValue({
+      isLoading: false,
+      data: { enabled: false, documentCount: 0, readyDocumentCount: 0 },
+    });
+    mockedUseKnowledgeDocumentsQuery.mockReturnValue({
+      isLoading: false,
+      data: { items: [], total: 0 },
+    });
+    render(<KnowledgeBasePanel />, { wrapper: createWrapper() });
+    expect(await screen.findByTestId("kb-toggle-card")).toBeTruthy();
+    expect(
+      screen.getByText("Use uploaded documents in agent answers"),
+    ).toBeTruthy();
+  });
+
   it("renders document list with ready document", async () => {
     mockedUseKnowledgeBaseStatusQuery.mockReturnValue({
       isLoading: false,

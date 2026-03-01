@@ -245,7 +245,7 @@ export const KnowledgeBasePanel = () => {
   };
 
   const toggleSwitch = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2">
       {canEnable ? (
         <>
           <Switch
@@ -254,16 +254,18 @@ export const KnowledgeBasePanel = () => {
             disabled={toggleMutation.isPending}
             data-testid="kb-toggle"
           />
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm font-medium">
             {status?.enabled ? "Enabled" : "Disabled"}
           </span>
         </>
       ) : (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Switch checked={false} disabled data-testid="kb-toggle" />
-              <span className="text-xs text-muted-foreground">Disabled</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                Disabled
+              </span>
             </div>
           </TooltipTrigger>
           <TooltipContent>
@@ -278,9 +280,31 @@ export const KnowledgeBasePanel = () => {
     <PanelShell
       title="Knowledge Base"
       description="Upload product documentation so your agent can answer questions using your content."
-      action={isLoading ? <Skeleton className="h-6 w-24" /> : toggleSwitch}
     >
       <div className="space-y-4">
+        {isLoading ? (
+          <Skeleton className="h-20 w-full rounded-xl" />
+        ) : (
+          <div
+            className="rounded-xl border border-border/70 bg-muted/20 p-4"
+            data-testid="kb-toggle-card"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">
+                  Use uploaded documents in agent answers
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {canEnable
+                    ? "Turn this on so your agent can answer with your documentation."
+                    : "Upload at least one document, then enable this."}
+                </p>
+              </div>
+              {toggleSwitch}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
           <input
             ref={fileInputRef}

@@ -53,8 +53,8 @@ The `Agent` model has a `knowledge_base_enabled` boolean to toggle the feature p
 ## Frontend
 Knowledge Base page sits between Features and Agent in the sidebar.
 
-- Upload files via drag-and-drop or file picker.
-- Toggle knowledge base enabled/disabled per agent.
+- Upload files via file picker.
+- Enable/disable appears in a dedicated activation card at the top of the panel.
 - Delete documents with confirmation dialog.
 - Auto-poll every 3s while any document is in a processing state.
 
