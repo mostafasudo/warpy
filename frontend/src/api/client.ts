@@ -19,6 +19,11 @@ import type {
   FeatureWithTools,
   FrontendCapabilityResponse,
   FrontendCapabilityUpdate,
+  KnowledgeBaseStatusResponse,
+  KnowledgeBaseToggle,
+  KnowledgeDocumentContentResponse,
+  KnowledgeDocumentListResponse,
+  KnowledgeDocumentResponse,
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -106,7 +111,7 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
 
   try {
     const headers = new Headers(init?.headers ?? undefined);
-    if (!headers.has("Content-Type")) {
+    if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
       headers.set("Content-Type", "application/json");
     }
     const token = await getSessionToken();
@@ -164,6 +169,11 @@ export type {
   FeatureWithTools,
   FrontendCapabilityResponse,
   FrontendCapabilityUpdate,
+  KnowledgeBaseStatusResponse,
+  KnowledgeBaseToggle,
+  KnowledgeDocumentContentResponse,
+  KnowledgeDocumentListResponse,
+  KnowledgeDocumentResponse,
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -335,4 +345,26 @@ export const apiClient = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  getKnowledgeBaseStatus: () => request<KnowledgeBaseStatusResponse>("/knowledge-base/status"),
+  toggleKnowledgeBase: (payload: KnowledgeBaseToggle) =>
+    request<KnowledgeBaseStatusResponse>("/knowledge-base/toggle", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  listKnowledgeDocuments: () => request<KnowledgeDocumentListResponse>("/knowledge-base/documents"),
+  uploadKnowledgeDocument: (file: File) => {
+    const formData = new FormData()
+    formData.append("file", file)
+    return request<KnowledgeDocumentResponse>("/knowledge-base/documents", {
+      method: "POST",
+      body: formData,
+      timeoutMs: 60000,
+    })
+  },
+  deleteKnowledgeDocument: (id: string) =>
+    request<void>(`/knowledge-base/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getKnowledgeDocumentContent: (id: string) =>
+    request<KnowledgeDocumentContentResponse>(
+      `/knowledge-base/documents/${encodeURIComponent(id)}/content`,
+    ),
 };

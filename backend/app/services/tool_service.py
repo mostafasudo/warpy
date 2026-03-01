@@ -12,7 +12,7 @@ from ..workers.embedding_jobs import enqueue_tool_embedding
 from .feature_service import resolve_feature
 from .user_stats_service import adjust_tool_count, get_tool_count
 
-RESERVED_TOOL_NAMES = {"find_tools", "find_actions", "read_page", "find_elements", "frontend", "js_exec"}
+RESERVED_TOOL_NAMES = {"find_tools", "find_actions", "read_page", "find_elements", "frontend", "js_exec", "search_knowledge_base"}
 
 
 def _escape_like(term: str) -> str:

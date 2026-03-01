@@ -10,6 +10,7 @@ from .controllers.features import router as features_router
 from .controllers.tools import router as tools_router
 from .controllers.health import router as health_router
 from .controllers.lemon_squeezy_webhook import router as lemon_squeezy_webhook_router
+from .controllers.knowledge_base import router as knowledge_base_router
 from .controllers.products import router as products_router
 from .controllers.session import router as session_router
 from .controllers.widget import router as widget_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(widget_router)
     app.include_router(widget_token_router)
     app.include_router(products_router)
+    app.include_router(knowledge_base_router)
     app.include_router(lemon_squeezy_webhook_router)
 
     return app

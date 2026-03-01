@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Braces, CreditCard, LayoutDashboard, Mail, MousePointerClick, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { BookOpen, Braces, CreditCard, LayoutDashboard, Mail, MousePointerClick, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
@@ -9,6 +9,7 @@ import { DashboardPanel } from "@/features/dashboard/dashboard-panel"
 import { ActivityPanel } from "@/features/activity/activity-panel"
 import { ApiConfigPanel } from "@/features/api-config/api-config-panel"
 import { ContactPanel } from "@/features/contact/contact-panel"
+import { KnowledgeBasePanel } from "@/features/knowledge-base/knowledge-base-panel"
 import { ToolsPanel } from "@/features/tools/ToolsPanel"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,7 @@ type NavButtonProps = {
 
 const sectionQueryKey = "tab"
 type Section = ReturnType<typeof navigationSelectors.section>
-const navigationSections: Section[] = ["dashboard", "activity", "api", "features", "agent", "billing", "contact"]
+const navigationSections: Section[] = ["dashboard", "activity", "api", "features", "knowledge-base", "agent", "billing", "contact"]
 
 const getSectionFromUrl = (): Section | null => {
   if (typeof window === "undefined") return null
@@ -223,6 +224,13 @@ export const Shell = () => {
               onClick={() => setSection("features")}
             />
             <NavButton
+              active={section === "knowledge-base"}
+              label="Knowledge Base"
+              icon={<BookOpen className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSection("knowledge-base")}
+            />
+            <NavButton
               active={section === "agent"}
               label="Agent"
               icon={<Sparkles className="h-4 w-4" />}
@@ -265,6 +273,7 @@ export const Shell = () => {
           {section === "activity" && <ActivityPanel />}
           {section === "api" && <ApiConfigPanel />}
           {section === "features" && <ToolsPanel />}
+          {section === "knowledge-base" && <KnowledgeBasePanel />}
           {section === "agent" && <AgentPanel />}
           {section === "billing" && <BillingPanel />}
           {section === "contact" && <ContactPanel />}

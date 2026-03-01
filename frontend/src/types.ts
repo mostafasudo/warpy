@@ -265,3 +265,46 @@ export type UserRateLimitsResponse = {
 };
 
 export type UserRateLimitsUpdate = UserRateLimitsResponse;
+
+export type KnowledgeDocumentStatus = "processing" | "ready" | "error"
+
+export type KnowledgeDocumentResponse = {
+  id: string
+  fileName: string
+  fileType: string
+  fileSize: number
+  status: KnowledgeDocumentStatus
+  chunkCount: number
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type KnowledgeDocumentListResponse = {
+  items: KnowledgeDocumentResponse[]
+  total: number
+}
+
+export type KnowledgeBaseStatusResponse = {
+  enabled: boolean
+  documentCount: number
+  readyDocumentCount: number
+}
+
+export type KnowledgeBaseToggle = {
+  enabled: boolean
+}
+
+export type KnowledgeChunkResponse = {
+  id: string
+  content: string
+  chunkIndex: number
+  chunkMetadata: Record<string, unknown> | null
+}
+
+export type KnowledgeDocumentContentResponse = {
+  documentId: string
+  fileName: string
+  chunks: KnowledgeChunkResponse[]
+  totalChunks: number
+}

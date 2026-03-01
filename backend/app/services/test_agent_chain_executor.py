@@ -502,3 +502,77 @@ def test_build_messages_limits_history(monkeypatch):
     invoked_messages = llm.invocations[0]
     human_msgs = [m for m in invoked_messages if isinstance(m, HM)]
     assert len(human_msgs) <= MAX_HISTORY_PAIRS + 1
+
+
+def test_knowledge_base_enabled_includes_tool(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+
+    kb_tool = build_tool("search_knowledge_base", '{"results": []}')
+    monkeypatch.setattr("app.services.agent_tools.create_search_knowledge_base_tool", lambda *_args, **_kwargs: kb_tool)
+
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, knowledge_base_enabled=True)
+    result = asyncio.run(executor.run_step("hello", []))
+    assert result.done is True
+    tool_names = {t.name for t in llm.bound_tools}
+    assert "search_knowledge_base" in tool_names
+
+
+def test_knowledge_base_disabled_excludes_tool(monkeypatch):
+    responses = [AIMessage(content="ok", tool_calls=[])]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, knowledge_base_enabled=False)
+    result = asyncio.run(executor.run_step("hello", []))
+    tool_names = {t.name for t in llm.bound_tools}
+    assert "search_knowledge_base" not in tool_names
+
+
+def test_knowledge_base_enabled_includes_prompt_section():
+    executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), knowledge_base_enabled=True)
+    assert "search_knowledge_base" in executor._system_prompt
+    assert "knowledge base" in executor._system_prompt
+
+
+def test_knowledge_base_disabled_excludes_prompt_section():
+    executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), knowledge_base_enabled=False)
+    assert "search_knowledge_base" not in executor._system_prompt
+
+
+def test_run_step_handles_kb_tool_inline(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-kb", "name": "search_knowledge_base", "args": {"query": "pricing"}}]),
+        AIMessage(content="Based on the docs, pricing is $10/mo.", tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    kb_tool = build_tool("search_knowledge_base", '{"results": [{"content": "Pricing is $10/mo"}]}')
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_tools.create_search_knowledge_base_tool", lambda *_args, **_kwargs: kb_tool)
+
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, knowledge_base_enabled=True)
+    result = asyncio.run(executor.run_step("What is the pricing?", []))
+    assert result.done is True
+    assert "pricing" in result.response.lower()
+
+
+def test_run_handles_kb_tool_inline(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-kb", "name": "search_knowledge_base", "args": {"query": "test"}}]),
+        AIMessage(content="answer from kb", tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    kb_tool = build_tool("search_knowledge_base", '{"results": [{"content": "doc content"}]}')
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr("app.services.agent_tools.create_search_knowledge_base_tool", lambda *_args, **_kwargs: kb_tool)
+
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, knowledge_base_enabled=True)
+    result = asyncio.run(executor.run("What is this?", []))
+    assert result == "answer from kb"
+    msgs = llm.invocations[1]
+    tool_msgs = [m for m in msgs if isinstance(m, ToolMessage)]
+    assert any("doc content" in str(m.content) for m in tool_msgs)

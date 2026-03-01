@@ -267,6 +267,34 @@ def create_frontend_tool(tool: Tool, schema_factory: SchemaFactory | None = None
     )
 
 
+
+class SearchKnowledgeBaseInput(BaseModel):
+    query: str = Field(
+        description="Search query to find relevant information from uploaded product documentation."
+    )
+
+
+def create_search_knowledge_base_tool(session: Session, user_id: str) -> StructuredTool:
+    def search_kb(query: str) -> str:
+        from .knowledge_embedding_service import search_knowledge_base
+        results = search_knowledge_base(session, user_id, query)
+        if not results:
+            return json.dumps({"results": [], "message": "No relevant content found in the knowledge base."})
+        return json.dumps({"results": results}, indent=2)
+
+    return StructuredTool.from_function(
+        func=search_kb,
+        name="search_knowledge_base",
+        description=(
+            "Task: Search the knowledge base for relevant product information. "
+            "Use when the user asks questions that might be answered by uploaded documentation. "
+            "Returns relevant text passages from product docs. "
+            "Output: JSON with matching text passages and source metadata."
+        ),
+        args_schema=SearchKnowledgeBaseInput,
+    )
+
+
 def get_agent_tools(
     session: Session,
     user_id: str,

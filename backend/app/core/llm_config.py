@@ -17,12 +17,22 @@ class LLMConfig:
     max_iterations: int = 20
     max_cached_tools: int = 24
     tool_cache_ttl: int = 86400
+    kb_top_k_min: int = 3
+    kb_top_k_max: int = 8
+    kb_chunk_max_chars: int = 1500
+    kb_chunk_overlap_chars: int = 200
 
     def calculate_top_k(self, total_tools: int) -> int:
         if total_tools <= 0:
             return 0
         calculated = int(total_tools * self.top_k_ratio)
         return min(total_tools, max(self.top_k_min, min(calculated, self.top_k_max)))
+
+    def calculate_kb_top_k(self, total_chunks: int) -> int:
+        if total_chunks <= 0:
+            return 0
+        calculated = int(total_chunks * 0.02)
+        return min(total_chunks, max(self.kb_top_k_min, min(calculated, self.kb_top_k_max)))
 
 
 def build_llm_config(environment: str, use_good_models: bool = False) -> LLMConfig:

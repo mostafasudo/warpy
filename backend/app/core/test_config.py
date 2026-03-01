@@ -24,3 +24,11 @@ def test_get_settings_cached(monkeypatch):
     cached = get_settings()
     same = get_settings()
     assert cached is same
+
+
+def test_unstructured_api_key_default():
+    get_settings.cache_clear()
+    settings = Settings()
+    assert settings.unstructured_api_key == ""
+
+

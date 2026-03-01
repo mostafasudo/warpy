@@ -27,3 +27,16 @@ def test_build_llm_config_production_overrides():
     assert config.embedding_model == "text-embedding-3-large"
     assert config.embedding_dimensions == 3072
     assert config.whisper_model == "gpt-4o-transcribe"
+
+
+def test_calculate_kb_top_k_bounds():
+    assert llm_config.calculate_kb_top_k(0) == 0
+    assert llm_config.calculate_kb_top_k(1) == 1
+    assert llm_config.calculate_kb_top_k(100) >= llm_config.kb_top_k_min
+    assert llm_config.calculate_kb_top_k(100) <= llm_config.kb_top_k_max
+    assert llm_config.calculate_kb_top_k(1000) <= llm_config.kb_top_k_max
+
+
+def test_calculate_kb_top_k_ratio():
+    result = llm_config.calculate_kb_top_k(500)
+    assert result == max(llm_config.kb_top_k_min, min(int(500 * 0.02), llm_config.kb_top_k_max))

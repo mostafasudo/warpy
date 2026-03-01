@@ -250,3 +250,29 @@ def test_create_js_exec_tool_returns_queued():
 def test_dummy_session_iterates():
     session = DummySession([])
     assert list(session) == []
+
+
+def test_create_search_knowledge_base_tool(monkeypatch):
+    from app.services.agent_tools import create_search_knowledge_base_tool
+    monkeypatch.setattr(
+        "app.services.knowledge_embedding_service.search_knowledge_base",
+        lambda session, user_id, query: [{"content": "answer", "metadata": {}}],
+    )
+    session = DummySession([])
+    tool = create_search_knowledge_base_tool(session, "user_1")
+    assert tool.name == "search_knowledge_base"
+    result = json.loads(tool.invoke({"query": "how does it work"}))
+    assert len(result["results"]) == 1
+
+
+def test_create_search_knowledge_base_tool_empty(monkeypatch):
+    from app.services.agent_tools import create_search_knowledge_base_tool
+    monkeypatch.setattr(
+        "app.services.knowledge_embedding_service.search_knowledge_base",
+        lambda session, user_id, query: [],
+    )
+    session = DummySession([])
+    tool = create_search_knowledge_base_tool(session, "user_1")
+    result = json.loads(tool.invoke({"query": "nothing"}))
+    assert result["results"] == []
+    assert "No relevant content" in result["message"]

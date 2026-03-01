@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     lemon_squeezy_test_mode: bool = Field(default=False)
     billing_admin_token: str = Field(default="")
     use_good_models: bool = Field(default=False)
+    unstructured_api_key: str = Field(default="")
 
 
 @lru_cache

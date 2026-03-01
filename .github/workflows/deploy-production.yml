@@ -145,6 +145,7 @@ jobs:
           LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID: ${{ secrets.LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID }}
           LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID: ${{ secrets.LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID }}
           BILLING_ADMIN_TOKEN: ${{ secrets.BILLING_ADMIN_TOKEN }}
+          UNSTRUCTURED_API_KEY: ${{ secrets.UNSTRUCTURED_API_KEY }}
           ECS_TASK_EXECUTION_ROLE_ARN: ${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}
         run: |
           set -euo pipefail
@@ -209,6 +210,7 @@ jobs:
               --arg LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID "${LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID:-}" \
               --arg LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID "${LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID:-}" \
               --arg BILLING_ADMIN_TOKEN "${BILLING_ADMIN_TOKEN:-}" \
+              --arg UNSTRUCTURED_API_KEY "${UNSTRUCTURED_API_KEY:-}" \
               '
                 def env(name; value): {"name": name, "value": value};
                 def optenv(name; value): if (value | length) > 0 then [env(name; value)] else [] end;
@@ -238,6 +240,7 @@ jobs:
                   + optenv("LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID"; $LEMON_SQUEEZY_TOPUP_5000_VARIANT_ID)
                   + optenv("LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID"; $LEMON_SQUEEZY_TOPUP_10000_VARIANT_ID)
                   + optenv("BILLING_ADMIN_TOKEN"; $BILLING_ADMIN_TOKEN)
+                  + optenv("UNSTRUCTURED_API_KEY"; $UNSTRUCTURED_API_KEY)
                 );
 
                 del(

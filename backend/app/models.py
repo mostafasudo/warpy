@@ -25,6 +25,12 @@ class AuthType(str, enum.Enum):
     none = "none"
 
 
+class DocumentStatus(str, enum.Enum):
+    processing = "processing"
+    ready = "ready"
+    error = "error"
+
+
 class Feature(Base):
     __tablename__ = "features"
     __table_args__ = (
@@ -225,6 +231,7 @@ class Agent(Base):
     widget_install_package_manager = Column(Text, nullable=False, server_default="npm")
     widget_security_disclosure_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     frontend_capability_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    knowledge_base_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     user_rate_limit_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     user_rate_limit_daily = Column(Integer, nullable=True)
     user_rate_limit_monthly = Column(Integer, nullable=True)
@@ -291,3 +298,58 @@ class ConversationAction(Base):
     status_code = Column(Integer, nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class KnowledgeDocument(Base):
+    __tablename__ = "knowledge_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    file_name = Column(Text, nullable=False)
+    file_type = Column(Text, nullable=False)
+    file_size = Column(Integer, nullable=False)
+    status = Column(
+        Enum(DocumentStatus, name="document_status", native_enum=True, validate_strings=True),
+        nullable=False,
+        server_default="processing",
+    )
+    chunk_count = Column(Integer, nullable=False, server_default="0")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    chunks = relationship("KnowledgeChunk", back_populates="document", cascade="all, delete-orphan")
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (
+        Index("ix_knowledge_chunks_document_index", "document_id", "chunk_index"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Text, nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    chunk_metadata = Column("metadata", json_type, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    document = relationship("KnowledgeDocument", back_populates="chunks")
+    embedding = relationship("KnowledgeEmbedding", back_populates="chunk", uselist=False, cascade="all, delete-orphan")
+
+
+class KnowledgeEmbedding(Base):
+    __tablename__ = "knowledge_embeddings"
+    __table_args__ = (
+        UniqueConstraint("chunk_id", name="uq_knowledge_embedding_chunk"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chunk_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_chunks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Text, nullable=False, index=True)
+    embedding = Column(Vector(llm_config.embedding_dimensions), nullable=False)
+    content_hash = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    chunk = relationship("KnowledgeChunk", back_populates="embedding")
