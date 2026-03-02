@@ -192,5 +192,6 @@ def test_search_similar_tools_filters_by_tool_owner(monkeypatch: pytest.MonkeyPa
     result = search_similar_tools(session, "user-x", "query", top_k=1)
     assert result == [UUID(int=13)]
     sql = str(session.last_query).lower()
+    assert "halfvec" in sql
     assert "tools.user_id" in sql
     assert "tool_embeddings.user_id" not in sql

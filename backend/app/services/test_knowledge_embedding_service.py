@@ -8,10 +8,12 @@ from app.services.embedding_service import _compute_hash
 
 
 class FakeSession:
-    def __init__(self, scalar_results=None, execute_results=None):
+    def __init__(self, scalar_results=None, execute_results=None, capture_query=False):
         self.scalar_results = scalar_results or []
         self.added = []
         self.flushed = False
+        self.capture_query = capture_query
+        self.last_query = None
 
     def scalar(self, _query):
         if self.scalar_results:
@@ -19,6 +21,8 @@ class FakeSession:
         return None
 
     def execute(self, _query):
+        if self.capture_query:
+            self.last_query = _query
         class Result:
             def __init__(self, rows):
                 self._rows = rows
@@ -34,11 +38,13 @@ class FakeSession:
 
 
 class FakeSessionWithExecute(FakeSession):
-    def __init__(self, scalar_results=None, execute_results=None):
-        super().__init__(scalar_results)
+    def __init__(self, scalar_results=None, execute_results=None, capture_query=False):
+        super().__init__(scalar_results, capture_query=capture_query)
         self._execute_results = execute_results or []
 
     def execute(self, _query):
+        if self.capture_query:
+            self.last_query = _query
         class Result:
             def __init__(self, rows):
                 self._rows = rows
@@ -174,3 +180,12 @@ def test_search_results_have_sanitized_metadata(monkeypatch):
     assert len(result) == 1
     assert "filename" not in result[0]["metadata"]
     assert result[0]["metadata"]["element_types"] == ["NarrativeText"]
+
+
+def test_search_uses_halfvec_distance(monkeypatch):
+    session = FakeSessionWithExecute(scalar_results=[10], execute_results=[], capture_query=True)
+    monkeypatch.setattr(knowledge_embedding_service, "generate_embedding", lambda text: [0.1])
+    result = knowledge_embedding_service.search_knowledge_base(session, "u", "query", top_k=1)
+    assert result == []
+    sql = str(session.last_query).lower()
+    assert "halfvec" in sql

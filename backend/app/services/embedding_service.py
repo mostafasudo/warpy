@@ -3,7 +3,8 @@ import json
 from uuid import UUID
 
 from openai import OpenAI
-from sqlalchemy import func, select
+from pgvector.sqlalchemy import HALFVEC, HalfVector
+from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..core.config import get_settings
@@ -126,6 +127,10 @@ def search_similar_tools(session: Session, user_id: str, query: str, top_k: int 
         log_error("EmbeddingService", "search_similar_tools", "Failed to generate query embedding", exc=e)
         return []
 
+    distance_expr = cast(ToolEmbedding.embedding, HALFVEC(llm_config.embedding_dimensions)).cosine_distance(
+        HalfVector(query_embedding)
+    )
+
     results = session.scalars(
         select(ToolEmbedding.tool_id)
         .join(Tool, Tool.id == ToolEmbedding.tool_id)
@@ -133,7 +138,7 @@ def search_similar_tools(session: Session, user_id: str, query: str, top_k: int 
             Tool.user_id == user_id,
             Tool.agent_enabled.is_(True)
         )
-        .order_by(ToolEmbedding.embedding.cosine_distance(query_embedding))
+        .order_by(distance_expr)
         .limit(top_k)
     ).all()
 

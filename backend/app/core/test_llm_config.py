@@ -10,8 +10,8 @@ def test_calculate_top_k_bounds():
 def test_build_llm_config_local_defaults():
     config = build_llm_config("local", use_good_models=False)
     assert config.chat_model == "gpt-4o"
-    assert config.embedding_model == "text-embedding-3-small"
-    assert config.embedding_dimensions == 1536
+    assert config.embedding_model == "text-embedding-3-large"
+    assert config.embedding_dimensions == 3072
     assert config.whisper_model == "whisper-1"
 
 

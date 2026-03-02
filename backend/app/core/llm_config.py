@@ -6,8 +6,8 @@ from .config import get_settings
 @dataclass(frozen=True)
 class LLMConfig:
     chat_model: str = "gpt-4o"
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dimensions: int = 1536
+    embedding_model: str = "text-embedding-3-large"
+    embedding_dimensions: int = 3072
     whisper_model: str = "whisper-1"
     max_audio_bytes: int = 5_242_880
     temperature: float = 0.7

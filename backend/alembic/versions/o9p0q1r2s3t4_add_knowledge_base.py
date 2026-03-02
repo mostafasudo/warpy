@@ -12,9 +12,6 @@ import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
-from app.core.llm_config import llm_config
-
-
 revision: str = "o9p0q1r2s3t4"
 down_revision: Union[str, None] = "n8o9p0q1r2s3"
 branch_labels = None
@@ -30,6 +27,7 @@ def upgrade() -> None:
     is_pg = bind.dialect.name == "postgresql"
 
     if is_pg:
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
         document_status_enum.create(bind, checkfirst=True)
 
     status_type = document_status_enum_no_create if is_pg else sa.Text()
@@ -73,7 +71,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("chunk_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.Text(), nullable=False),
-        sa.Column("embedding", Vector(llm_config.embedding_dimensions), nullable=False),
+        sa.Column("embedding", Vector(1536), nullable=False),
         sa.Column("content_hash", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["chunk_id"], ["knowledge_chunks.id"], ondelete="CASCADE"),

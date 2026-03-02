@@ -46,7 +46,7 @@ Three tables:
 |-------|---------|
 | `knowledge_documents` | Uploaded file metadata, processing status |
 | `knowledge_chunks` | Chunked text content, linked to document |
-| `knowledge_embeddings` | Vector embeddings with IVFFlat cosine index |
+| `knowledge_embeddings` | Full 3072-dim vectors with IVFFlat cosine index on a `halfvec` cast for ANN speed |
 
 The `Agent` model has a `knowledge_base_enabled` boolean to toggle the feature per agent.
 

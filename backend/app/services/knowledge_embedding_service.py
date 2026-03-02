@@ -1,6 +1,8 @@
 from uuid import UUID
 
+from pgvector.sqlalchemy import HALFVEC, HalfVector
 from sqlalchemy import func, select
+from sqlalchemy import cast
 from sqlalchemy.orm import Session
 
 from ..core.llm_config import llm_config
@@ -74,11 +76,15 @@ def search_knowledge_base(session: Session, user_id: str, query: str, top_k: int
         log_error("KBEmbeddingService", "search_knowledge_base", "Query embedding failed", exc=exc)
         return []
 
+    distance_expr = cast(KnowledgeEmbedding.embedding, HALFVEC(llm_config.embedding_dimensions)).cosine_distance(
+        HalfVector(query_embedding)
+    )
+
     rows = session.execute(
         select(KnowledgeChunk.content, KnowledgeChunk.chunk_metadata)
         .join(KnowledgeEmbedding, KnowledgeEmbedding.chunk_id == KnowledgeChunk.id)
         .where(KnowledgeEmbedding.user_id == user_id)
-        .order_by(KnowledgeEmbedding.embedding.cosine_distance(query_embedding))
+        .order_by(distance_expr)
         .limit(top_k)
     ).all()
 
