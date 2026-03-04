@@ -9,7 +9,7 @@ Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a ligh
 Infra reference: `INFRA_GUIDE.md`.
 
 ## Skills
-LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
 
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.
