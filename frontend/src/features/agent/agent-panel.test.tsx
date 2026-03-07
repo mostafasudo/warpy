@@ -277,6 +277,32 @@ describe("AgentPanel", () => {
     expect(screen.getByText("Advanced Security")).not.toBeNull()
   })
 
+  it("uses distinct typography for code snippets and custom instructions", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: { local: "http://localhost:3000", production: "https://api.example.com" },
+        headers: {}
+      },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    expect(screen.getByTestId("install-code")).toHaveClass("font-mono")
+    expect(screen.getByTestId("usage-code")).toHaveClass("font-mono")
+
+    await openCustomInstructions(user)
+
+    expect(screen.getByLabelText("Instructions")).toHaveClass("font-serif")
+  })
+
   it.each([
     ["script", "<script src="],
     ["react", "@warpy-ai/widget/react"],

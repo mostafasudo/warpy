@@ -195,7 +195,7 @@ const hideWidget = () => {
 const CodeSnippet = ({ code, copied, onCopy, testId, buttonTestId }: CodeSnippetProps) => (
   <div className="relative rounded-lg border border-border bg-muted/30">
     <pre className="whitespace-pre-wrap break-words p-4 pr-20 font-mono text-sm leading-relaxed text-foreground" data-testid={testId}>
-      {code}
+      <code className="font-mono">{code}</code>
     </pre>
     <Button
       size="sm"
@@ -901,7 +901,7 @@ const CustomInstructionsPanel = () => {
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     maxLength={CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH}
-                    className="min-h-36"
+                    className="min-h-36 font-serif text-[15px] leading-6"
                   />
                 </div>
 
