@@ -258,6 +258,12 @@ export type FrontendCapabilityResponse = {
 
 export type FrontendCapabilityUpdate = FrontendCapabilityResponse;
 
+export type CustomUserSystemPromptResponse = {
+  customUserSystemPrompt: string;
+};
+
+export type CustomUserSystemPromptUpdate = CustomUserSystemPromptResponse;
+
 export type UserRateLimitsResponse = {
   enabled: boolean;
   dailyLimit: number | null;

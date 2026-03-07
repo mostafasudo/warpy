@@ -11,6 +11,8 @@ import type {
   BillingPortalResponse,
   BillingSummaryResponse,
   ConfigResponse,
+  CustomUserSystemPromptResponse,
+  CustomUserSystemPromptUpdate,
   ToolPayload,
   ToolResponse,
   FeatureToolsResponse,
@@ -161,6 +163,8 @@ export type {
   BillingPortalResponse,
   BillingSummaryResponse,
   ConfigResponse,
+  CustomUserSystemPromptResponse,
+  CustomUserSystemPromptUpdate,
   ToolPayload,
   ToolResponse,
   FeatureToolsResponse,
@@ -282,6 +286,13 @@ export const apiClient = {
   getAgentWidgetInstall: () => request<AgentWidgetInstallResponse>("/agent/widget-install"),
   updateAgentWidgetInstall: (payload: AgentWidgetInstallUpdate) =>
     request<AgentWidgetInstallResponse>("/agent/widget-install", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  getAgentCustomSystemPrompt: () =>
+    request<CustomUserSystemPromptResponse>("/agent/custom-system-prompt"),
+  updateAgentCustomSystemPrompt: (payload: CustomUserSystemPromptUpdate) =>
+    request<CustomUserSystemPromptResponse>("/agent/custom-system-prompt", {
       method: "PUT",
       body: JSON.stringify(payload),
     }),

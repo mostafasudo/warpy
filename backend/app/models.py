@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from .core.database import Base
+from .core.agent_custom_system_prompt import DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
 from .core.llm_config import llm_config
 
 
@@ -232,6 +233,12 @@ class Agent(Base):
     widget_security_disclosure_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     frontend_capability_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     knowledge_base_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    custom_user_system_prompt = Column(
+        Text,
+        nullable=False,
+        server_default=DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
+        default=DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
+    )
     user_rate_limit_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     user_rate_limit_daily = Column(Integer, nullable=True)
     user_rate_limit_monthly = Column(Integer, nullable=True)

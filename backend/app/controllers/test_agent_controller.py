@@ -4,6 +4,10 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.agent_custom_system_prompt import (
+    CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH,
+    DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
+)
 from app.main import create_app
 from app.schemas.auth import ClerkSession
 
@@ -37,8 +41,12 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
 
 
 class FakeExecutor:
-    def __init__(self, session, user_id, conversation_id=None, frontend_capability_enabled=True):
+    instances: list["FakeExecutor"] = []
+
+    def __init__(self, session, user_id, conversation_id=None, **kwargs):
         self.calls = []
+        self.kwargs = kwargs
+        FakeExecutor.instances.append(self)
 
     async def run(self, message, history):
         self.calls.append({"message": message, "history": history})
@@ -58,6 +66,7 @@ def auth_headers():
 
 
 def test_agent_conversation_and_chat_flow(client: TestClient):
+    FakeExecutor.instances.clear()
     create = client.post("/agent", headers=auth_headers())
     assert create.status_code == 201
     agent = create.json()
@@ -84,6 +93,77 @@ def test_agent_conversation_and_chat_flow(client: TestClient):
     conversations = client.get("/agent/conversations", headers=auth_headers())
     assert conversations.status_code == 200
     assert len(conversations.json()) == 1
+    assert FakeExecutor.instances[-1].kwargs["custom_user_system_prompt"] == DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+
+
+def test_agent_custom_system_prompt_get_and_update(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    fetched = client.get("/agent/custom-system-prompt", headers=auth_headers())
+    assert fetched.status_code == 200
+    assert fetched.json()["customUserSystemPrompt"] == DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+
+    updated = client.put(
+        "/agent/custom-system-prompt",
+        headers=auth_headers(),
+        json={"customUserSystemPrompt": "  Be extra concise.\r\nOffer next steps.\r\n  "},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["customUserSystemPrompt"] == "Be extra concise.\nOffer next steps."
+
+    refetched = client.get("/agent/custom-system-prompt", headers=auth_headers())
+    assert refetched.status_code == 200
+    assert refetched.json()["customUserSystemPrompt"] == "Be extra concise.\nOffer next steps."
+
+
+def test_agent_custom_system_prompt_blank_resets_to_default(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    updated = client.put(
+        "/agent/custom-system-prompt",
+        headers=auth_headers(),
+        json={"customUserSystemPrompt": "   "},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["customUserSystemPrompt"] == DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+
+
+def test_agent_custom_system_prompt_rejects_over_limit(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    invalid = client.put(
+        "/agent/custom-system-prompt",
+        headers=auth_headers(),
+        json={"customUserSystemPrompt": "x" * (CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH + 1)},
+    )
+    assert invalid.status_code == 422
+
+
+def test_agent_chat_passes_custom_system_prompt_to_executor(client: TestClient):
+    FakeExecutor.instances.clear()
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    update = client.put(
+        "/agent/custom-system-prompt",
+        headers=auth_headers(),
+        json={"customUserSystemPrompt": "Guide users step by step."},
+    )
+    assert update.status_code == 200
+
+    convo = client.post("/agent/conversations", json={"participant": "user"}, headers=auth_headers())
+    assert convo.status_code == 201
+
+    chat = client.post(
+        f"/agent/conversations/{convo.json()['id']}",
+        json={"message": "hi"},
+        headers=auth_headers(),
+    )
+    assert chat.status_code == 200
+    assert FakeExecutor.instances[-1].kwargs["custom_user_system_prompt"] == "Guide users step by step."
 
 
 def test_agent_widget_config_get_and_update(client: TestClient):

@@ -20,6 +20,7 @@ from ..schemas.widget import (
 )
 from ..services.agent_chain import AgentExecutor
 from ..services.context_budget import prune_messages
+from ..services.agent_service import build_agent_executor_config
 from ..services.billing_service import consume_actions_for_tool_results, get_billing_actions_summary
 from ..services.transcription_service import transcribe_audio
 from ..workers.queue import get_redis_connection
@@ -312,8 +313,7 @@ async def widget_chat(
             agent.user_id,
             conversation_id=conversation.id,
             redis_client=redis_client,
-            frontend_capability_enabled=agent.frontend_capability_enabled,
-            knowledge_base_enabled=agent.knowledge_base_enabled,
+            **build_agent_executor_config(agent),
         )
         result = await executor.run_step(
             user_message=payload.message,

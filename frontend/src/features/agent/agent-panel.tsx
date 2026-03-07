@@ -26,10 +26,12 @@ import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
 import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-frontend-capability"
+import { useUpdateAgentCustomSystemPrompt } from "@/mutations/use-update-agent-custom-system-prompt"
 import { useUpdateAgentUserRateLimits } from "@/mutations/use-update-agent-user-rate-limits"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
+import { useAgentCustomSystemPromptQuery } from "@/queries/use-agent-custom-system-prompt"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
 
 declare const __VITE_WIDGET_CDN_URL__: string | undefined
@@ -400,6 +402,15 @@ const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
 
 const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
 
+const DEFAULT_CUSTOM_USER_SYSTEM_PROMPT =
+  "You are a helpful copilot for this SaaS product. Help users find features, understand workflows, solve problems, and complete tasks. Be concise, friendly, and proactive. If someone seems stuck, suggest the next best step. Avoid technical jargon unless the user is clearly technical. Offer step-by-step guidance when it would help."
+const CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH = 1500
+
+const normalizeCustomUserSystemPrompt = (value: string) => {
+  const normalized = value.replace(/\r\n?/g, "\n").trim()
+  return normalized || DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+}
+
 const ConfigureWidgetPanel = () => {
   const { data, isPending } = useAgentWidgetConfigQuery()
   const updateConfig = useUpdateAgentWidgetConfig()
@@ -645,6 +656,160 @@ const ConfigureWidgetPanel = () => {
                   <Button
                     onClick={handleSave}
                     disabled={!isDirty || updateConfig.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Save changes
+                  </Button>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </div>
+      </div>
+    </Collapsible>
+  )
+}
+
+const CustomInstructionsPanel = () => {
+  const { data, isPending } = useAgentCustomSystemPromptQuery()
+  const updatePrompt = useUpdateAgentCustomSystemPrompt()
+  const addToast = useToastStore(toastSelectors.addToast)
+  const [isOpen, setIsOpen] = useState(false)
+  const [draft, setDraft] = useState("")
+
+  useEffect(() => {
+    if (!data) return
+    setDraft(data.customUserSystemPrompt)
+  }, [data])
+
+  const normalizedDraft = useMemo(() => normalizeCustomUserSystemPrompt(draft), [draft])
+  const savedValue = useMemo(
+    () => normalizeCustomUserSystemPrompt(data?.customUserSystemPrompt ?? DEFAULT_CUSTOM_USER_SYSTEM_PROMPT),
+    [data]
+  )
+
+  const isDirty = normalizedDraft !== savedValue
+  const isCustom = normalizedDraft !== DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+
+  const handleSave = async () => {
+    try {
+      await updatePrompt.mutateAsync({ customUserSystemPrompt: draft })
+      addToast({ title: "Saved", description: "Custom instructions updated.", variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update custom instructions"
+      addToast({ title: "Save failed", description: message, variant: "error" })
+    }
+  }
+
+  const handleDiscard = () => {
+    if (!data) return
+    setDraft(data.customUserSystemPrompt)
+  }
+
+  const handleRestoreDefaults = () => {
+    setDraft(DEFAULT_CUSTOM_USER_SYSTEM_PROMPT)
+  }
+
+  if (isPending) {
+    return (
+      <div
+        className="mt-6 rounded-xl border border-border bg-card/70 p-6 shadow-sm"
+        data-testid="custom-system-prompt-loading"
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <div className="mt-6 space-y-3">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
+        <div className="p-6">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">Custom Instructions</h3>
+                  {isDirty ? (
+                    <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
+                      Unsaved
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Add short guidance for how the assistant should help users.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge variant={isCustom ? "default" : "secondary"}>
+                  {isCustom ? "Custom" : "Default"}
+                </Badge>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2"
+                    aria-label={isOpen ? "Collapse custom instructions" : "Expand custom instructions"}
+                  >
+                    <span className="text-sm font-medium">{isOpen ? "Hide" : "Show"}</span>
+                    <ChevronDown
+                      className={clsx("h-4 w-4 transition-transform", isOpen && "rotate-180")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+
+            <CollapsibleContent>
+              <div className="space-y-6">
+                <div className="h-px bg-border" />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="custom-user-system-prompt">Instructions</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {draft.length}/{CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH} characters
+                    </span>
+                  </div>
+                  <Textarea
+                    id="custom-user-system-prompt"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    maxLength={CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH}
+                    className="min-h-36"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+                  <Button
+                    variant="ghost"
+                    onClick={handleDiscard}
+                    disabled={!isDirty || updatePrompt.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Discard changes
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRestoreDefaults}
+                    disabled={updatePrompt.isPending}
+                    className="w-full justify-center sm:w-auto"
+                  >
+                    Restore defaults
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={!isDirty || updatePrompt.isPending}
                     className="w-full justify-center sm:w-auto"
                   >
                     Save changes
@@ -1302,6 +1467,7 @@ export const AgentPanel = () => {
         <>
           <WidgetInstallDisplay agentId={agent.id} baseUrl={currentBaseUrl} />
           <ConfigureWidgetPanel />
+          <CustomInstructionsPanel />
           <FrontendCapabilityPanel />
           <AdvancedSecurityPanel />
           <UserRateLimitsPanel />

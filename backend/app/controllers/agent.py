@@ -17,6 +17,8 @@ from ..schemas.agent import (
     ConversationCreate,
     ConversationResponse,
     ConversationWithMessagesResponse,
+    CustomUserSystemPromptResponse,
+    CustomUserSystemPromptUpdate,
     FrontendCapabilityResponse,
     FrontendCapabilityUpdate,
     MessageResponse,
@@ -29,6 +31,7 @@ from ..schemas.agent import (
 from ..schemas.auth import ClerkSession
 from ..services.agent_chain import AgentExecutor
 from ..services.agent_service import (
+    build_agent_executor_config,
     create_agent,
     create_conversation,
     get_agent,
@@ -38,6 +41,10 @@ from ..services.agent_service import (
     save_message,
     update_frontend_capability,
     update_user_rate_limits,
+)
+from ..services.agent_custom_system_prompt_service import (
+    get_custom_user_system_prompt,
+    update_custom_user_system_prompt,
 )
 from ..services.agent_widget_security_service import (
     create_widget_api_key_draft,
@@ -176,7 +183,7 @@ async def chat_route(
             session,
             clerk_session.user_id,
             conversation_id=conversation_id,
-            frontend_capability_enabled=agent.frontend_capability_enabled if agent else True,
+            **build_agent_executor_config(agent),
         )
         response_content = await executor.run(payload.message, history)
         
@@ -349,6 +356,47 @@ async def get_frontend_capability_route(
     except Exception as error:
         log_error("AgentController", "get_frontend_capability", "Failed to fetch frontend capability", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch frontend capability")
+
+
+@router.get("/agent/custom-system-prompt", response_model=CustomUserSystemPromptResponse)
+async def get_custom_system_prompt_route(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> CustomUserSystemPromptResponse:
+    try:
+        return get_custom_user_system_prompt(session, clerk_session.user_id)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error(
+            "AgentController",
+            "get_custom_system_prompt",
+            "Failed to fetch custom system prompt",
+            exc=error,
+            user_id=clerk_session.user_id,
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch custom system prompt")
+
+
+@router.put("/agent/custom-system-prompt", response_model=CustomUserSystemPromptResponse)
+async def update_custom_system_prompt_route(
+    payload: CustomUserSystemPromptUpdate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session)
+) -> CustomUserSystemPromptResponse:
+    try:
+        return update_custom_user_system_prompt(session, clerk_session.user_id, payload)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error(
+            "AgentController",
+            "update_custom_system_prompt",
+            "Failed to update custom system prompt",
+            exc=error,
+            user_id=clerk_session.user_id,
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update custom system prompt")
 
 
 @router.put("/agent/frontend-capability", response_model=FrontendCapabilityResponse)

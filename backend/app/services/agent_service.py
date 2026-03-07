@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from ..core.agent_custom_system_prompt import DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
 from ..core.logger import log_info
 from ..models import Agent, Conversation, Message
 from .billing_service import get_or_create_billing_account
@@ -23,6 +24,16 @@ def create_agent(session: Session, user_id: str) -> Agent:
 
 def get_agent(session: Session, user_id: str) -> Agent | None:
     return session.scalar(select(Agent).where(Agent.user_id == user_id))
+
+
+def build_agent_executor_config(agent: Agent | None) -> dict[str, bool | str]:
+    return {
+        "frontend_capability_enabled": agent.frontend_capability_enabled if agent else True,
+        "knowledge_base_enabled": agent.knowledge_base_enabled if agent else False,
+        "custom_user_system_prompt": (
+            agent.custom_user_system_prompt if agent else DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+        ),
+    }
 
 
 def create_conversation(session: Session, agent_id: UUID, participant: str) -> Conversation:
@@ -106,4 +117,3 @@ def update_user_rate_limits(
     session.refresh(agent)
     log_info("AgentService", "update_user_rate_limits", "User rate limits updated", user_id=user_id)
     return agent
-

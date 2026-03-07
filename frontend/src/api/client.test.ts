@@ -330,6 +330,35 @@ describe("apiClient", () => {
     )
   })
 
+  it("supports custom instruction operations", async () => {
+    const responses = [
+      jsonResponse({
+        customUserSystemPrompt: "You are a helpful copilot for this SaaS product."
+      }),
+      jsonResponse({
+        customUserSystemPrompt: "Be concise and offer next steps."
+      })
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getAgentCustomSystemPrompt()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/custom-system-prompt", "http://api.test"),
+      expect.any(Object)
+    )
+
+    await apiClient.updateAgentCustomSystemPrompt({
+      customUserSystemPrompt: "Be concise and offer next steps."
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/agent/custom-system-prompt", "http://api.test"),
+      expect.objectContaining({ method: "PUT" })
+    )
+  })
+
   it("supports billing operations", async () => {
     const responses = [
       jsonResponse({

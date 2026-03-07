@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..core.agent_custom_system_prompt import CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH
+
 
 class AgentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -132,6 +134,19 @@ class FrontendCapabilityUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     enabled: bool
+
+
+class CustomUserSystemPromptResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    custom_user_system_prompt: str = Field(
+        alias="customUserSystemPrompt",
+        max_length=CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH,
+    )
+
+
+class CustomUserSystemPromptUpdate(CustomUserSystemPromptResponse):
+    pass
 
 
 class UserRateLimitsResponse(BaseModel):

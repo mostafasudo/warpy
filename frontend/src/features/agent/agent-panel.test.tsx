@@ -8,10 +8,12 @@ import { AgentPanel } from "./agent-panel"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useUpdateAgentCustomSystemPrompt } from "@/mutations/use-update-agent-custom-system-prompt"
 import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-frontend-capability"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
 import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-config"
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
+import { useAgentCustomSystemPromptQuery } from "@/queries/use-agent-custom-system-prompt"
 import { useAgentQuery } from "@/queries/use-agent"
 import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
@@ -87,6 +89,15 @@ jest.mock("@/mutations/use-deploy-agent-widget-security", () => ({
   useDeployAgentWidgetSecurity: jest.fn()
 }))
 
+jest.mock("@/queries/use-agent-custom-system-prompt", () => ({
+  useAgentCustomSystemPromptQuery: jest.fn(),
+  agentCustomSystemPromptQueryKey: ["agent", "custom-system-prompt"]
+}))
+
+jest.mock("@/mutations/use-update-agent-custom-system-prompt", () => ({
+  useUpdateAgentCustomSystemPrompt: jest.fn()
+}))
+
 jest.mock("@/queries/use-agent-frontend-capability", () => ({
   useAgentFrontendCapabilityQuery: jest.fn(),
   agentFrontendCapabilityQueryKey: ["agent", "frontend-capability"]
@@ -107,6 +118,8 @@ const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown a
 const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetConfig = useUpdateAgentWidgetConfig as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetInstall = useUpdateAgentWidgetInstall as unknown as jest.Mock
+const mockedUseAgentCustomSystemPromptQuery = useAgentCustomSystemPromptQuery as unknown as jest.Mock
+const mockedUseUpdateAgentCustomSystemPrompt = useUpdateAgentCustomSystemPrompt as unknown as jest.Mock
 const mockedUseAgentFrontendCapabilityQuery = useAgentFrontendCapabilityQuery as unknown as jest.Mock
 const mockedUseUpdateAgentFrontendCapability = useUpdateAgentFrontendCapability as unknown as jest.Mock
 
@@ -121,6 +134,10 @@ const createWrapper = () => {
 
 const openAdvancedSecurity = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(await screen.findByRole("button", { name: /expand advanced security/i }))
+}
+
+const openCustomInstructions = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(await screen.findByRole("button", { name: /expand custom instructions/i }))
 }
 
 const baseWidgetSecurity = {
@@ -142,6 +159,9 @@ const baseWidgetConfig = {
   widgetInputPlaceholder: "Ask Warpy…",
   widgetSecurityDisclosureEnabled: true
 }
+
+const defaultCustomUserSystemPrompt =
+  "You are a helpful copilot for this SaaS product. Help users find features, understand workflows, solve problems, and complete tasks. Be concise, friendly, and proactive. If someone seems stuck, suggest the next best step. Avoid technical jargon unless the user is clearly technical. Offer step-by-step guidance when it would help."
 
 const renderPanelWithInstall = (
   install: { framework: string; packageManager: string },
@@ -200,6 +220,14 @@ describe("AgentPanel", () => {
       mutate: jest.fn(),
       isPending: false
     })
+    mockedUseAgentCustomSystemPromptQuery.mockReturnValue({
+      data: { customUserSystemPrompt: defaultCustomUserSystemPrompt },
+      isPending: false
+    })
+    mockedUseUpdateAgentCustomSystemPrompt.mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false
+    })
     mockedUseAgentFrontendCapabilityQuery.mockReturnValue({
       data: { enabled: true },
       isPending: false
@@ -244,6 +272,7 @@ describe("AgentPanel", () => {
     expect(screen.getByText("Install")).not.toBeNull()
     expect(screen.getByText("Usage")).not.toBeNull()
     expect(screen.getByText("Configure Widget")).not.toBeNull()
+    expect(screen.getByText("Custom Instructions")).not.toBeNull()
     expect(screen.getByText("Advanced Security")).not.toBeNull()
   })
 
@@ -308,6 +337,153 @@ describe("AgentPanel", () => {
     expect(screen.getByTestId("configure-widget-loading")).not.toBeNull()
   })
 
+  it("shows custom instructions loading state when pending", () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+    mockedUseAgentCustomSystemPromptQuery.mockReturnValue({
+      data: null,
+      isPending: true
+    })
+
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    expect(screen.getByTestId("custom-system-prompt-loading")).not.toBeNull()
+  })
+
+  it("saves custom instructions and shows toast", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => ({
+      customUserSystemPrompt: "Be concise and offer next steps."
+    }))
+    mockedUseUpdateAgentCustomSystemPrompt.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await openCustomInstructions(user)
+
+    const instructionsInput = screen.getByLabelText("Instructions")
+    fireEvent.change(instructionsInput, { target: { value: "Be concise and offer next steps." } })
+    expect(screen.getByText("Unsaved")).not.toBeNull()
+    expect(screen.getByText("32/1500 characters")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        customUserSystemPrompt: "Be concise and offer next steps."
+      })
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Saved",
+        description: "Custom instructions updated.",
+        variant: "success"
+      })
+    })
+  })
+
+  it("restores default custom instructions and discards changes", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+    mockedUseAgentCustomSystemPromptQuery.mockReturnValue({
+      data: { customUserSystemPrompt: "Keep replies short." },
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await openCustomInstructions(user)
+
+    const instructionsInput = screen.getByLabelText("Instructions")
+    expect((instructionsInput as HTMLTextAreaElement).value).toBe("Keep replies short.")
+
+    await user.click(screen.getByRole("button", { name: /restore defaults/i }))
+    expect((screen.getByLabelText("Instructions") as HTMLTextAreaElement).value).toBe(
+      defaultCustomUserSystemPrompt
+    )
+
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "Always keep it short." }
+    })
+    expect(screen.getByText("Unsaved")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /discard changes/i }))
+    expect((screen.getByLabelText("Instructions") as HTMLTextAreaElement).value).toBe(
+      "Keep replies short."
+    )
+  })
+
+  it("shows error toast when custom instructions save fails", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => {
+      throw new Error("nope")
+    })
+    mockedUseUpdateAgentCustomSystemPrompt.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await openCustomInstructions(user)
+
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "Be concise and offer next steps." }
+    })
+    expect(screen.getByLabelText("Instructions")).toHaveAttribute("maxlength", "1500")
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalled()
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Save failed",
+        description: "nope",
+        variant: "error"
+      })
+    })
+  })
+
   it("saves widget config changes and shows toast", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
@@ -332,7 +508,7 @@ describe("AgentPanel", () => {
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
     const titleInput = screen.getByLabelText("Widget name")
-    expect(screen.getByText("Default")).not.toBeNull()
+    expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
     await user.clear(titleInput)
     await user.type(titleInput, "Acme Assistant")
     expect(screen.getByText("Unsaved")).not.toBeNull()
@@ -456,7 +632,7 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /restore defaults/i }))
     expect(screen.queryByText("Unsaved")).toBeNull()
-    expect(screen.getByText("Default")).not.toBeNull()
+    expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
     expect((screen.getByLabelText("Widget name") as HTMLInputElement).value).toBe("Warpy")
 
     await user.clear(screen.getByLabelText("Widget name"))
@@ -512,7 +688,7 @@ describe("AgentPanel", () => {
     await user.click(screen.getByLabelText("Widget icon mode"))
     await user.click(screen.getByRole("option", { name: "Default sparkles" }))
 
-    expect(screen.getByText("Default")).not.toBeNull()
+    expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
     expect(screen.queryByRole("img", { name: "Widget icon" })).toBeNull()
     expect(screen.getByLabelText("Widget icon URL")).toBeDisabled()
   })
