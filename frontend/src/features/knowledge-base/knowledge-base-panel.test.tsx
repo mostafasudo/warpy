@@ -248,7 +248,7 @@ describe("KnowledgeBasePanel", () => {
   it("toggle is enabled when ready documents exist", async () => {
     mockedUseKnowledgeBaseStatusQuery.mockReturnValue({
       isLoading: false,
-      data: { enabled: false, documentCount: 1, readyDocumentCount: 1 },
+      data: { enabled: false, documentCount: 1, readyDocumentCount: 0 },
     });
     mockedUseKnowledgeDocumentsQuery.mockReturnValue({
       isLoading: false,

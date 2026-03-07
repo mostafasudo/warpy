@@ -178,7 +178,7 @@ export const KnowledgeBasePanel = () => {
   const isLoading = statusQuery.isLoading || documentsQuery.isLoading;
   const status = statusQuery.data;
   const documents = documentsQuery.data?.items ?? [];
-  const canEnable = (status?.readyDocumentCount ?? 0) > 0;
+  const canEnable = documents.some((doc) => doc.status === "ready");
   const isUploadBlocked =
     billingQuery.data?.plan === "free" &&
     (billingQuery.data?.actionsRemaining ?? 0) <= 0;
