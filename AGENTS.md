@@ -6,8 +6,6 @@ Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a ligh
 ## Modes
 - **Ask mode:** answers are short, clear, and strictly concise.
 
-Infra reference: `INFRA_GUIDE.md`.
-
 ## Skills
 LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
 
@@ -99,3 +97,4 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 | [Frontend Agent](docs/frontend-agent.md) | How frontend actions work in the widget/agent. Use when working on `read_page`, `find_elements`, `frontend`, or `js_exec` tools; the ref system; the action execution engine; accessibility tree; tab screenshot capture; or widget UI feedback for agent runs. |
 | [Worktrees](docs/worktrees.md) | Multi-worktree Docker Compose workflow. Use when running parallel worktrees with isolated ports and containers. |
 | [Knowledge Base](docs/knowledge-base.md) | Knowledge base feature architecture. Use when working on document upload, parsing, chunking, embedding, or the search_knowledge_base agent tool. |
+| [Infra Guide](docs/infra-guide.md) | Production deployment and infrastructure reference. Use when working on Docker, ECS, deployment, production AWS setup, or infrastructure. |

@@ -21,7 +21,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 
 ## Deployment
 
-Production infrastructure reference: [INFRA_GUIDE.md](INFRA_GUIDE.md).
+Production infrastructure reference: [docs/infra-guide.md](docs/infra-guide.md).
 
 ## Planning
 
