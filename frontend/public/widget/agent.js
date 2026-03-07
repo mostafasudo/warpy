@@ -26,6 +26,11 @@
   const PAGE_PUSH_OFFSET_VAR = "--cta-widget-push-offset";
   const PAGE_PUSH_STYLE_ID = "cta-widget-page-push-style";
   const PAGE_PUSH_TRANSITION_MS = 240;
+  const PANEL_BASE_MIN_WIDTH = 440;
+  const PANEL_BASE_MAX_WIDTH = 680;
+  const PANEL_VIEWPORT_GUTTER = 56;
+  const PANEL_MOBILE_BREAKPOINT = 640;
+  const PANEL_RESIZE_STEP = 32;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Utilities
@@ -3308,10 +3313,58 @@
         transform: translateX(0);
       }
 
+      .cta-widget-resize-rail {
+        position: absolute;
+        top: 12px;
+        left: 0;
+        bottom: 12px;
+        width: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--cta-fg-muted);
+        opacity: 0;
+        pointer-events: none;
+        cursor: ew-resize;
+        touch-action: none;
+        transition: opacity 160ms ease, box-shadow 160ms ease;
+        z-index: 4;
+      }
+
+      .cta-widget-resize-rail.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .cta-widget-resize-rail:focus-visible {
+        outline: none;
+        box-shadow: inset 1px 0 0 var(--cta-border-strong);
+      }
+
+      .cta-widget-resize-grip {
+        position: relative;
+        width: 3px;
+        height: 42px;
+        border-radius: 999px;
+        background: var(--cta-border-strong);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+        transition: transform 160ms ease;
+      }
+
+      .cta-widget-resize-rail:hover .cta-widget-resize-grip,
+      .cta-widget-resize-rail:focus-visible .cta-widget-resize-grip,
+      .cta-widget-resize-rail.dragging .cta-widget-resize-grip {
+        transform: scaleX(1.25);
+      }
+
       @media (max-width: 640px) {
         .cta-widget-panel {
           width: 100vw;
           border-radius: 0;
+        }
+
+        .cta-widget-resize-rail {
+          display: none;
         }
       }
 
@@ -4303,7 +4356,9 @@
         .cta-widget-new-chat,
         .cta-widget-close,
         .cta-widget-mic,
-        .cta-widget-mic-select {
+        .cta-widget-mic-select,
+        .cta-widget-resize-rail,
+        .cta-widget-resize-grip {
           transition: none !important;
         }
 
@@ -4365,8 +4420,19 @@
     if (savedUi && typeof savedUi.launcherY === "number") {
       state.ui.launcherY = clamp(savedUi.launcherY, 0, 1);
     }
+    if (typeof state.ui.panelWidth === "number") {
+      state.ui.panelWidth = clampInt(state.ui.panelWidth, PANEL_BASE_MIN_WIDTH, PANEL_BASE_MAX_WIDTH);
+    }
+    if (savedUi && typeof savedUi.panelWidth === "number") {
+      state.ui.panelWidth = clampInt(savedUi.panelWidth, PANEL_BASE_MIN_WIDTH, PANEL_BASE_MAX_WIDTH);
+    }
     if (typeof state.ui.launcherY !== "number") {
       state.ui.launcherY = 0.72;
+      saveUiState(state.ui);
+      saveState(state);
+    }
+    if (typeof state.ui.panelWidth !== "number") {
+      state.ui.panelWidth = PANEL_BASE_MIN_WIDTH;
       saveUiState(state.ui);
       saveState(state);
     }
@@ -4483,6 +4549,17 @@
     panel.setAttribute("role", "dialog");
     toggle.setAttribute("aria-controls", panel.id);
     panel.innerHTML = `
+      <div
+        class="cta-widget-resize-rail"
+        role="separator"
+        aria-controls="cta-widget-panel"
+        aria-orientation="vertical"
+        aria-label="Resize chat panel"
+        aria-disabled="true"
+        tabindex="-1"
+      >
+        <span class="cta-widget-resize-grip" aria-hidden="true"></span>
+      </div>
       <div class="cta-widget-header">
         <div class="cta-widget-header-left">
           <button class="cta-widget-security-btn" aria-label="Security & Privacy" title="Security & Privacy">
@@ -4576,6 +4653,7 @@
     const messagesEl = panel.querySelector(".cta-widget-messages");
     const inputEl = panel.querySelector(".cta-widget-input");
     const sendEl = panel.querySelector(".cta-widget-send");
+    const resizeHandle = panel.querySelector(".cta-widget-resize-rail");
     const closeEl = panel.querySelector(".cta-widget-close");
     const newChatEl = panel.querySelector(".cta-widget-new-chat");
     const micEl = panel.querySelector(".cta-widget-mic");
@@ -4596,6 +4674,66 @@
         return window.visualViewport.width;
       }
       return window.innerWidth;
+    }
+
+    function isMobilePanelViewport() {
+      return getViewportWidth() <= PANEL_MOBILE_BREAKPOINT;
+    }
+
+    function getPanelMinWidth() {
+      if (isMobilePanelViewport()) return getViewportWidth();
+      return Math.min(PANEL_BASE_MIN_WIDTH, Math.max(0, getViewportWidth() - PANEL_VIEWPORT_GUTTER));
+    }
+
+    function getPanelMaxWidth() {
+      if (isMobilePanelViewport()) return getViewportWidth();
+      return Math.max(getPanelMinWidth(), Math.min(PANEL_BASE_MAX_WIDTH, Math.max(0, getViewportWidth() - PANEL_VIEWPORT_GUTTER)));
+    }
+
+    function isPanelResizable() {
+      return !isMobilePanelViewport() && getPanelMaxWidth() > getPanelMinWidth();
+    }
+
+    function getPreferredPanelWidth() {
+      const width = typeof state.ui.panelWidth === "number" ? state.ui.panelWidth : PANEL_BASE_MIN_WIDTH;
+      return clampInt(width, PANEL_BASE_MIN_WIDTH, PANEL_BASE_MAX_WIDTH);
+    }
+
+    function getAppliedPanelWidth() {
+      if (isMobilePanelViewport()) return getViewportWidth();
+      return clampInt(getPreferredPanelWidth(), getPanelMinWidth(), getPanelMaxWidth());
+    }
+
+    function syncResizeHandle() {
+      const active = isOpen && isPanelResizable();
+      resizeHandle.classList.toggle("active", active);
+      resizeHandle.setAttribute("aria-disabled", active ? "false" : "true");
+      resizeHandle.tabIndex = active ? 0 : -1;
+      resizeHandle.setAttribute("aria-valuemin", String(Math.round(getPanelMinWidth())));
+      resizeHandle.setAttribute("aria-valuemax", String(Math.round(getPanelMaxWidth())));
+      resizeHandle.setAttribute("aria-valuenow", String(Math.round(getAppliedPanelWidth())));
+    }
+
+    function persistPanelWidth() {
+      saveUiState(state.ui);
+      saveState(state);
+    }
+
+    function setPreferredPanelWidth(width, { persist = false } = {}) {
+      state.ui.panelWidth = clampInt(width, PANEL_BASE_MIN_WIDTH, PANEL_BASE_MAX_WIDTH);
+      if (persist) {
+        persistPanelWidth();
+      }
+    }
+
+    function applyPanelWidth() {
+      if (isMobilePanelViewport()) {
+        panel.style.removeProperty("width");
+      } else {
+        panel.style.width = `${getAppliedPanelWidth()}px`;
+      }
+      syncResizeHandle();
+      syncBehaviorUi();
     }
 
     function getResolvedWidgetBehavior() {
@@ -4661,7 +4799,7 @@
         return;
       }
       ensurePagePushReady();
-      const fallbackWidth = Math.min(440, Math.max(0, getViewportWidth() - 56));
+      const fallbackWidth = getAppliedPanelWidth();
       const panelWidth = Math.max(0, Math.round(panel.getBoundingClientRect().width || fallbackWidth));
       document.documentElement.setAttribute(PAGE_PUSH_ACTIVE_ATTR, "true");
       document.documentElement.style.setProperty(PAGE_PUSH_OFFSET_VAR, `${panelWidth}px`);
@@ -4690,7 +4828,7 @@
       syncHeader();
       syncIcons();
       syncSecurityButton();
-      syncBehaviorUi();
+      applyPanelWidth();
       syncToggleAriaLabel();
       syncSendButton();
       syncFrontendWarningUi();
@@ -4835,11 +4973,12 @@
 
     function handleViewportResize() {
       applyLauncherPosition();
-      syncBehaviorUi();
+      applyPanelWidth();
       syncToggleAriaLabel();
     }
 
     applyLauncherPosition();
+    applyPanelWidth();
 
     if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
       window.visualViewport.addEventListener("resize", handleViewportResize, { passive: true });
@@ -4852,6 +4991,11 @@
     let dragPointerId = null;
     let dragStartClientY = 0;
     let dragStartTop = 0;
+    let resizePointerId = null;
+    let resizeStartClientX = 0;
+    let resizeStartWidth = 0;
+    let resizeCursorSnapshot = "";
+    let resizeUserSelectSnapshot = "";
 
     function stopDragging(event) {
       if (dragPointerId === null) return;
@@ -4898,6 +5042,79 @@
 
     toggle.addEventListener("pointerup", stopDragging);
     toggle.addEventListener("pointercancel", stopDragging);
+
+    function setResizeInteraction(active) {
+      const body = document.body;
+      if (active) {
+        resizeCursorSnapshot = document.documentElement.style.cursor;
+        resizeUserSelectSnapshot = body ? body.style.userSelect : "";
+        document.documentElement.style.cursor = "ew-resize";
+        if (body) body.style.userSelect = "none";
+        resizeHandle.classList.add("dragging");
+        return;
+      }
+      document.documentElement.style.cursor = resizeCursorSnapshot;
+      if (body) body.style.userSelect = resizeUserSelectSnapshot;
+      resizeHandle.classList.remove("dragging");
+    }
+
+    function updatePanelWidth(width, { persist = false } = {}) {
+      setPreferredPanelWidth(width, { persist });
+      applyPanelWidth();
+    }
+
+    function stopResizing(event) {
+      if (resizePointerId === null) return;
+      if (event && resizePointerId !== event.pointerId) return;
+      try {
+        if (event && resizeHandle.hasPointerCapture(event.pointerId)) {
+          resizeHandle.releasePointerCapture(event.pointerId);
+        }
+      } catch { }
+      resizePointerId = null;
+      setResizeInteraction(false);
+      persistPanelWidth();
+    }
+
+    resizeHandle.addEventListener("pointerdown", (event) => {
+      if (!isOpen || !isPanelResizable()) return;
+      if (typeof event.button === "number" && event.button !== 0) return;
+      event.preventDefault();
+      resizePointerId = event.pointerId;
+      resizeStartClientX = event.clientX;
+      resizeStartWidth = panel.getBoundingClientRect().width || getAppliedPanelWidth();
+      setResizeInteraction(true);
+      try {
+        resizeHandle.setPointerCapture(event.pointerId);
+      } catch { }
+    });
+
+    resizeHandle.addEventListener("pointermove", (event) => {
+      if (resizePointerId !== event.pointerId) return;
+      const delta = resizeStartClientX - event.clientX;
+      if (Math.abs(delta) < 4) return;
+      event.preventDefault();
+      updatePanelWidth(resizeStartWidth + delta);
+    });
+
+    resizeHandle.addEventListener("pointerup", stopResizing);
+    resizeHandle.addEventListener("pointercancel", stopResizing);
+    resizeHandle.addEventListener("keydown", (event) => {
+      if (!isOpen || !isPanelResizable()) return;
+      let nextWidth = null;
+      if (event.key === "ArrowLeft") {
+        nextWidth = getAppliedPanelWidth() + PANEL_RESIZE_STEP;
+      } else if (event.key === "ArrowRight") {
+        nextWidth = getAppliedPanelWidth() - PANEL_RESIZE_STEP;
+      } else if (event.key === "Home") {
+        nextWidth = getPanelMaxWidth();
+      } else if (event.key === "End") {
+        nextWidth = getPanelMinWidth();
+      }
+      if (nextWidth === null) return;
+      event.preventDefault();
+      updatePanelWidth(nextWidth, { persist: true });
+    });
 
     scrim.addEventListener("click", () => {
       if (isOpen) togglePanel();
@@ -5694,7 +5911,7 @@
       scrim.classList.add("open");
       toggle.classList.add("open");
       toggle.setAttribute("aria-expanded", "true");
-      syncBehaviorUi();
+      applyPanelWidth();
       syncToggleAriaLabel();
       inputEl.focus();
       syncSendButton();
@@ -5704,6 +5921,7 @@
 
     function closePanel({ restoreLauncherFocus = true } = {}) {
       if (!isOpen) return;
+      stopResizing();
       isOpen = false;
       isSecurityPanelOpen = false;
       securityPanelEl.classList.remove("open");
@@ -5711,7 +5929,7 @@
       scrim.classList.remove("open");
       toggle.classList.remove("open");
       toggle.setAttribute("aria-expanded", "false");
-      syncBehaviorUi();
+      applyPanelWidth();
       syncToggleAriaLabel();
       closeMicMenu();
       stopRecording();
