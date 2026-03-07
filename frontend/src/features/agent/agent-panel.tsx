@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { getApiUrl } from "@/api/client"
@@ -51,8 +52,8 @@ type EnvironmentTabsProps = {
 }
 
 const EnvironmentTabs = ({ environments, selected, onSelect }: EnvironmentTabsProps) => (
-  <div className="max-w-[36rem] overflow-x-auto">
-    <div className="inline-flex min-w-max gap-1 rounded-lg bg-muted/50 p-1">
+  <ScrollArea className="max-w-[36rem]" type="always">
+    <div className="inline-flex min-w-max gap-1 rounded-xl border border-border/60 bg-muted/40 p-1">
       {environments.map((env) => (
         <button
           key={env}
@@ -69,7 +70,7 @@ const EnvironmentTabs = ({ environments, selected, onSelect }: EnvironmentTabsPr
         </button>
       ))}
     </div>
-  </div>
+  </ScrollArea>
 )
 
 type WidgetInstallDisplayProps = {
