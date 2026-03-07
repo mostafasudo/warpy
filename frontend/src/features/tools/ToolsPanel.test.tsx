@@ -595,11 +595,15 @@ describe("ToolsPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     renderPanel();
 
-    await user.click(screen.getByTestId("delete-feature-feature-1"));
+    const deleteFeatureButton = screen.getByTestId("delete-feature-feature-1");
+    expect(deleteFeatureButton.className).toContain("hover:text-destructive");
+    await user.click(deleteFeatureButton);
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     expect(mutateDeleteFeature).toHaveBeenCalledWith("feature-1");
 
-    await user.click(screen.getByTestId("delete-tool-tool-1"));
+    const deleteToolButton = screen.getByTestId("delete-tool-tool-1");
+    expect(deleteToolButton.className).toContain("hover:text-destructive");
+    await user.click(deleteToolButton);
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     expect(mutateDeleteTool).toHaveBeenCalledWith("tool-1");
   });

@@ -95,7 +95,9 @@ describe("BaseUrlsPanel", () => {
       headers: {}
     })
 
-    await user.click(screen.getByTestId("delete-env-staging"))
+    const deleteButton = screen.getByTestId("delete-env-staging")
+    expect(deleteButton.className).toContain("hover:text-destructive")
+    await user.click(deleteButton)
     await user.click(await screen.findByRole("button", { name: "Delete" }))
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -174,9 +176,11 @@ describe("BaseUrlsPanel", () => {
 
     renderPanel()
 
+    expect(screen.getByTestId("delete-env-local").className).toContain("hover:text-destructive")
     await user.click(screen.getByTestId("delete-env-local"))
     expect(mutateAsync).not.toHaveBeenCalled()
 
+    expect(screen.getByTestId("delete-env-dev").className).toContain("hover:text-destructive")
     await user.click(screen.getByTestId("delete-env-dev"))
     await user.click(await screen.findByRole("button", { name: "Delete" }))
     expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }))

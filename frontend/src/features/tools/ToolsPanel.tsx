@@ -248,6 +248,7 @@ const FeatureCard = ({
                   variant="ghost"
                   disabled={isDeletingFeature}
                   data-testid={`delete-feature-${feature.id}`}
+                  className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -398,6 +399,7 @@ const FeatureCard = ({
                         variant="ghost"
                         disabled={isDeletingTool}
                         data-testid={`delete-tool-${tool.id}`}
+                        className="text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

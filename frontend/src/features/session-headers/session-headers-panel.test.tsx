@@ -106,7 +106,9 @@ describe("SessionHeadersPanel", () => {
       headers: { auth: { source: "cookies", key: "auth-cookie" } }
     })
 
-    await user.click(screen.getByTestId("delete-header-auth"))
+    const deleteButton = screen.getByTestId("delete-header-auth")
+    expect(deleteButton.className).toContain("hover:text-destructive")
+    await user.click(deleteButton)
     await user.click(await screen.findByRole("button", { name: "Delete" }))
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -210,6 +212,7 @@ describe("SessionHeadersPanel", () => {
     await user.click(screen.getByTestId("save-header"))
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
 
+    expect(screen.getByTestId("delete-header-auth").className).toContain("hover:text-destructive")
     await user.click(screen.getByTestId("delete-header-auth"))
     await user.click(await screen.findByRole("button", { name: "Delete" }))
     expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }))

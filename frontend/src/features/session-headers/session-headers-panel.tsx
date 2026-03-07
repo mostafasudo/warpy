@@ -252,6 +252,7 @@ export const SessionHeadersPanel = () => {
                               variant="ghost"
                               disabled={isSaving}
                               data-testid={`delete-header-${name}`}
+                              className="text-muted-foreground hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
