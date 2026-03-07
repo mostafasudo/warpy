@@ -76,6 +76,7 @@ def get_widget_config(
         widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path,
         widget_title=agent.widget_title,
         widget_icon_url=agent.widget_icon_url,
+        widget_behavior=agent.widget_behavior,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,

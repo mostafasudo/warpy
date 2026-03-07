@@ -14,6 +14,7 @@ def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfig
     return AgentWidgetConfigResponse(
         widget_title=agent.widget_title,
         widget_icon_url=agent.widget_icon_url,
+        widget_behavior=agent.widget_behavior,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
@@ -32,6 +33,7 @@ def update_agent_widget_config(
 
     agent.widget_title = _strip_required(payload.widget_title, "Widget name")
     agent.widget_icon_url = _normalize_widget_icon_url(payload.widget_icon_url)
+    agent.widget_behavior = payload.widget_behavior
     agent.widget_empty_title = _strip_optional(payload.widget_empty_title)
     agent.widget_empty_description = _strip_optional(payload.widget_empty_description)
     agent.widget_input_placeholder = _strip_required(payload.widget_input_placeholder, "Input placeholder")
@@ -42,6 +44,7 @@ def update_agent_widget_config(
     return AgentWidgetConfigResponse(
         widget_title=agent.widget_title,
         widget_icon_url=agent.widget_icon_url,
+        widget_behavior=agent.widget_behavior,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,

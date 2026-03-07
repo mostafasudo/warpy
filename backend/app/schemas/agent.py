@@ -60,6 +60,7 @@ class AgentWidgetConfigResponse(BaseModel):
 
     widget_title: str = Field(alias="widgetTitle", min_length=1, max_length=80)
     widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl", max_length=2048)
+    widget_behavior: Literal["overlay", "push"] = Field(default="overlay", alias="widgetBehavior")
     widget_empty_title: str = Field(alias="widgetEmptyTitle", max_length=120)
     widget_empty_description: str = Field(alias="widgetEmptyDescription", max_length=240)
     widget_input_placeholder: str = Field(alias="widgetInputPlaceholder", min_length=1, max_length=120)

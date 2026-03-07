@@ -154,6 +154,7 @@ const baseWidgetSecurity = {
 const baseWidgetConfig = {
   widgetTitle: "Warpy",
   widgetIconUrl: null,
+  widgetBehavior: "overlay",
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
@@ -568,6 +569,81 @@ describe("AgentPanel", () => {
     })
   })
 
+  it("saves widget behavior changes", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => ({ ...baseWidgetConfig, widgetBehavior: "push" }))
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    expect(screen.getByRole("radio", { name: /overlay/i })).toHaveAttribute("aria-checked", "true")
+    await user.click(screen.getByRole("radio", { name: /push/i }))
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widgetBehavior: "push"
+        })
+      )
+    })
+  })
+
+  it("moves focus when arrow keys change widget behavior", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    const overlayOption = screen.getByRole("radio", { name: /overlay/i })
+    const pushOption = screen.getByRole("radio", { name: /push/i })
+
+    overlayOption.focus()
+    expect(overlayOption).toHaveFocus()
+
+    await user.keyboard("{ArrowLeft}")
+
+    await waitFor(() => {
+      expect(pushOption).toHaveAttribute("aria-checked", "true")
+      expect(pushOption).toHaveFocus()
+    })
+
+    await user.keyboard("{ArrowRight}")
+
+    await waitFor(() => {
+      expect(overlayOption).toHaveAttribute("aria-checked", "true")
+      expect(overlayOption).toHaveFocus()
+    })
+  })
+
   it("shows error toast when widget config save fails", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
@@ -686,7 +762,7 @@ describe("AgentPanel", () => {
     })
 
     await user.click(screen.getByLabelText("Widget icon mode"))
-    await user.click(screen.getByRole("option", { name: "Default sparkles" }))
+    await user.click(screen.getByRole("option", { name: "Default bubble" }))
 
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
     expect(screen.queryByRole("img", { name: "Widget icon" })).toBeNull()

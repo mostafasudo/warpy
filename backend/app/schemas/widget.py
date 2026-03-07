@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,6 +24,7 @@ class WidgetConfigResponse(BaseModel):
     widget_refresh_endpoint_path: str = Field(default="/widget-token", alias="widgetRefreshEndpointPath")
     widget_title: str = Field(default="Warpy", alias="widgetTitle")
     widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl")
+    widget_behavior: Literal["overlay", "push"] = Field(default="overlay", alias="widgetBehavior")
     widget_empty_title: str = Field(default="What would you like to do?", alias="widgetEmptyTitle")
     widget_empty_description: str = Field(
         default="Ask a question, request help, or describe what you want to get done.",

@@ -134,9 +134,12 @@ export type WidgetApiKeyCreateResponse = {
   apiKeyLast4: string;
 };
 
+export type WidgetBehavior = "overlay" | "push";
+
 export type AgentWidgetConfigResponse = {
   widgetTitle: string;
   widgetIconUrl: string | null;
+  widgetBehavior: WidgetBehavior;
   widgetEmptyTitle: string;
   widgetEmptyDescription: string;
   widgetInputPlaceholder: string;

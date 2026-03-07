@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, Copy, Info, Sparkles, Terminal, RotateCw } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ArrowLeft, Check, ChevronDown, Copy, Info, Layers, MessageSquare, RotateCw, Terminal } from "lucide-react"
 import clsx from "clsx"
 
 import { PanelShell } from "@/components/panel-shell"
@@ -29,7 +29,7 @@ import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-f
 import { useUpdateAgentCustomSystemPrompt } from "@/mutations/use-update-agent-custom-system-prompt"
 import { useUpdateAgentUserRateLimits } from "@/mutations/use-update-agent-user-rate-limits"
 import { toastSelectors, useToastStore } from "@/stores/toast"
-import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
+import type { WidgetBehavior, WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
 import { useAgentCustomSystemPromptQuery } from "@/queries/use-agent-custom-system-prompt"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
@@ -376,6 +376,7 @@ Notes
 type WidgetConfigDraft = {
   widgetTitle: string
   widgetIconUrl: string | null
+  widgetBehavior: WidgetBehavior
   widgetEmptyTitle: string
   widgetEmptyDescription: string
   widgetInputPlaceholder: string
@@ -385,19 +386,46 @@ type WidgetConfigDraft = {
 const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetTitle: "Warpy",
   widgetIconUrl: null,
+  widgetBehavior: "overlay",
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
   widgetSecurityDisclosureEnabled: true
 }
 
+const WIDGET_BEHAVIOR_OPTIONS: Array<{
+  value: WidgetBehavior
+  label: string
+  description: string
+  icon: typeof Layers
+}> = [
+  {
+    value: "push",
+    label: "Push",
+    description: "Makes room in the page.",
+    icon: ArrowLeft
+  },
+  {
+    value: "overlay",
+    label: "Overlay",
+    description: "Opens above the page.",
+    icon: Layers
+  }
+]
+
 const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
   widgetTitle: value.widgetTitle.trim(),
   widgetIconUrl: value.widgetIconUrl?.trim() ? value.widgetIconUrl.trim() : null,
+  widgetBehavior: value.widgetBehavior,
   widgetEmptyTitle: value.widgetEmptyTitle.trim(),
   widgetEmptyDescription: value.widgetEmptyDescription.trim(),
   widgetInputPlaceholder: value.widgetInputPlaceholder.trim(),
   widgetSecurityDisclosureEnabled: value.widgetSecurityDisclosureEnabled
+})
+
+const createWidgetConfigDraft = (value: WidgetConfigDraft): WidgetConfigDraft => ({
+  ...value,
+  widgetBehavior: value.widgetBehavior === "push" ? "push" : "overlay"
 })
 
 const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
@@ -418,10 +446,14 @@ const ConfigureWidgetPanel = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [draft, setDraft] = useState<WidgetConfigDraft | null>(null)
   const [iconMode, setIconMode] = useState<"default" | "custom">("default")
+  const widgetBehaviorOptionRefs = useRef<Record<WidgetBehavior, HTMLButtonElement | null>>({
+    overlay: null,
+    push: null
+  })
 
   useEffect(() => {
     if (!data) return
-    setDraft(data)
+    setDraft(createWidgetConfigDraft(data))
     setIconMode(data.widgetIconUrl ? "custom" : "default")
   }, [data])
 
@@ -437,7 +469,7 @@ const ConfigureWidgetPanel = () => {
 
   const isDirty = useMemo(() => {
     if (!data || !payloadFingerprint) return false
-    return JSON.stringify(normalizeWidgetConfig(data)) !== payloadFingerprint
+    return JSON.stringify(normalizeWidgetConfig(createWidgetConfigDraft(data))) !== payloadFingerprint
   }, [data, payloadFingerprint])
 
   const isCustomConfig = useMemo(() => {
@@ -449,6 +481,30 @@ const ConfigureWidgetPanel = () => {
     if (!draft) return null
     return iconMode === "custom" ? (draft.widgetIconUrl?.trim() ? draft.widgetIconUrl.trim() : null) : null
   }, [draft, iconMode])
+
+  const setWidgetBehavior = (value: WidgetBehavior, options?: { focus?: boolean }) => {
+    setDraft((current) => (current ? { ...current, widgetBehavior: value } : current))
+    if (options?.focus) {
+      widgetBehaviorOptionRefs.current[value]?.focus()
+    }
+  }
+
+  const handleWidgetBehaviorKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, fallbackIndex: number) => {
+    if (
+      event.key !== "ArrowRight" &&
+      event.key !== "ArrowDown" &&
+      event.key !== "ArrowLeft" &&
+      event.key !== "ArrowUp"
+    ) {
+      return
+    }
+    event.preventDefault()
+    const currentIndex = WIDGET_BEHAVIOR_OPTIONS.findIndex((option) => option.value === draft?.widgetBehavior)
+    const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1
+    const baseIndex = currentIndex === -1 ? fallbackIndex : currentIndex
+    const nextIndex = (baseIndex + direction + WIDGET_BEHAVIOR_OPTIONS.length) % WIDGET_BEHAVIOR_OPTIONS.length
+    setWidgetBehavior(WIDGET_BEHAVIOR_OPTIONS[nextIndex].value, { focus: true })
+  }
 
   const handleSave = async () => {
     if (!payload) return
@@ -463,7 +519,7 @@ const ConfigureWidgetPanel = () => {
 
   const handleDiscard = () => {
     if (!data) return
-    setDraft(data)
+    setDraft(createWidgetConfigDraft(data))
     setIconMode(data.widgetIconUrl ? "custom" : "default")
   }
 
@@ -503,7 +559,7 @@ const ConfigureWidgetPanel = () => {
               <div className="flex items-start gap-3">
                 <div>
                   <h3 className="text-lg font-semibold">Configure Widget</h3>
-                  <p className="text-sm text-muted-foreground">Icon and copy</p>
+                  <p className="text-sm text-muted-foreground">Appearance and behavior</p>
                 </div>
                 {isDirty ? (
                   <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
@@ -535,15 +591,25 @@ const ConfigureWidgetPanel = () => {
               <div className="space-y-6 pt-2">
                 <div className="rounded-lg border border-border bg-muted/20 p-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+                    <div
+                      className={clsx(
+                        "flex items-center justify-center border border-border bg-background text-primary",
+                        draft.widgetBehavior === "push"
+                          ? "-mr-1 h-10 w-11 rounded-l-xl rounded-r-md shadow-sm"
+                          : "h-[38px] w-[38px] rounded-[19px]"
+                      )}
+                    >
                       {previewIconUrl ? (
                         <img src={previewIconUrl} alt="Widget icon" className="h-5 w-5 rounded-sm object-contain" />
                       ) : (
-                        <Sparkles className="h-5 w-5 text-primary" />
+                        <MessageSquare className="h-5 w-5" />
                       )}
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{draft.widgetTitle}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {draft.widgetBehavior === "push" ? "Push layout" : "Overlay layout"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -556,6 +622,54 @@ const ConfigureWidgetPanel = () => {
                       value={draft.widgetTitle}
                       onChange={(event) => setDraft({ ...draft, widgetTitle: event.target.value })}
                     />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Widget behavior</Label>
+                    <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Widget behavior">
+                      {WIDGET_BEHAVIOR_OPTIONS.map((option, index) => {
+                        const selected = draft.widgetBehavior === option.value
+                        const Icon = option.icon
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            tabIndex={selected ? 0 : -1}
+                            ref={(node) => {
+                              widgetBehaviorOptionRefs.current[option.value] = node
+                            }}
+                            onClick={() => setWidgetBehavior(option.value)}
+                            onKeyDown={(event) => handleWidgetBehaviorKeyDown(event, index)}
+                            className={clsx(
+                              "flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+                              selected
+                                ? "border-primary bg-primary/5 text-foreground shadow-sm"
+                                : "border-border bg-background hover:border-primary/40 hover:bg-muted/30"
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={clsx(
+                                  "mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg border",
+                                  selected
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-border bg-muted/40 text-muted-foreground"
+                                )}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold">{option.label}</p>
+                                <p className="text-sm text-muted-foreground">{option.description}</p>
+                              </div>
+                            </div>
+                            {selected ? <Check className="mt-1 h-4 w-4 text-primary" /> : null}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div className="space-y-2 sm:col-span-2">
@@ -577,7 +691,7 @@ const ConfigureWidgetPanel = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="default">Default sparkles</SelectItem>
+                          <SelectItem value="default">Default bubble</SelectItem>
                           <SelectItem value="custom">Custom image URL</SelectItem>
                         </SelectContent>
                       </Select>

@@ -20,6 +20,12 @@
   const FRONTEND_WARNING_MIN_VISIBLE_MS = 2400;
   const FRONTEND_WARNING_HOLD_MS = 2200;
   const SCREEN_SHARE_TIMEOUT_MS = 20000;
+  const PAGE_PUSH_BREAKPOINT = 900;
+  const PAGE_PUSH_ACTIVE_ATTR = "data-cta-widget-push-active";
+  const PAGE_PUSH_READY_ATTR = "data-cta-widget-push-ready";
+  const PAGE_PUSH_OFFSET_VAR = "--cta-widget-push-offset";
+  const PAGE_PUSH_STYLE_ID = "cta-widget-page-push-style";
+  const PAGE_PUSH_TRANSITION_MS = 240;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Utilities
@@ -3085,8 +3091,10 @@
         top: 70vh;
         right: calc(16px + env(safe-area-inset-right, 0px));
         transform: translateY(-50%) translateX(10px);
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        gap: 0;
         border-radius: 999px;
         background: var(--cta-surface);
         border: 1px solid var(--cta-border-strong);
@@ -3103,6 +3111,17 @@
         box-shadow: 0 18px 60px var(--cta-shadow-color);
         backdrop-filter: blur(18px) saturate(160%);
         -webkit-backdrop-filter: blur(18px) saturate(160%);
+        overflow: hidden;
+      }
+
+      .cta-widget-toggle[data-behavior="push"] {
+        right: calc(-10px + env(safe-area-inset-right, 0px));
+        transform: translateY(-50%);
+        width: 48px;
+        height: 48px;
+        padding: 0;
+        border-radius: 16px 0 0 16px;
+        opacity: 1;
       }
 
       .cta-widget-toggle:hover,
@@ -3122,18 +3141,34 @@
         transform: translateY(-50%) translateX(18px);
       }
 
+      .cta-widget-toggle.open[data-behavior="push"] {
+        transform: translateY(-50%) translateX(12px);
+      }
+
       .cta-widget-toggle:focus-visible {
         outline: none;
         box-shadow: 0 18px 60px var(--cta-shadow-color), 0 0 0 4px var(--cta-focus);
       }
 
-      .cta-widget-toggle svg,
-      .cta-widget-toggle img {
+      .cta-widget-toggle-brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .cta-widget-toggle-brand {
         width: 22px;
         height: 22px;
       }
 
-      .cta-widget-toggle img {
+      .cta-widget-toggle-brand svg,
+      .cta-widget-toggle-brand img {
+        width: 22px;
+        height: 22px;
+      }
+
+      .cta-widget-toggle-brand img {
         border-radius: 6px;
         object-fit: contain;
         pointer-events: none;
@@ -3144,8 +3179,8 @@
       .cta-widget-toggle.has-unread::after {
         content: "";
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: 7px;
+        right: 7px;
         width: 8px;
         height: 8px;
         border-radius: 999px;
@@ -3154,13 +3189,18 @@
         pointer-events: none;
       }
 
+      .cta-widget-toggle[data-behavior="push"].has-unread::after {
+        top: 9px;
+        right: 18px;
+      }
+
       .cta-widget-toggle.unread-pulse::after {
         animation: cta-widget-unread-pulse 420ms ease-out;
       }
 
       .cta-widget-toggle-warning {
         position: fixed;
-        right: calc(68px + env(safe-area-inset-right, 0px));
+        right: calc(66px + env(safe-area-inset-right, 0px));
         transform: translateY(-50%) translateX(8px);
         max-width: min(280px, calc(100vw - 96px));
         padding: 8px 10px;
@@ -3175,6 +3215,10 @@
         pointer-events: none;
         transition: opacity 180ms ease, transform 180ms ease;
         z-index: 2;
+      }
+
+      .cta-widget-toggle-warning[data-behavior="push"] {
+        right: calc(80px + env(safe-area-inset-right, 0px));
       }
 
       .cta-widget-toggle-warning.visible {
@@ -3201,6 +3245,10 @@
         .cta-widget-toggle {
           transform: translateY(-50%);
           opacity: 0.9;
+        }
+
+        .cta-widget-toggle[data-behavior="push"] {
+          transform: translateY(-50%);
         }
       }
 
@@ -4276,12 +4324,36 @@
     return style;
   }
 
+  function ensurePagePushStyle() {
+    if (!document.head) return null;
+    const existing = document.getElementById(PAGE_PUSH_STYLE_ID);
+    if (existing) return existing;
+    const style = document.createElement("style");
+    style.id = PAGE_PUSH_STYLE_ID;
+    style.textContent = `
+      body[${PAGE_PUSH_READY_ATTR}="true"] {
+        transition: margin-right 240ms cubic-bezier(0.2, 0.9, 0.2, 1);
+      }
+
+      html[${PAGE_PUSH_ACTIVE_ATTR}="true"] {
+        overflow-x: hidden;
+      }
+
+      html[${PAGE_PUSH_ACTIVE_ATTR}="true"] body[${PAGE_PUSH_READY_ATTR}="true"] {
+        margin-right: var(${PAGE_PUSH_OFFSET_VAR}, 0px) !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return style;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Widget Creation & Lifecycle
   // ═══════════════════════════════════════════════════════════════════════════
 
   function createWidget(config, initialConfigData) {
     const apiUrl = resolveApiUrl();
+    ensurePagePushStyle();
 
     // ─── State ───────────────────────────────────────────────────────────────
 
@@ -4334,9 +4406,7 @@
 
     const DEFAULT_WIDGET_ICON = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 3l1.5 3.5L17 8l-3.5 1.5L12 13l-1.5-3.5L7 8l3.5-1.5L12 3z"/>
-        <path d="M5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/>
-        <path d="M18 14l.75 1.5 1.5.75-1.5.75-.75 1.5-.75-1.5-1.5-.75 1.5-.75.75-1.5z"/>
+        <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 4V11.5A8.5 8.5 0 1 1 21 11.5z"/>
       </svg>
     `;
     const SEND_ICON = `
@@ -4352,6 +4422,7 @@
 
     let widgetTitle = "Warpy";
     let widgetIconUrl = null;
+    let widgetBehavior = "overlay";
     let widgetEmptyTitle = "What would you like to do?";
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
     let widgetInputPlaceholder = "Ask Warpy…";
@@ -4364,6 +4435,7 @@
     let frontendWarningText = "";
     let frontendWarningVisibleSince = 0;
     let frontendWarningTimer = null;
+    let pagePushReadyTimer = null;
     let screenSharePromiseResolve = null;
     let screenShareDismissed = false;
     let screenShareCountdown = 0;
@@ -4380,6 +4452,7 @@
       chatEpoch += 1;
       stopCurrentExecution();
       closePanel({ restoreLauncherFocus: false });
+      clearPagePushLayout();
       clearHighlight();
       clearFrontendWarning();
       stopScreenShare();
@@ -4398,7 +4471,7 @@
     const toggle = document.createElement("button");
     toggle.className = "cta-widget-toggle";
     toggle.setAttribute("aria-expanded", "false");
-    toggle.innerHTML = DEFAULT_WIDGET_ICON;
+    toggle.innerHTML = `<span class="cta-widget-toggle-brand">${DEFAULT_WIDGET_ICON}</span>`;
 
     const toggleWarning = document.createElement("div");
     toggleWarning.className = "cta-widget-toggle-warning";
@@ -4518,13 +4591,80 @@
 
     // ─── UI Sync Helpers ────────────────────────────────────────────────────
 
-    function getToggleAriaLabel() {
-      return hasUnread ? `Open ${widgetTitle} (new message)` : `Open ${widgetTitle}`;
+    function getViewportWidth() {
+      if (window.visualViewport && typeof window.visualViewport.width === "number") {
+        return window.visualViewport.width;
+      }
+      return window.innerWidth;
     }
 
-    function getIconMarkup() {
+    function getResolvedWidgetBehavior() {
+      if (widgetBehavior !== "push") return "overlay";
+      return getViewportWidth() > PAGE_PUSH_BREAKPOINT ? "push" : "overlay";
+    }
+
+    function getToggleAriaLabel() {
+      const baseLabel =
+        getResolvedWidgetBehavior() === "push"
+          ? `Open ${widgetTitle} and make space on the page`
+          : `Open ${widgetTitle}`;
+      return hasUnread ? `${baseLabel} (new message)` : baseLabel;
+    }
+
+    function getBrandIconMarkup() {
       if (!widgetIconUrl) return DEFAULT_WIDGET_ICON;
       return `<img src="${escapeHtml(widgetIconUrl)}" alt="" aria-hidden="true" draggable="false" />`;
+    }
+
+    function getToggleMarkup() {
+      return `<span class="cta-widget-toggle-brand">${getBrandIconMarkup()}</span>`;
+    }
+
+    function ensurePagePushReady() {
+      if (!document.body) return;
+      if (pagePushReadyTimer) {
+        clearTimeout(pagePushReadyTimer);
+        pagePushReadyTimer = null;
+      }
+      document.body.setAttribute(PAGE_PUSH_READY_ATTR, "true");
+    }
+
+    function schedulePagePushReadyCleanup() {
+      if (!document.body) return;
+      if (!document.body.hasAttribute(PAGE_PUSH_READY_ATTR) && !pagePushReadyTimer) return;
+      if (pagePushReadyTimer) {
+        clearTimeout(pagePushReadyTimer);
+      }
+      pagePushReadyTimer = setTimeout(() => {
+        pagePushReadyTimer = null;
+        if (document.documentElement && document.documentElement.getAttribute(PAGE_PUSH_ACTIVE_ATTR) === "true") {
+          return;
+        }
+        document.body.removeAttribute(PAGE_PUSH_READY_ATTR);
+      }, PAGE_PUSH_TRANSITION_MS);
+    }
+
+    function clearPagePushLayout() {
+      if (document.documentElement) {
+        document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR);
+        document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR);
+      }
+      schedulePagePushReadyCleanup();
+    }
+
+    function syncBehaviorUi() {
+      const resolvedBehavior = getResolvedWidgetBehavior();
+      toggle.setAttribute("data-behavior", resolvedBehavior);
+      toggleWarning.setAttribute("data-behavior", resolvedBehavior);
+      if (!isOpen || resolvedBehavior !== "push" || !document.documentElement) {
+        clearPagePushLayout();
+        return;
+      }
+      ensurePagePushReady();
+      const fallbackWidth = Math.min(440, Math.max(0, getViewportWidth() - 56));
+      const panelWidth = Math.max(0, Math.round(panel.getBoundingClientRect().width || fallbackWidth));
+      document.documentElement.setAttribute(PAGE_PUSH_ACTIVE_ATTR, "true");
+      document.documentElement.style.setProperty(PAGE_PUSH_OFFSET_VAR, `${panelWidth}px`);
     }
 
     function syncToggleAriaLabel() {
@@ -4537,7 +4677,7 @@
     }
 
     function syncIcons() {
-      toggle.innerHTML = getIconMarkup();
+      toggle.innerHTML = getToggleMarkup();
     }
 
     function syncSecurityButton() {
@@ -4550,6 +4690,7 @@
       syncHeader();
       syncIcons();
       syncSecurityButton();
+      syncBehaviorUi();
       syncToggleAriaLabel();
       syncSendButton();
       syncFrontendWarningUi();
@@ -4692,13 +4833,19 @@
       saveState(state);
     }
 
+    function handleViewportResize() {
+      applyLauncherPosition();
+      syncBehaviorUi();
+      syncToggleAriaLabel();
+    }
+
     applyLauncherPosition();
 
     if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
-      window.visualViewport.addEventListener("resize", applyLauncherPosition, { passive: true });
+      window.visualViewport.addEventListener("resize", handleViewportResize, { passive: true });
       window.visualViewport.addEventListener("scroll", applyLauncherPosition, { passive: true });
     } else {
-      window.addEventListener("resize", applyLauncherPosition, { passive: true });
+      window.addEventListener("resize", handleViewportResize, { passive: true });
     }
 
     let ignoreToggleClick = false;
@@ -4856,7 +5003,7 @@
         const empty = document.createElement("div");
         empty.className = "cta-widget-empty";
         empty.innerHTML = `
-          <div class="cta-widget-empty-icon">${getIconMarkup()}</div>
+          <div class="cta-widget-empty-icon">${getBrandIconMarkup()}</div>
           ${emptyTitle ? `<h3>${escapeHtml(emptyTitle)}</h3>` : ""}
           ${emptyDescription ? `<p>${escapeHtml(emptyDescription)}</p>` : ""}
         `;
@@ -5294,6 +5441,9 @@
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
       widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
       widgetIconUrl = getConfigString(data, "widgetIconUrl");
+      if (data.widgetBehavior === "push" || data.widgetBehavior === "overlay") {
+        widgetBehavior = data.widgetBehavior;
+      }
       const emptyTitle = getOptionalConfigString(data, "widgetEmptyTitle");
       const emptyDescription = getOptionalConfigString(data, "widgetEmptyDescription");
       if (emptyTitle !== null) widgetEmptyTitle = emptyTitle;
@@ -5544,6 +5694,8 @@
       scrim.classList.add("open");
       toggle.classList.add("open");
       toggle.setAttribute("aria-expanded", "true");
+      syncBehaviorUi();
+      syncToggleAriaLabel();
       inputEl.focus();
       syncSendButton();
       syncFrontendWarningUi();
@@ -5559,6 +5711,8 @@
       scrim.classList.remove("open");
       toggle.classList.remove("open");
       toggle.setAttribute("aria-expanded", "false");
+      syncBehaviorUi();
+      syncToggleAriaLabel();
       closeMicMenu();
       stopRecording();
       clearHighlight();

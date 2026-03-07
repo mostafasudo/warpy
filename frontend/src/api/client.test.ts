@@ -274,6 +274,7 @@ describe("apiClient", () => {
       jsonResponse({
         widgetTitle: "Warpy",
         widgetIconUrl: null,
+        widgetBehavior: "overlay",
         widgetEmptyTitle: "What would you like to do?",
         widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
         widgetInputPlaceholder: "Ask Warpy…",
@@ -282,6 +283,7 @@ describe("apiClient", () => {
       jsonResponse({
         widgetTitle: "Acme Assistant",
         widgetIconUrl: "https://example.com/icon.png",
+        widgetBehavior: "push",
         widgetEmptyTitle: "How can we help?",
         widgetEmptyDescription: "Ask a question or request help.",
         widgetInputPlaceholder: "Ask Acme…",
@@ -299,6 +301,7 @@ describe("apiClient", () => {
     await apiClient.updateAgentWidgetConfig({
       widgetTitle: "Acme Assistant",
       widgetIconUrl: "https://example.com/icon.png",
+      widgetBehavior: "push",
       widgetEmptyTitle: "How can we help?",
       widgetEmptyDescription: "Ask a question or request help.",
       widgetInputPlaceholder: "Ask Acme…",
