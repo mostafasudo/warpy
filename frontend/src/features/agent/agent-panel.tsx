@@ -862,7 +862,7 @@ const CustomInstructionsPanel = () => {
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Add short guidance for how the assistant should help users.
+                  Define the assistant&apos;s personality, knowledge boundaries, and response style.
                 </p>
               </div>
               <div className="flex items-center gap-3">
