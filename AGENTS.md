@@ -95,6 +95,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 | Doc | When to load |
 |-----|--------------|
 | [Backend Conventions](docs/prompt-engineering.md) | Reference guide for prompt engineering best practices. Use when creating, modifying, or optimizing LLM agent system prompts, tool descriptions, parameter descriptions, or any AI instruction text. Apply when writing prompts for Claude, GPT, or other language models. |
+| [Mega Plan Review](docs/mega-plan-review.md) | Use for non-trivial work during planning, after drafting the initial implementation plan and before writing code. Review the draft plan against this document to verify scope, edge cases, failure modes, tests, observability, and rollout posture. |
 | [Frontend Agent](docs/frontend-agent.md) | How frontend actions work in the widget/agent. Use when working on `read_page`, `find_elements`, `frontend`, or `js_exec` tools; the ref system; the action execution engine; accessibility tree; tab screenshot capture; or widget UI feedback for agent runs. |
 | [Worktrees](docs/worktrees.md) | Multi-worktree Docker Compose workflow. Use when running parallel worktrees with isolated ports and containers. |
 | [Knowledge Base](docs/knowledge-base.md) | Knowledge base feature architecture. Use when working on document upload, parsing, chunking, embedding, or the search_knowledge_base agent tool. |
