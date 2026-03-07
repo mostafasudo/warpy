@@ -329,7 +329,7 @@ Execution reliability:
 - Warning is visible both when the panel is open (inline subtle alert) and when collapsed (launcher-adjacent subtle alert).
 - While a run is active and the panel is open, Send is replaced by an immediate Stop button.
 - Chat header controls are icon-only: Security/Privacy on the left, New Chat + Close on the right.
-- On desktop, the open widget panel can be widened from a subtle left-edge resize rail; the current default width is the minimum, and the chosen width is remembered locally for later visits.
+- On desktop, the open widget panel starts at the existing 440px default width and can be widened or narrowed a touch further from a subtle left-edge resize rail; the chosen width is remembered locally for later visits.
 - Header, message area, footer, and Security/Privacy panel share a unified surface background (no section divider lines).
 - Default execution failures render a Resume button that retries the original failed query; consecutive duplicate resume errors are collapsed into a single latest message.
 - Screen share prompt: a minimal inline bar (sticky at the top of the messages area) with a status dot, descriptive text, and Share/Skip actions. Uses the same design tokens as the rest of the widget (`.cta-widget-screen-prompt`). Shows a live countdown ("Continuing in Xs") on a second line. When sharing is active, the bar changes to "Sharing this tab" with a pulsing dot and a "Stop" link. The bar remains visible in the empty-state/new-chat view so users always have access to the stop control.

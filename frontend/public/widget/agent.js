@@ -26,7 +26,8 @@
   const PAGE_PUSH_OFFSET_VAR = "--cta-widget-push-offset";
   const PAGE_PUSH_STYLE_ID = "cta-widget-page-push-style";
   const PAGE_PUSH_TRANSITION_MS = 240;
-  const PANEL_BASE_MIN_WIDTH = 440;
+  const PANEL_DEFAULT_WIDTH = 440;
+  const PANEL_BASE_MIN_WIDTH = 344;
   const PANEL_BASE_MAX_WIDTH = 680;
   const PANEL_VIEWPORT_GUTTER = 56;
   const PANEL_MOBILE_BREAKPOINT = 640;
@@ -4432,7 +4433,7 @@
       saveState(state);
     }
     if (typeof state.ui.panelWidth !== "number") {
-      state.ui.panelWidth = PANEL_BASE_MIN_WIDTH;
+      state.ui.panelWidth = PANEL_DEFAULT_WIDTH;
       saveUiState(state.ui);
       saveState(state);
     }
@@ -4695,7 +4696,7 @@
     }
 
     function getPreferredPanelWidth() {
-      const width = typeof state.ui.panelWidth === "number" ? state.ui.panelWidth : PANEL_BASE_MIN_WIDTH;
+      const width = typeof state.ui.panelWidth === "number" ? state.ui.panelWidth : PANEL_DEFAULT_WIDTH;
       return clampInt(width, PANEL_BASE_MIN_WIDTH, PANEL_BASE_MAX_WIDTH);
     }
 

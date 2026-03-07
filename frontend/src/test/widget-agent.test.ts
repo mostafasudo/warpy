@@ -132,7 +132,7 @@ describe("widget desktop resize", () => {
     setViewport(1280, 900)
   })
 
-  it("keeps the current width as the minimum, supports resizing, and persists the chosen width", async () => {
+  it("keeps the current width as the default, supports resizing narrower, and persists the chosen width", async () => {
     const widget = await loadWidget()
     await openPanel(widget)
 
@@ -150,18 +150,18 @@ describe("widget desktop resize", () => {
     dispatchPointer(widget.handle, "pointermove", { clientX: 420, pointerId: 2 })
     dispatchPointer(widget.handle, "pointerup", { clientX: 420, pointerId: 2 })
 
-    expect(getWidth(widget.panel)).toBe(440)
-    expect(readUiState().panelWidth).toBe(440)
+    expect(getWidth(widget.panel)).toBe(344)
+    expect(readUiState().panelWidth).toBe(344)
 
     fireEvent.keyDown(widget.handle, { key: "ArrowLeft" })
-    expect(getWidth(widget.panel)).toBe(472)
+    expect(getWidth(widget.panel)).toBe(376)
 
     fireEvent.keyDown(widget.handle, { key: "Home" })
     expect(getWidth(widget.panel)).toBe(680)
 
     fireEvent.keyDown(widget.handle, { key: "End" })
-    expect(getWidth(widget.panel)).toBe(440)
-    expect(readUiState().panelWidth).toBe(440)
+    expect(getWidth(widget.panel)).toBe(344)
+    expect(readUiState().panelWidth).toBe(344)
 
     fireEvent.keyDown(widget.handle, { key: "Home" })
     expect(getWidth(widget.panel)).toBe(680)
