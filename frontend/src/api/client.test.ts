@@ -278,6 +278,8 @@ describe("apiClient", () => {
         widgetEmptyTitle: "What would you like to do?",
         widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
         widgetInputPlaceholder: "Ask Warpy…",
+        widgetSuggestionsEnabled: false,
+        widgetStarterSuggestions: [],
         widgetSecurityDisclosureEnabled: true
       }),
       jsonResponse({
@@ -287,6 +289,8 @@ describe("apiClient", () => {
         widgetEmptyTitle: "How can we help?",
         widgetEmptyDescription: "Ask a question or request help.",
         widgetInputPlaceholder: "Ask Acme…",
+        widgetSuggestionsEnabled: true,
+        widgetStarterSuggestions: ["Show recent invoices", "Create a refund"],
         widgetSecurityDisclosureEnabled: true
       })
     ]
@@ -305,6 +309,8 @@ describe("apiClient", () => {
       widgetEmptyTitle: "How can we help?",
       widgetEmptyDescription: "Ask a question or request help.",
       widgetInputPlaceholder: "Ask Acme…",
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices", "Create a refund"],
       widgetSecurityDisclosureEnabled: true
     })
     expect(fetchSpy).toHaveBeenCalledWith(

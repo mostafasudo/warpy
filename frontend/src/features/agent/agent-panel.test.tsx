@@ -158,6 +158,8 @@ const baseWidgetConfig = {
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
+  widgetSuggestionsEnabled: false,
+  widgetStarterSuggestions: [],
   widgetSecurityDisclosureEnabled: true
 }
 
@@ -547,7 +549,9 @@ describe("AgentPanel", () => {
       expect(mutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           widgetTitle: "Acme Assistant",
-          widgetIconUrl: null
+          widgetIconUrl: null,
+          widgetSuggestionsEnabled: false,
+          widgetStarterSuggestions: []
         })
       )
       expect(getAddToast()).toHaveBeenCalledWith({
@@ -590,6 +594,69 @@ describe("AgentPanel", () => {
         expect.objectContaining({
           widgetEmptyTitle: "",
           widgetEmptyDescription: ""
+        })
+      )
+    })
+  })
+
+  it("blocks saving enabled suggestions without a starter suggestion", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+    await user.click(screen.getByLabelText("Toggle widget suggestions"))
+
+    expect(screen.getByText("Add at least one starter suggestion before saving.")).not.toBeNull()
+    expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled()
+  })
+
+  it("saves starter suggestions when suggestions are enabled", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const mutateAsync = jest.fn(async () => ({
+      ...baseWidgetConfig,
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices", "Create a refund"]
+    }))
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+    await user.click(screen.getByLabelText("Toggle widget suggestions"))
+    await user.type(screen.getByLabelText("Starter suggestion 1"), "  Show recent invoices  ")
+    await user.type(screen.getByLabelText("Starter suggestion 2"), "Create a refund")
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widgetSuggestionsEnabled: true,
+          widgetStarterSuggestions: ["Show recent invoices", "Create a refund"]
         })
       )
     })

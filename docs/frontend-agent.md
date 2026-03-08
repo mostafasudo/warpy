@@ -53,6 +53,7 @@ window.warpy = async (toolName, vars) => {
 - UI feedback for page actions: status panel, element highlight, frontend-interaction warning lifecycle.
 - User stop control while runs are in progress (Send becomes Stop).
 - Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
+- Optional suggestion chips: starter suggestions for empty chats plus LLM-generated follow-up suggestions after completed replies.
 - System prompt encourages proactive retries and page rescans via `read_page`.
 - Screen autopilot actions and frontend tool actions are tracked in the Activity panel alongside backend actions.
 
@@ -80,7 +81,7 @@ sequenceDiagram
   W->>B: toolResults (frontend actions)
   B->>L: ToolMessage (results)
   L-->>B: Final response
-  B-->>W: Assistant message summary
+  B-->>W: Assistant message summary + follow-up suggestions
 ```
 
 ## Decision path
@@ -333,6 +334,7 @@ Execution reliability:
 - Header, message area, footer, and Security/Privacy panel share a unified surface background (no section divider lines).
 - Default execution failures render a Resume button that retries the original failed query; consecutive duplicate resume errors are collapsed into a single latest message.
 - Screen share prompt: a minimal inline bar (sticky at the top of the messages area) with a status dot, descriptive text, and Share/Skip actions. Uses the same design tokens as the rest of the widget (`.cta-widget-screen-prompt`). Shows a live countdown ("Continuing in Xs") on a second line. When sharing is active, the bar changes to "Sharing this tab" with a pulsing dot and a "Stop" link. The bar remains visible in the empty-state/new-chat view so users always have access to the stop control.
+- When Suggestions is enabled, a brand-new empty chat can show up to three configured starter suggestions; completed assistant turns can swap those for 2-3 LLM-generated follow-up suggestions. Clicking a suggestion sends it immediately.
 
 ## Activity panel
 Frontend actions are recorded and displayed in the Activity panel alongside backend actions:

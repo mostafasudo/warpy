@@ -217,6 +217,36 @@ def test_run_step_returns_response_directly(monkeypatch):
     result = asyncio.run(executor.run_step("Create a user", []))
     assert result.done is True
     assert result.response == "I've created the user."
+    assert result.suggestions == []
+
+
+def test_run_step_generates_widget_suggestions_when_enabled(monkeypatch):
+    responses = [
+        AIMessage(content="The invoice is ready.", tool_calls=[]),
+        AIMessage(content='["Send it to finance", "Create another invoice"]', tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, widget_suggestions_enabled=True)
+    result = asyncio.run(executor.run_step("Create an invoice", []))
+    assert result.done is True
+    assert result.suggestions == ["Send it to finance", "Create another invoice"]
+    assert len(llm.invocations) == 2
+
+
+def test_run_step_ignores_invalid_widget_suggestions(monkeypatch):
+    responses = [
+        AIMessage(content="The invoice is ready.", tool_calls=[]),
+        AIMessage(content='["Only one"]', tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, widget_suggestions_enabled=True)
+    result = asyncio.run(executor.run_step("Create an invoice", []))
+    assert result.done is True
+    assert result.suggestions == []
 
 
 def test_sanitize_localized_reply_strips_language_name_prefix():
@@ -231,6 +261,15 @@ def test_sanitize_localized_reply_strips_language_name_prefix():
         "fallback",
     )
     assert cleaned_inline == "I can only help with dashboard actions."
+
+
+def test_sanitize_widget_suggestions_dedupes_and_trims():
+    executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), widget_suggestions_enabled=True)
+    suggestions = executor._sanitize_widget_suggestions(
+        ["  Show recent invoices  ", "show recent invoices", "Create another invoice"],
+        min_count=2,
+    )
+    assert suggestions == ["Show recent invoices", "Create another invoice"]
 
 
 def test_run_step_uses_history_for_pending_messages(monkeypatch):

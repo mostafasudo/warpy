@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..core.logger import log_info
 from ..models import Agent
 from ..schemas.agent import AgentWidgetConfigResponse, AgentWidgetConfigUpdate
+from ..schemas.widget import WIDGET_SUGGESTION_MAX_COUNT, WIDGET_SUGGESTION_MAX_LENGTH
 
 
 def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfigResponse:
@@ -18,6 +19,8 @@ def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfig
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
+        widget_suggestions_enabled=agent.widget_suggestions_enabled,
+        widget_starter_suggestions=_normalize_widget_starter_suggestions(agent.widget_starter_suggestions)[:WIDGET_SUGGESTION_MAX_COUNT],
         widget_security_disclosure_enabled=agent.widget_security_disclosure_enabled,
     )
 
@@ -37,6 +40,11 @@ def update_agent_widget_config(
     agent.widget_empty_title = _strip_optional(payload.widget_empty_title)
     agent.widget_empty_description = _strip_optional(payload.widget_empty_description)
     agent.widget_input_placeholder = _strip_required(payload.widget_input_placeholder, "Input placeholder")
+    agent.widget_suggestions_enabled = payload.widget_suggestions_enabled
+    agent.widget_starter_suggestions = _validate_widget_starter_suggestions(
+        payload.widget_starter_suggestions,
+        enabled=payload.widget_suggestions_enabled,
+    )
     agent.widget_security_disclosure_enabled = payload.widget_security_disclosure_enabled
 
     session.flush()
@@ -48,6 +56,8 @@ def update_agent_widget_config(
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
+        widget_suggestions_enabled=agent.widget_suggestions_enabled,
+        widget_starter_suggestions=_normalize_widget_starter_suggestions(agent.widget_starter_suggestions)[:WIDGET_SUGGESTION_MAX_COUNT],
         widget_security_disclosure_enabled=agent.widget_security_disclosure_enabled,
     )
 
@@ -74,3 +84,32 @@ def _strip_required(value: str, label: str) -> str:
 
 def _strip_optional(value: str) -> str:
     return value.strip()
+
+
+def _normalize_widget_starter_suggestions(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        trimmed = " ".join(item.split()).strip()
+        if not trimmed:
+            continue
+        normalized.append(trimmed[:WIDGET_SUGGESTION_MAX_LENGTH])
+    return normalized
+
+
+def _validate_widget_starter_suggestions(values: list[str], *, enabled: bool) -> list[str]:
+    normalized = _normalize_widget_starter_suggestions(values)
+    if len(normalized) > WIDGET_SUGGESTION_MAX_COUNT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can save up to three starter suggestions.",
+        )
+    if enabled and not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add at least one starter suggestion before enabling suggestions.",
+        )
+    return normalized

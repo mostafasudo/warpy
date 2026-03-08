@@ -37,7 +37,10 @@ describe("widget config mutations", () => {
       widgetBehavior: "overlay",
       widgetEmptyTitle: "Hi",
       widgetEmptyDescription: "Hello",
-      widgetInputPlaceholder: "Ask…"
+      widgetInputPlaceholder: "Ask…",
+      widgetSuggestionsEnabled: false,
+      widgetStarterSuggestions: [],
+      widgetSecurityDisclosureEnabled: true,
     }
     options.onSuccess?.(next, undefined, undefined)
     expect(setQueryData).toHaveBeenCalledWith(agentWidgetConfigQueryKey, next)

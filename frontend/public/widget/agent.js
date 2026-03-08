@@ -3720,6 +3720,47 @@
         max-width: 320px;
       }
 
+      .cta-widget-suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        margin-top: 16px;
+      }
+
+      .cta-widget-suggestion {
+        appearance: none;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface-strong);
+        color: var(--cta-fg);
+        border-radius: 999px;
+        padding: 9px 12px;
+        font: inherit;
+        font-size: 12px;
+        line-height: 1.3;
+        cursor: pointer;
+        transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+        max-width: 100%;
+      }
+
+      .cta-widget-suggestion:hover:not(:disabled) {
+        border-color: var(--cta-accent);
+        background: var(--cta-accent-soft);
+        transform: translateY(-1px);
+      }
+
+      .cta-widget-suggestion:focus-visible {
+        outline: 2px solid var(--cta-ring);
+        outline-offset: 2px;
+      }
+
+      .cta-widget-suggestion:disabled {
+        opacity: 0.6;
+        cursor: default;
+        transform: none;
+      }
+
       .cta-widget-activity {
         border: 1px solid var(--cta-border);
         background: var(--cta-surface-strong);
@@ -4417,6 +4458,7 @@
     if (!state.voice) state.voice = {};
     if (!state.auth) state.auth = {};
     if (!state.ui) state.ui = {};
+    if (!Array.isArray(state.suggestions)) state.suggestions = [];
     const savedUi = loadUiState();
     if (savedUi && typeof savedUi.launcherY === "number") {
       state.ui.launcherY = clamp(savedUi.launcherY, 0, 1);
@@ -4493,6 +4535,8 @@
     let widgetEmptyTitle = "What would you like to do?";
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
     let widgetInputPlaceholder = "Ask Warpy…";
+    let widgetSuggestionsEnabled = false;
+    let widgetStarterSuggestions = [];
     let securityDisclosureEnabled = true;
     let isSecurityPanelOpen = false;
     let frontendActivity = null;
@@ -4901,6 +4945,52 @@
       syncFrontendWarningUi();
     }
 
+    function normalizeWidgetSuggestions(value, minCount) {
+      if (!Array.isArray(value)) return [];
+      const suggestions = [];
+      const seen = new Set();
+      for (const item of value) {
+        if (typeof item !== "string") continue;
+        const trimmed = item.replace(/\s+/g, " ").trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        suggestions.push(trimmed.slice(0, 120).trim());
+        if (suggestions.length === 3) break;
+      }
+      return suggestions.length >= (minCount || 0) ? suggestions : [];
+    }
+
+    function getVisibleSuggestions() {
+      if (!widgetSuggestionsEnabled) return [];
+      if (state.messages.length === 0) {
+        return widgetStarterSuggestions;
+      }
+      return Array.isArray(state.suggestions) ? state.suggestions : [];
+    }
+
+    function appendSuggestionButtons(container, suggestions) {
+      if (!suggestions || suggestions.length === 0) return;
+      const wrapper = document.createElement("div");
+      wrapper.className = "cta-widget-suggestions";
+      suggestions.forEach((suggestion) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "cta-widget-suggestion";
+        button.textContent = suggestion;
+        button.disabled = isLoading || widgetHidden;
+        button.addEventListener("click", () => {
+          if (isLoading || widgetHidden) return;
+          inputEl.value = "";
+          syncSendButton();
+          sendMessage(suggestion);
+        });
+        wrapper.appendChild(button);
+      });
+      container.appendChild(wrapper);
+    }
+
     function syncSendButton() {
       const showStop = isLoading && isOpen;
       sendEl.classList.toggle("is-stop", showStop);
@@ -5225,6 +5315,7 @@
           ${emptyTitle ? `<h3>${escapeHtml(emptyTitle)}</h3>` : ""}
           ${emptyDescription ? `<p>${escapeHtml(emptyDescription)}</p>` : ""}
         `;
+        appendSuggestionButtons(empty, getVisibleSuggestions());
         messagesEl.appendChild(empty);
         return;
       }
@@ -5288,6 +5379,8 @@
         }
         messagesEl.appendChild(activity);
       }
+
+      appendSuggestionButtons(messagesEl, getVisibleSuggestions());
 
       if (isLoading) {
         const loading = document.createElement("div");
@@ -5667,6 +5760,14 @@
       if (emptyTitle !== null) widgetEmptyTitle = emptyTitle;
       if (emptyDescription !== null) widgetEmptyDescription = emptyDescription;
       widgetInputPlaceholder = getConfigString(data, "widgetInputPlaceholder") || widgetInputPlaceholder;
+      if (typeof data.widgetSuggestionsEnabled === "boolean") {
+        widgetSuggestionsEnabled = data.widgetSuggestionsEnabled;
+      }
+      widgetStarterSuggestions = normalizeWidgetSuggestions(data.widgetStarterSuggestions, 0);
+      if (!widgetSuggestionsEnabled && state.suggestions.length > 0) {
+        state.suggestions = [];
+        saveState(state);
+      }
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;
       }
@@ -5788,8 +5889,9 @@
       const skipUserEcho = options && options.skipUserEcho === true;
       if (!skipUserEcho) {
         state.messages.push({ role: "user", content: messageText });
-        saveState(state);
       }
+      state.suggestions = [];
+      saveState(state);
       renderMessages();
       setLoading(true);
       const runAbortController = new AbortController();
@@ -5863,6 +5965,8 @@
             }
           }
         }
+
+        state.suggestions = normalizeWidgetSuggestions(data.suggestions, state.messages.length === 0 ? 0 : 2);
 
         if (!shouldHide) {
           saveState(state);
@@ -5959,6 +6063,7 @@
       }
       state.messages = [];
       state.conversationId = null;
+      state.suggestions = [];
       saveState(state);
       setUnread(false);
       clearFrontendActivity();

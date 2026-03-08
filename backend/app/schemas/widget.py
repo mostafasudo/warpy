@@ -5,6 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..models import AuthType, StorageSource
 
+WIDGET_SUGGESTION_MAX_COUNT = 3
+WIDGET_DYNAMIC_SUGGESTION_MIN_COUNT = 2
+WIDGET_SUGGESTION_MAX_LENGTH = 120
+
 
 class SessionHeaderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -31,6 +35,12 @@ class WidgetConfigResponse(BaseModel):
         alias="widgetEmptyDescription",
     )
     widget_input_placeholder: str = Field(default="Ask Warpy…", alias="widgetInputPlaceholder")
+    widget_suggestions_enabled: bool = Field(default=False, alias="widgetSuggestionsEnabled")
+    widget_starter_suggestions: list[str] = Field(
+        default_factory=list,
+        alias="widgetStarterSuggestions",
+        max_length=WIDGET_SUGGESTION_MAX_COUNT,
+    )
     security_disclosure_enabled: bool = Field(default=True, alias="securityDisclosureEnabled")
 
 
@@ -113,6 +123,7 @@ class WidgetChatResponse(BaseModel):
     conversation_id: UUID = Field(alias="conversationId")
     messages: list[WidgetMessagePayload] = []
     tool_calls: list[ToolCallPayload] = Field(default=[], alias="toolCalls")
+    suggestions: list[str] = Field(default_factory=list, alias="suggestions", max_length=WIDGET_SUGGESTION_MAX_COUNT)
     done: bool = False
     is_widget_hidden: bool = Field(default=False, alias="isWidgetHidden")
     actions_remaining: int = Field(default=0, alias="actionsRemaining")

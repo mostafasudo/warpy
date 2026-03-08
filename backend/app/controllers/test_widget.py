@@ -91,6 +91,49 @@ def test_widget_config_returns_headers(client: TestClient):
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
+    assert body["widgetSuggestionsEnabled"] is False
+    assert body["widgetStarterSuggestions"] == []
+
+
+def test_widget_chat_returns_dynamic_suggestions(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    class FakeExecutorWithSuggestions:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            return StepResult(
+                response="Here is the summary.",
+                suggestions=["Create another invoice", "Show unpaid invoices"],
+                done=True,
+                messages=[],
+                active_tool_ids=[],
+            )
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithSuggestions)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    update = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Warpy",
+            "widgetIconUrl": None,
+            "widgetBehavior": "overlay",
+            "widgetEmptyTitle": "What would you like to do?",
+            "widgetEmptyDescription": "Ask a question, request help, or describe what you want to get done.",
+            "widgetInputPlaceholder": "Ask Warpy…",
+            "widgetSuggestionsEnabled": True,
+            "widgetStarterSuggestions": ["Show unpaid invoices"],
+            "widgetSecurityDisclosureEnabled": True,
+        },
+    )
+    assert update.status_code == 200
+
+    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "Help me with invoices"})
+    assert response.status_code == 200
+    assert response.json()["suggestions"] == ["Create another invoice", "Show unpaid invoices"]
 
 
 def test_widget_hides_when_actions_exhausted(client: TestClient):

@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 from ..core.logger import log_info, log_warning
 from ..models import Agent, AuthType, Conversation, Message, SessionHeader
-from ..schemas.widget import SessionHeaderConfig, WidgetConfigResponse
+from ..schemas.widget import (
+    SessionHeaderConfig,
+    WIDGET_SUGGESTION_MAX_COUNT,
+    WIDGET_SUGGESTION_MAX_LENGTH,
+    WidgetConfigResponse,
+)
 from .billing_service import get_billing_actions_summary
 from .user_rate_limit_service import is_rate_limited
 
@@ -80,6 +85,8 @@ def get_widget_config(
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
         widget_input_placeholder=agent.widget_input_placeholder,
+        widget_suggestions_enabled=agent.widget_suggestions_enabled,
+        widget_starter_suggestions=_normalize_widget_starter_suggestions(agent.widget_starter_suggestions),
         security_disclosure_enabled=agent.widget_security_disclosure_enabled,
     )
 
@@ -159,3 +166,19 @@ def get_tool_context(session: Session, conversation_id: UUID) -> str | None:
         )
     )
     return msg.content if msg else None
+
+
+def _normalize_widget_starter_suggestions(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        trimmed = " ".join(item.split()).strip()
+        if not trimmed:
+            continue
+        normalized.append(trimmed[:WIDGET_SUGGESTION_MAX_LENGTH])
+        if len(normalized) == WIDGET_SUGGESTION_MAX_COUNT:
+            break
+    return normalized

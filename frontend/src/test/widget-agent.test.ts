@@ -15,6 +15,8 @@ const widgetSource = fs.readFileSync(path.resolve(process.cwd(), "public/widget/
 type WidgetConfig = {
   actionsRemaining?: number
   isWidgetHidden?: boolean
+  widgetStarterSuggestions?: string[]
+  widgetSuggestionsEnabled?: boolean
   widgetBehavior?: "overlay" | "push"
   widgetTitle?: string
   widgetInputPlaceholder?: string
@@ -36,6 +38,8 @@ function createConfig(overrides: WidgetConfig = {}): Required<WidgetConfig> {
     securityDisclosureEnabled: true,
     widgetBehavior: "overlay",
     widgetInputPlaceholder: "Ask Warpy…",
+    widgetStarterSuggestions: [],
+    widgetSuggestionsEnabled: false,
     widgetTitle: "Warpy",
     ...overrides,
   }
@@ -58,6 +62,7 @@ function createJsonResponse(body: unknown) {
   return {
     json: async () => body,
     ok: true,
+    status: 200,
   }
 }
 
@@ -85,9 +90,14 @@ function getWidth(panel: HTMLDivElement) {
   return Number.parseInt(panel.style.width || "0", 10)
 }
 
-async function loadWidget(configOverrides: WidgetConfig = {}): Promise<WidgetDom> {
+async function loadWidget(
+  configOverrides: WidgetConfig = {},
+  options: { mockConfigFetch?: boolean } = {}
+): Promise<WidgetDom> {
   const config = createConfig(configOverrides)
-  ;(global.fetch as jest.Mock).mockImplementation(async () => createJsonResponse(config))
+  if (options.mockConfigFetch !== false) {
+    ;(global.fetch as jest.Mock).mockImplementation(async () => createJsonResponse(config))
+  }
 
   const script = document.createElement("script")
   script.src = SCRIPT_SRC
@@ -111,6 +121,12 @@ async function loadWidget(configOverrides: WidgetConfig = {}): Promise<WidgetDom
     panel: shadowRoot?.querySelector(".cta-widget-panel") as HTMLDivElement,
     toggle: shadowRoot?.querySelector(".cta-widget-toggle") as HTMLButtonElement,
   }
+}
+
+function getShadowRoot(widget: WidgetDom) {
+  const shadowRoot = widget.host.shadowRoot
+  expect(shadowRoot).not.toBeNull()
+  return shadowRoot as ShadowRoot
 }
 
 async function openPanel(widget: WidgetDom) {
@@ -219,5 +235,63 @@ describe("widget desktop resize", () => {
     expect(widget.handle.tabIndex).toBe(-1)
     expect(widget.handle.classList.contains("active")).toBe(false)
     expect(widget.panel.style.width).toBe("")
+  })
+
+  it("renders starter suggestions, sends clicked suggestions immediately, and swaps in dynamic suggestions", async () => {
+    const config = createConfig({
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices", "Create a refund"]
+    })
+    const chatBodies: Array<Record<string, unknown>> = []
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(config)
+      }
+      if (url.endsWith("/widget/chat")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>
+        chatBodies.push(body)
+        return createJsonResponse({
+          conversationId: "conversation-1",
+          messages: [{ role: "assistant", content: "Here is the update." }],
+          toolCalls: [],
+          suggestions: ["Send it to finance", "Create another invoice"],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    const widget = await loadWidget({}, { mockConfigFetch: false })
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-suggestion")?.textContent).toBe("Show recent invoices")
+    })
+
+    const starterButton = Array.from(shadowRoot.querySelectorAll(".cta-widget-suggestion")).find(
+      (element) => element.textContent === "Create a refund"
+    ) as HTMLButtonElement | undefined
+    expect(starterButton).toBeDefined()
+    fireEvent.click(starterButton!)
+
+    await waitFor(() => {
+      expect(chatBodies).toHaveLength(1)
+      expect(chatBodies[0]).toMatchObject({
+        agentId: AGENT_ID,
+        conversationId: null,
+        message: "Create a refund",
+      })
+    })
+
+    await waitFor(() => {
+      const suggestionTexts = Array.from(shadowRoot.querySelectorAll(".cta-widget-suggestion")).map((element) => element.textContent)
+      expect(suggestionTexts).toEqual(["Send it to finance", "Create another invoice"])
+    })
+    expect(shadowRoot.textContent).toContain("Here is the update.")
   })
 })

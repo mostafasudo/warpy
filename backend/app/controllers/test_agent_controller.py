@@ -94,6 +94,7 @@ def test_agent_conversation_and_chat_flow(client: TestClient):
     assert conversations.status_code == 200
     assert len(conversations.json()) == 1
     assert FakeExecutor.instances[-1].kwargs["custom_user_system_prompt"] == DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+    assert FakeExecutor.instances[-1].kwargs["widget_suggestions_enabled"] is False
 
 
 def test_agent_custom_system_prompt_get_and_update(client: TestClient):
@@ -179,6 +180,8 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
+    assert body["widgetSuggestionsEnabled"] is False
+    assert body["widgetStarterSuggestions"] == []
 
     updated = client.put(
         "/agent/widget-config",
@@ -190,6 +193,8 @@ def test_agent_widget_config_get_and_update(client: TestClient):
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
             "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": True,
+            "widgetStarterSuggestions": ["Show recent invoices", "Create a refund"],
         },
     )
     assert updated.status_code == 200
@@ -197,11 +202,14 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert updated_body["widgetTitle"] == "Acme Assistant"
     assert updated_body["widgetIconUrl"] == "https://example.com/icon.png"
     assert updated_body["widgetBehavior"] == "push"
+    assert updated_body["widgetSuggestionsEnabled"] is True
+    assert updated_body["widgetStarterSuggestions"] == ["Show recent invoices", "Create a refund"]
 
     refetched = client.get("/agent/widget-config", headers=auth_headers())
     assert refetched.status_code == 200
     assert refetched.json()["widgetTitle"] == "Acme Assistant"
     assert refetched.json()["widgetBehavior"] == "push"
+    assert refetched.json()["widgetStarterSuggestions"] == ["Show recent invoices", "Create a refund"]
 
 
 def test_agent_widget_config_icon_url_validation(client: TestClient):
@@ -218,6 +226,8 @@ def test_agent_widget_config_icon_url_validation(client: TestClient):
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
             "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": False,
+            "widgetStarterSuggestions": [],
         },
     )
     assert invalid.status_code == 400
@@ -237,6 +247,8 @@ def test_agent_widget_config_rejects_blank_title(client: TestClient):
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
             "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": False,
+            "widgetStarterSuggestions": [],
         },
     )
     assert invalid.status_code == 400
@@ -256,6 +268,8 @@ def test_agent_widget_config_allows_blank_empty_state_fields(client: TestClient)
             "widgetEmptyTitle": "   ",
             "widgetEmptyDescription": "   ",
             "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": True,
+            "widgetStarterSuggestions": ["  Review approvals  ", "   "],
         },
     )
     assert updated.status_code == 200
@@ -263,6 +277,7 @@ def test_agent_widget_config_allows_blank_empty_state_fields(client: TestClient)
     assert updated_body["widgetBehavior"] == "push"
     assert updated_body["widgetEmptyTitle"] == ""
     assert updated_body["widgetEmptyDescription"] == ""
+    assert updated_body["widgetStarterSuggestions"] == ["Review approvals"]
 
 
 def test_agent_widget_config_rejects_invalid_behavior(client: TestClient):
@@ -279,6 +294,51 @@ def test_agent_widget_config_rejects_invalid_behavior(client: TestClient):
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
             "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": False,
+            "widgetStarterSuggestions": [],
+        },
+    )
+    assert invalid.status_code == 422
+
+
+def test_agent_widget_config_requires_starter_suggestion_when_enabled(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    invalid = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetIconUrl": None,
+            "widgetBehavior": "overlay",
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": True,
+            "widgetStarterSuggestions": [],
+        },
+    )
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"] == "Add at least one starter suggestion before enabling suggestions."
+
+
+def test_agent_widget_config_rejects_more_than_three_starter_suggestions(client: TestClient):
+    create = client.post("/agent", headers=auth_headers())
+    assert create.status_code == 201
+
+    invalid = client.put(
+        "/agent/widget-config",
+        headers=auth_headers(),
+        json={
+            "widgetTitle": "Acme Assistant",
+            "widgetIconUrl": None,
+            "widgetBehavior": "overlay",
+            "widgetEmptyTitle": "How can we help?",
+            "widgetEmptyDescription": "Ask a question or request help.",
+            "widgetInputPlaceholder": "Ask Acme…",
+            "widgetSuggestionsEnabled": True,
+            "widgetStarterSuggestions": ["One", "Two", "Three", "Four"],
         },
     )
     assert invalid.status_code == 422

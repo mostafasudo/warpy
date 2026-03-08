@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.agent_custom_system_prompt import CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH
 
+WIDGET_STARTER_SUGGESTION_MAX_COUNT = 3
+
 
 class AgentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -64,6 +66,12 @@ class AgentWidgetConfigResponse(BaseModel):
     widget_empty_title: str = Field(alias="widgetEmptyTitle", max_length=120)
     widget_empty_description: str = Field(alias="widgetEmptyDescription", max_length=240)
     widget_input_placeholder: str = Field(alias="widgetInputPlaceholder", min_length=1, max_length=120)
+    widget_suggestions_enabled: bool = Field(default=False, alias="widgetSuggestionsEnabled")
+    widget_starter_suggestions: list[str] = Field(
+        default_factory=list,
+        alias="widgetStarterSuggestions",
+        max_length=WIDGET_STARTER_SUGGESTION_MAX_COUNT,
+    )
     widget_security_disclosure_enabled: bool = Field(default=True, alias="widgetSecurityDisclosureEnabled")
 
 

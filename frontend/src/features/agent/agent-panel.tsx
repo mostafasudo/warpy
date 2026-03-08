@@ -381,8 +381,32 @@ type WidgetConfigDraft = {
   widgetEmptyTitle: string
   widgetEmptyDescription: string
   widgetInputPlaceholder: string
+  widgetSuggestionsEnabled: boolean
+  widgetStarterSuggestions: [string, string, string]
   widgetSecurityDisclosureEnabled: boolean
 }
+
+type WidgetConfigPayload = Omit<WidgetConfigDraft, "widgetStarterSuggestions"> & {
+  widgetStarterSuggestions: string[]
+}
+
+const WIDGET_STARTER_SUGGESTION_LIMIT = 3
+
+const createEmptyStarterSuggestionSlots = (): [string, string, string] => ["", "", ""]
+
+const toWidgetStarterSuggestionSlots = (value: string[] | undefined): [string, string, string] => {
+  const slots = createEmptyStarterSuggestionSlots()
+  value?.slice(0, WIDGET_STARTER_SUGGESTION_LIMIT).forEach((item, index) => {
+    slots[index] = item
+  })
+  return slots
+}
+
+const STARTER_SUGGESTION_PLACEHOLDERS = [
+  "Show recent invoices",
+  "Create a refund",
+  "Summarize open approvals"
+] as const
 
 const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetTitle: "Warpy",
@@ -391,6 +415,8 @@ const DEFAULT_WIDGET_CONFIG: WidgetConfigDraft = {
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
   widgetInputPlaceholder: "Ask Warpy…",
+  widgetSuggestionsEnabled: false,
+  widgetStarterSuggestions: createEmptyStarterSuggestionSlots(),
   widgetSecurityDisclosureEnabled: true
 }
 
@@ -414,19 +440,25 @@ const WIDGET_BEHAVIOR_OPTIONS: Array<{
   }
 ]
 
-const normalizeWidgetConfig = (value: WidgetConfigDraft) => ({
+const normalizeWidgetConfig = (value: WidgetConfigDraft): WidgetConfigPayload => ({
   widgetTitle: value.widgetTitle.trim(),
   widgetIconUrl: value.widgetIconUrl?.trim() ? value.widgetIconUrl.trim() : null,
   widgetBehavior: value.widgetBehavior,
   widgetEmptyTitle: value.widgetEmptyTitle.trim(),
   widgetEmptyDescription: value.widgetEmptyDescription.trim(),
   widgetInputPlaceholder: value.widgetInputPlaceholder.trim(),
+  widgetSuggestionsEnabled: value.widgetSuggestionsEnabled,
+  widgetStarterSuggestions: value.widgetStarterSuggestions
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, WIDGET_STARTER_SUGGESTION_LIMIT),
   widgetSecurityDisclosureEnabled: value.widgetSecurityDisclosureEnabled
 })
 
-const createWidgetConfigDraft = (value: WidgetConfigDraft): WidgetConfigDraft => ({
+const createWidgetConfigDraft = (value: WidgetConfigPayload): WidgetConfigDraft => ({
   ...value,
-  widgetBehavior: value.widgetBehavior === "push" ? "push" : "overlay"
+  widgetBehavior: value.widgetBehavior === "push" ? "push" : "overlay",
+  widgetStarterSuggestions: toWidgetStarterSuggestionSlots(value.widgetStarterSuggestions)
 })
 
 const DEFAULT_WIDGET_CONFIG_FINGERPRINT = JSON.stringify(normalizeWidgetConfig(DEFAULT_WIDGET_CONFIG))
@@ -482,12 +514,32 @@ const ConfigureWidgetPanel = () => {
     if (!draft) return null
     return iconMode === "custom" ? (draft.widgetIconUrl?.trim() ? draft.widgetIconUrl.trim() : null) : null
   }, [draft, iconMode])
+  const starterSuggestionsCount = payload?.widgetStarterSuggestions.length ?? 0
+  const suggestionsValidationMessage = useMemo(() => {
+    if (!payload?.widgetSuggestionsEnabled) return null
+    if (payload.widgetStarterSuggestions.length === 0) {
+      return "Add at least one starter suggestion before saving."
+    }
+    return null
+  }, [payload])
 
   const setWidgetBehavior = (value: WidgetBehavior, options?: { focus?: boolean }) => {
     setDraft((current) => (current ? { ...current, widgetBehavior: value } : current))
     if (options?.focus) {
       widgetBehaviorOptionRefs.current[value]?.focus()
     }
+  }
+
+  const setStarterSuggestion = (index: number, value: string) => {
+    setDraft((current) => {
+      if (!current) return current
+      const nextSuggestions = [...current.widgetStarterSuggestions] as [string, string, string]
+      nextSuggestions[index] = value
+      return {
+        ...current,
+        widgetStarterSuggestions: nextSuggestions,
+      }
+    })
   }
 
   const handleWidgetBehaviorKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, fallbackIndex: number) => {
@@ -509,6 +561,10 @@ const ConfigureWidgetPanel = () => {
 
   const handleSave = async () => {
     if (!payload) return
+    if (suggestionsValidationMessage) {
+      addToast({ title: "Save failed", description: suggestionsValidationMessage, variant: "error" })
+      return
+    }
     try {
       await updateConfig.mutateAsync(payload)
       addToast({ title: "Saved", description: "Widget configuration updated.", variant: "success" })
@@ -525,7 +581,7 @@ const ConfigureWidgetPanel = () => {
   }
 
   const handleRestoreDefaults = () => {
-    setDraft(DEFAULT_WIDGET_CONFIG)
+    setDraft(createWidgetConfigDraft(DEFAULT_WIDGET_CONFIG))
     setIconMode("default")
   }
 
@@ -736,6 +792,64 @@ const ConfigureWidgetPanel = () => {
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="widget-suggestions-toggle" className="text-sm font-semibold">
+                        Suggestions
+                      </Label>
+                      <Badge variant={draft.widgetSuggestionsEnabled ? "default" : "secondary"}>
+                        {draft.widgetSuggestionsEnabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Show starter suggestions in a new chat. After each reply, it can suggest what to ask next based on the chat and what the agent can do.
+                    </p>
+                  </div>
+                  <Switch
+                    id="widget-suggestions-toggle"
+                    checked={draft.widgetSuggestionsEnabled}
+                    onCheckedChange={(checked) => setDraft({ ...draft, widgetSuggestionsEnabled: checked })}
+                    aria-label="Toggle widget suggestions"
+                  />
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Starter suggestions</p>
+                      <p className="text-sm text-muted-foreground">
+                        Add up to three suggestions for a brand-new, empty chat.
+                      </p>
+                    </div>
+                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      {starterSuggestionsCount}/{WIDGET_STARTER_SUGGESTION_LIMIT} saved
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    {STARTER_SUGGESTION_PLACEHOLDERS.map((placeholder, index) => (
+                      <div key={placeholder} className="space-y-2">
+                        <Label htmlFor={`starter-suggestion-${index + 1}`}>Starter suggestion {index + 1}</Label>
+                        <Input
+                          id={`starter-suggestion-${index + 1}`}
+                          value={draft.widgetStarterSuggestions[index]}
+                          onChange={(event) => setStarterSuggestion(index, event.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {suggestionsValidationMessage ? (
+                    <p className="mt-4 text-sm text-destructive">{suggestionsValidationMessage}</p>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      Tip: use short, clickable requests like "Show recent invoices", "Create a refund", or "Export this report".
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-4">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
                       <Label htmlFor="security-disclosure-toggle" className="text-sm font-semibold">
@@ -770,7 +884,7 @@ const ConfigureWidgetPanel = () => {
                   </Button>
                   <Button
                     onClick={handleSave}
-                    disabled={!isDirty || updateConfig.isPending}
+                    disabled={!isDirty || updateConfig.isPending || Boolean(suggestionsValidationMessage)}
                     className="w-full justify-center sm:w-auto"
                   >
                     Save changes

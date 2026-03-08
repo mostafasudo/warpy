@@ -18,7 +18,13 @@ from ..core.agent_custom_system_prompt import (
 from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
 from ..models import Tool
-from ..schemas.widget import ToolCallPayload, ToolResultPayload
+from ..schemas.widget import (
+    ToolCallPayload,
+    ToolResultPayload,
+    WIDGET_DYNAMIC_SUGGESTION_MIN_COUNT,
+    WIDGET_SUGGESTION_MAX_COUNT,
+    WIDGET_SUGGESTION_MAX_LENGTH,
+)
 from .agent_execution import execute_backend_tool
 from .agent_schema import SchemaFactory, serialize_args
 from .agent_tools import create_find_elements_tool, create_find_tools_tool, create_frontend_actions_tool, create_js_exec_tool, create_read_page_tool, get_agent_tools
@@ -140,6 +146,7 @@ def build_system_prompt(
 class StepResult:
     tool_calls: list[ToolCallPayload] = field(default_factory=list)
     response: str | None = None
+    suggestions: list[str] = field(default_factory=list)
     done: bool = False
     messages: list[BaseMessage] = field(default_factory=list)
     active_tool_ids: list[UUID] = field(default_factory=list)
@@ -156,6 +163,7 @@ class AgentExecutor:
         schema_factory: SchemaFactory | None = None,
         frontend_capability_enabled: bool = True,
         knowledge_base_enabled: bool = False,
+        widget_suggestions_enabled: bool = False,
         custom_user_system_prompt: str = DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
     ):
         self.session = session
@@ -163,6 +171,7 @@ class AgentExecutor:
         self.conversation_id = conversation_id
         self.frontend_capability_enabled = frontend_capability_enabled
         self.knowledge_base_enabled = knowledge_base_enabled
+        self.widget_suggestions_enabled = widget_suggestions_enabled
         self.custom_user_system_prompt = custom_user_system_prompt
         self.schema_factory = schema_factory or SchemaFactory()
         self._system_prompt = build_system_prompt(
@@ -329,6 +338,99 @@ Keep it brief and friendly."""
         text = LANGUAGE_TAG_PREFIX_PATTERN.sub("", text).strip()
         return text or fallback
 
+    @staticmethod
+    def _extract_conversation_for_suggestions(messages: list[BaseMessage]) -> str:
+        lines: list[str] = []
+        for message in messages:
+            if isinstance(message, HumanMessage):
+                content = str(message.content or "").strip()
+                if content:
+                    lines.append(f"User: {content}")
+            elif isinstance(message, AIMessage):
+                content = str(message.content or "").strip()
+                if content:
+                    lines.append(f"Assistant: {content}")
+        return "\n".join(lines[-6:])
+
+    @staticmethod
+    def _parse_json_array(text: str) -> list[str] | None:
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"\[[\s\S]*\]", text)
+            if not match:
+                return None
+            try:
+                parsed = json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return None
+        return parsed if isinstance(parsed, list) else None
+
+    def _sanitize_widget_suggestions(self, value: object, *, min_count: int) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        suggestions: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            if not isinstance(item, str):
+                continue
+            trimmed = " ".join(item.split()).strip().strip("\"'")
+            if not trimmed:
+                continue
+            lowered = trimmed.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            suggestions.append(trimmed[:WIDGET_SUGGESTION_MAX_LENGTH].rstrip(" .,:;-"))
+            if len(suggestions) == WIDGET_SUGGESTION_MAX_COUNT:
+                break
+        if len(suggestions) < min_count:
+            return []
+        return suggestions
+
+    def _get_suggestion_capabilities(self) -> str:
+        capabilities: list[str] = []
+        if self.frontend_capability_enabled:
+            capabilities.append("screen_autopilot: inspect the current page and take UI actions for the user")
+        if self.knowledge_base_enabled:
+            capabilities.append("search_knowledge_base: answer product questions from uploaded docs")
+        for tool in self._get_tools():
+            if tool.name in DISCOVERY_TOOL_NAMES or tool.name in {"read_page", "find_elements", "frontend", "js_exec"}:
+                continue
+            capabilities.append(f"{tool.name}: {tool.description}")
+        return "\n".join(capabilities[:12]) or "No additional customer tools are currently available."
+
+    async def _maybe_generate_widget_suggestions(self, messages: list[BaseMessage], response_text: str) -> list[str]:
+        if not self.widget_suggestions_enabled:
+            return []
+        conversation = self._extract_conversation_for_suggestions(messages)
+        if not conversation.strip() or not response_text.strip():
+            return []
+        prompt = (
+            "You generate short follow-up suggestions for a dashboard agent widget.\n"
+            f"Return ONLY a JSON array with {WIDGET_DYNAMIC_SUGGESTION_MIN_COUNT} or {WIDGET_SUGGESTION_MAX_COUNT} strings.\n"
+            "Each suggestion must sound like something the user could click next.\n"
+            "Rules:\n"
+            "- Same language as the user.\n"
+            "- Concrete, concise, and action-oriented.\n"
+            "- No internal tool names, APIs, or implementation details.\n"
+            "- Do not repeat the user's exact last message.\n"
+            "- If there are fewer than two strong suggestions, return [].\n\n"
+            f"Conversation:\n{conversation}\n\n"
+            f"Assistant reply:\n{response_text.strip()}\n\n"
+            f"Available capabilities:\n{self._get_suggestion_capabilities()}"
+        )
+        try:
+            response = await self.llm.ainvoke(
+                [SystemMessage(content=prompt)],
+                config={"tags": ["widget-suggestions"]},
+            )
+        except Exception as error:
+            log_error("AgentExecutor", "_maybe_generate_widget_suggestions", "Suggestion generation failed", exc=error)
+            return []
+        parsed = self._parse_json_array(str(response.content or ""))
+        return self._sanitize_widget_suggestions(parsed, min_count=WIDGET_DYNAMIC_SUGGESTION_MIN_COUNT)
+
     def _build_frontend_recovery_note(self, result: ToolResultPayload) -> str | None:
         if result.status_code not in (207, 400, 404, 422, 500):
             if result.status_code not in (200, 201, 204):
@@ -431,8 +533,10 @@ Keep it brief and friendly."""
             runtime_messages.append(response)
 
             if not response.tool_calls:
+                suggestions = await self._maybe_generate_widget_suggestions(messages, response.content or "")
                 return StepResult(
                     response=response.content or "",
+                    suggestions=suggestions,
                     done=True,
                     messages=messages,
                     active_tool_ids=self.active_tool_ids
@@ -597,8 +701,10 @@ Keep it brief and friendly."""
                     user_input = msg["content"]
                     break
         max_iter_response = await self._generate_max_iterations_response(user_input)
+        suggestions = await self._maybe_generate_widget_suggestions(messages, max_iter_response)
         return StepResult(
             response=max_iter_response,
+            suggestions=suggestions,
             done=True,
             messages=messages,
             active_tool_ids=self.active_tool_ids

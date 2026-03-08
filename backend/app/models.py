@@ -229,6 +229,8 @@ class Agent(Base):
         server_default="Ask a question, request help, or describe what you want to get done.",
     )
     widget_input_placeholder = Column(Text, nullable=False, server_default="Ask Warpy…")
+    widget_suggestions_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    widget_starter_suggestions = Column(json_type, nullable=False, server_default=text("'[]'"), default=list)
     widget_install_framework = Column(Text, nullable=False, server_default="react")
     widget_install_package_manager = Column(Text, nullable=False, server_default="npm")
     widget_security_disclosure_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)

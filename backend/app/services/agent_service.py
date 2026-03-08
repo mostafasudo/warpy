@@ -30,6 +30,7 @@ def build_agent_executor_config(agent: Agent | None) -> dict[str, bool | str]:
     return {
         "frontend_capability_enabled": agent.frontend_capability_enabled if agent else True,
         "knowledge_base_enabled": agent.knowledge_base_enabled if agent else False,
+        "widget_suggestions_enabled": agent.widget_suggestions_enabled if agent else False,
         "custom_user_system_prompt": (
             agent.custom_user_system_prompt if agent else DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
         ),

@@ -143,6 +143,8 @@ export type AgentWidgetConfigResponse = {
   widgetEmptyTitle: string;
   widgetEmptyDescription: string;
   widgetInputPlaceholder: string;
+  widgetSuggestionsEnabled: boolean;
+  widgetStarterSuggestions: string[];
   widgetSecurityDisclosureEnabled: boolean;
 };
 

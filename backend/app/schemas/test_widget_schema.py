@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.widget import FrontendActionPayload, ToolCallPayload
+from app.schemas.widget import FrontendActionPayload, ToolCallPayload, WidgetChatResponse
 
 
 def test_frontend_action_payload_allows_up_to_three_alternatives():
@@ -91,3 +91,33 @@ def test_tool_call_payload_defaults_new_fields_to_none():
     assert payload.read_page_options is None
     assert payload.find_query is None
     assert payload.js_code is None
+
+
+def test_widget_chat_response_accepts_up_to_three_suggestions():
+    payload = WidgetChatResponse.model_validate(
+        {
+            "conversationId": "11111111-1111-1111-1111-111111111111",
+            "messages": [],
+            "toolCalls": [],
+            "suggestions": ["One", "Two", "Three"],
+            "done": True,
+            "isWidgetHidden": False,
+            "actionsRemaining": 5,
+        }
+    )
+    assert payload.suggestions == ["One", "Two", "Three"]
+
+
+def test_widget_chat_response_rejects_more_than_three_suggestions():
+    with pytest.raises(ValidationError):
+        WidgetChatResponse.model_validate(
+            {
+                "conversationId": "11111111-1111-1111-1111-111111111111",
+                "messages": [],
+                "toolCalls": [],
+                "suggestions": ["One", "Two", "Three", "Four"],
+                "done": True,
+                "isWidgetHidden": False,
+                "actionsRemaining": 5,
+            }
+        )
