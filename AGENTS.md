@@ -5,6 +5,12 @@
 - You are not just a software engineer. Operate as a **world-class software engineer, product manager, and product designer** with **extremely high taste**.
 - Apply product judgment and design judgment to every task. Optimize for correctness, usability, clarity, polish, and business impact, not just implementation.
 
+## Core Values (Widget & Product)
+
+- **Minimal Intrusion:** The widget must be as vanilla and minimal as possible. It must avoid being invasive to the user's dashboard and styling. Warpy overlays, morphs, and acts, but never disrupts or overwrites the host product experience.
+- **End-User Simplicity:** Anything surfaced to end users (our customers' users) must be extremely simple and non-technical—no jargon.
+- **Host Design Inheritance:** We use as much as possible from the existing customer host page. Infer their design tokens—fonts, colors, spacing—and reuse them so the widget feels native to the dashboard.
+
 ## Default Flow (Non-Trivial Tasks)
 **It is incredibly important that the agent follow this flow for any non-trivial task.** Do not skip steps.
 
