@@ -37,6 +37,18 @@ def test_build_agent_executor_config_defaults_without_agent():
     assert config == {
         "frontend_capability_enabled": True,
         "knowledge_base_enabled": False,
+        "widget_suggestions_enabled": False,
+        "custom_user_system_prompt": DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
+    }
+
+
+def test_build_agent_executor_config_defaults_transient_agent_fields():
+    agent = Agent(user_id="user")
+    config = build_agent_executor_config(agent)
+    assert config == {
+        "frontend_capability_enabled": True,
+        "knowledge_base_enabled": False,
+        "widget_suggestions_enabled": False,
         "custom_user_system_prompt": DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
     }
 
@@ -46,11 +58,13 @@ def test_build_agent_executor_config_uses_agent_values():
         user_id="user",
         frontend_capability_enabled=False,
         knowledge_base_enabled=True,
+        widget_suggestions_enabled=True,
         custom_user_system_prompt="Keep it short.",
     )
     config = build_agent_executor_config(agent)
     assert config == {
         "frontend_capability_enabled": False,
         "knowledge_base_enabled": True,
+        "widget_suggestions_enabled": True,
         "custom_user_system_prompt": "Keep it short.",
     }

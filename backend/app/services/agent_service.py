@@ -27,12 +27,34 @@ def get_agent(session: Session, user_id: str) -> Agent | None:
 
 
 def build_agent_executor_config(agent: Agent | None) -> dict[str, bool | str]:
+    if not agent:
+        return {
+            "frontend_capability_enabled": True,
+            "knowledge_base_enabled": False,
+            "widget_suggestions_enabled": False,
+            "custom_user_system_prompt": DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
+        }
+
     return {
-        "frontend_capability_enabled": agent.frontend_capability_enabled if agent else True,
-        "knowledge_base_enabled": agent.knowledge_base_enabled if agent else False,
-        "widget_suggestions_enabled": agent.widget_suggestions_enabled if agent else False,
+        "frontend_capability_enabled": (
+            agent.frontend_capability_enabled
+            if agent.frontend_capability_enabled is not None
+            else True
+        ),
+        "knowledge_base_enabled": (
+            agent.knowledge_base_enabled
+            if agent.knowledge_base_enabled is not None
+            else False
+        ),
+        "widget_suggestions_enabled": (
+            agent.widget_suggestions_enabled
+            if agent.widget_suggestions_enabled is not None
+            else False
+        ),
         "custom_user_system_prompt": (
-            agent.custom_user_system_prompt if agent else DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
+            agent.custom_user_system_prompt
+            if agent.custom_user_system_prompt is not None
+            else DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
         ),
     }
 
