@@ -23,29 +23,70 @@ class FakeClient:
 
 
 class FakeSession:
-    def __init__(self, scalar_results=None, scalars_result=None, capture_query=False):
+    class Bind:
+        class Dialect:
+            def __init__(self, name):
+                self.name = name
+
+        def __init__(self, name):
+            self.dialect = self.Dialect(name)
+
+    def __init__(
+        self,
+        scalar_results=None,
+        scalars_result=None,
+        scalars_result_sets=None,
+        execute_results=None,
+        execute_result_sets=None,
+        capture_query=False,
+        dialect_name=None,
+    ):
         self.scalar_results = scalar_results or []
         self.scalars_result = scalars_result or []
+        self.scalars_result_sets = list(scalars_result_sets or [])
+        self.execute_results = execute_results or []
+        self.execute_result_sets = list(execute_result_sets or [])
         self.added = []
         self.deleted = []
         self.flushed = False
         self.capture_query = capture_query
         self.last_query = None
+        self.queries = []
+        self.last_execute_params = None
+        self.bind = self.Bind(dialect_name) if dialect_name else None
 
     def scalar(self, _query):
+        if self.capture_query:
+            self.queries.append(_query)
+            self.last_query = _query
         if self.scalar_results:
             return self.scalar_results.pop(0)
         return None
 
     def scalars(self, _query):
         if self.capture_query:
+            self.queries.append(_query)
             self.last_query = _query
+        rows = self.scalars_result_sets.pop(0) if self.scalars_result_sets else self.scalars_result
         class Result:
             def __init__(self, rows):
                 self._rows = rows
             def all(self):
                 return self._rows
-        return Result(self.scalars_result)
+        return Result(rows)
+
+    def execute(self, _query, _params=None):
+        if self.capture_query:
+            self.queries.append(_query)
+            self.last_query = _query
+            self.last_execute_params = _params
+        rows = self.execute_result_sets.pop(0) if self.execute_result_sets else self.execute_results
+        class Result:
+            def __init__(self, rows):
+                self._rows = rows
+            def all(self):
+                return self._rows
+        return Result(rows)
 
     def add(self, obj):
         self.added.append(obj)
@@ -126,13 +167,27 @@ def test_delete_tool_embedding_removes(monkeypatch: pytest.MonkeyPatch):
     assert existing in session.deleted
 
 
-def test_search_similar_tools_handles_zero_and_errors(monkeypatch: pytest.MonkeyPatch):
+def test_search_similar_tools_handles_zero_results(monkeypatch: pytest.MonkeyPatch):
     session = FakeSession(scalar_results=[0])
     assert search_similar_tools(session, "u", "q") == []
 
-    session2 = FakeSession(scalar_results=[1], scalars_result=[UUID(int=5)])
+
+def test_search_similar_tools_embedding_error_uses_lexical_fallback(monkeypatch: pytest.MonkeyPatch):
+    session = FakeSession(
+        scalar_results=[1],
+        execute_result_sets=[[(UUID(int=5),)]],
+    )
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: (_ for _ in ()).throw(RuntimeError("fail")))
-    assert search_similar_tools(session2, "u", "q") == []
+    assert search_similar_tools(session, "u", "get products") == [UUID(int=5)]
+
+
+def test_search_similar_tools_skips_embeddings_when_vector_search_is_unsupported(monkeypatch: pytest.MonkeyPatch):
+    session = FakeSession(
+        scalar_results=[1],
+        execute_result_sets=[[(UUID(int=6),)]],
+    )
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: (_ for _ in ()).throw(RuntimeError("should not run")))
+    assert search_similar_tools(session, "u", "get products") == [UUID(int=6)]
 
 
 def test_upsert_tool_embedding_missing_tool_logs(monkeypatch: pytest.MonkeyPatch):
@@ -141,7 +196,11 @@ def test_upsert_tool_embedding_missing_tool_logs(monkeypatch: pytest.MonkeyPatch
 
 
 def test_search_similar_tools_success(monkeypatch: pytest.MonkeyPatch):
-    session = FakeSession(scalar_results=[1], scalars_result=[UUID(int=7)])
+    session = FakeSession(
+        scalar_results=[1],
+        execute_results=[(UUID(int=7),)],
+        dialect_name="postgresql",
+    )
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: [0.1])
     result = search_similar_tools(session, "u", "q", top_k=1)
     assert result == [UUID(int=7)]
@@ -187,11 +246,69 @@ def test_upsert_tool_embedding_rejects_user_mismatch(monkeypatch: pytest.MonkeyP
 
 
 def test_search_similar_tools_filters_by_tool_owner(monkeypatch: pytest.MonkeyPatch):
-    session = FakeSession(scalars_result=[UUID(int=13)], capture_query=True)
+    session = FakeSession(
+        execute_results=[(UUID(int=13),)],
+        capture_query=True,
+        dialect_name="postgresql",
+    )
     monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: [0.1])
     result = search_similar_tools(session, "user-x", "query", top_k=1)
     assert result == [UUID(int=13)]
     sql = str(session.last_query).lower()
-    assert "halfvec" in sql
-    assert "tools.user_id" in sql
-    assert "tool_embeddings.user_id" not in sql
+    assert "with candidates as materialized" in sql
+    assert "tool_embeddings.user_id = :user_id_1" in sql
+    assert "tools.user_id = :user_id_2" in sql
+
+
+def test_search_similar_tools_selects_distance_in_query(monkeypatch: pytest.MonkeyPatch):
+    session = FakeSession(
+        execute_results=[(UUID(int=14),)],
+        capture_query=True,
+        dialect_name="postgresql",
+    )
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: [0.1])
+    result = search_similar_tools(session, "user-x", "query", top_k=1)
+    assert result == [UUID(int=14)]
+    sql = str(session.last_query).lower()
+    assert "order by cast(candidates.embedding as halfvec" in sql
+    assert "<=> :param_1" in sql
+    assert "limit :param_2" in sql
+
+
+def test_search_similar_tools_backfills_when_vector_results_are_short(monkeypatch: pytest.MonkeyPatch):
+    session = FakeSession(
+        execute_result_sets=[[(UUID(int=14),)], [(UUID(int=15),)]],
+        dialect_name="postgresql",
+    )
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: [0.1])
+    result = search_similar_tools(session, "u", "get products", top_k=2)
+    assert result == [UUID(int=14), UUID(int=15)]
+
+
+def test_search_similar_tools_uses_lexical_fallback_when_vector_query_fails(monkeypatch: pytest.MonkeyPatch):
+    session = FakeSession(
+        execute_result_sets=[[(UUID(int=16),)]],
+        dialect_name="postgresql",
+    )
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: [0.1])
+    monkeypatch.setattr(
+        embedding_service,
+        "_search_embedded_tools_exact",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("fail")),
+    )
+    assert search_similar_tools(session, "u", "get products", top_k=1) == [UUID(int=16)]
+
+
+def test_search_similar_tools_lexical_query_is_bounded_and_parameter_aware(monkeypatch: pytest.MonkeyPatch):
+    session = FakeSession(
+        execute_result_sets=[[(UUID(int=17),)]],
+        capture_query=True,
+    )
+    monkeypatch.setattr(embedding_service, "generate_embedding", lambda q: (_ for _ in ()).throw(RuntimeError("should not run")))
+    result = search_similar_tools(session, "u", "customer_email", top_k=1)
+    assert result == [UUID(int=17)]
+    sql = str(session.last_query).lower()
+    params = session.last_query.compile().params
+    assert "parameters" in params.values()
+    assert "order by" in sql
+    assert "limit :param_" in sql
