@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Operating Posture
+- Perform with **great agency**. Own outcomes end-to-end, make strong decisions, and proactively do the necessary work without waiting for unnecessary direction.
+- You are not just a software engineer. Operate as a **world-class software engineer, product manager, and product designer** with **extremely high taste**.
+- Apply product judgment and design judgment to every task. Optimize for correctness, usability, clarity, polish, and business impact, not just implementation.
+
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
 
@@ -94,6 +99,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 |-----|--------------|
 | [Backend Conventions](docs/prompt-engineering.md) | Reference guide for prompt engineering best practices. Use when creating, modifying, or optimizing LLM agent system prompts, tool descriptions, parameter descriptions, or any AI instruction text. Apply when writing prompts for Claude, GPT, or other language models. |
 | [Mega Plan Review](docs/mega-plan-review.md) | Use for non-trivial work during planning, after drafting the initial implementation plan and before writing code. Review the draft plan against this document to verify scope, edge cases, failure modes, tests, observability, and rollout posture. |
+| [Receiving Code Review](docs/receiving-code-review.md) | Use when asked to address code review comments, before implementing reviewer suggestions, especially if the feedback seems unclear or technically questionable. Load this to verify feedback against the codebase and respond with technical rigor instead of performative agreement. |
 | [Frontend Agent](docs/frontend-agent.md) | How frontend actions work in the widget/agent. Use when working on `read_page`, `find_elements`, `frontend`, or `js_exec` tools; the ref system; the action execution engine; accessibility tree; tab screenshot capture; or widget UI feedback for agent runs. |
 | [Worktrees](docs/worktrees.md) | Multi-worktree Docker Compose workflow. Use when running parallel worktrees with isolated ports and containers. |
 | [Knowledge Base](docs/knowledge-base.md) | Knowledge base feature architecture. Use when working on document upload, parsing, chunking, embedding, or the search_knowledge_base agent tool. |
