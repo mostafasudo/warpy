@@ -17,13 +17,13 @@ def test_build_llm_config_local_defaults():
 
 def test_build_llm_config_use_good_models():
     config = build_llm_config("local", use_good_models=True)
-    assert config.chat_model == "gpt-5.2"
+    assert config.chat_model == "gpt-5.4"
     assert config.whisper_model == "gpt-4o-transcribe"
 
 
 def test_build_llm_config_production_overrides():
     config = build_llm_config("production")
-    assert config.chat_model == "gpt-5.2"
+    assert config.chat_model == "gpt-5.4"
     assert config.embedding_model == "text-embedding-3-large"
     assert config.embedding_dimensions == 3072
     assert config.whisper_model == "gpt-4o-transcribe"

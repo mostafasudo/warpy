@@ -7,7 +7,7 @@ from ..core.logger import log_info, log_warning
 
 MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "gpt-4o": 128_000,
-    "gpt-5.2": 256_000,
+    "gpt-5.4": 256_000,
 }
 DEFAULT_CONTEXT_LIMIT = 128_000
 RESPONSE_HEADROOM_RATIO = 0.20

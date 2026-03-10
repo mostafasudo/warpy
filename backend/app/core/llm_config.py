@@ -38,14 +38,14 @@ class LLMConfig:
 def build_llm_config(environment: str, use_good_models: bool = False) -> LLMConfig:
     if environment == "production":
         return LLMConfig(
-            chat_model="gpt-5.2",
+            chat_model="gpt-5.4",
             embedding_model="text-embedding-3-large",
             embedding_dimensions=3072,
             whisper_model="gpt-4o-transcribe",
         )
     if use_good_models:
         return LLMConfig(
-            chat_model="gpt-5.2",
+            chat_model="gpt-5.4",
             whisper_model="gpt-4o-transcribe",
         )
     return LLMConfig()
