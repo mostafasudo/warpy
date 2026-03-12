@@ -71,6 +71,31 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - Production: add the GitHub Secret/Variable and wire it into `.github/workflows/deploy-production.yml` (`Deploy ECS services` step env + `render_task_definition`/`managed_env`). Backend/worker ECS env vars are overwritten from GitHub on deploy.
 - Frontend: `VITE_*` vars are build-time; update `frontend/.env.example`, workflow `build-args`, and `frontend/Dockerfile` `ARG/ENV`.
 
+## Agent AWS & GitHub Access
+- The root `.env` is the source of truth for agent access. Keep `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `AWS_REGION`, and `GITHUB_TOKEN` there.
+- Use `node scripts/with-agent-env.mjs <command> ...` for any AWS CLI, GitHub CLI, or other tooling that should inherit repo credentials. Do not rely on `aws configure`, `gh auth login`, or machine-specific global credential state.
+- `scripts/with-agent-env.mjs` loads the repo root `.env` and maps repo env names to official CLI names:
+  `AWS_ACCESS_KEY` -> `AWS_ACCESS_KEY_ID`
+  `AWS_SECRET_KEY` -> `AWS_SECRET_ACCESS_KEY`
+  `AWS_REGION` -> `AWS_DEFAULT_REGION`
+  `GITHUB_TOKEN` -> `GH_TOKEN`
+- If the CLIs are missing on macOS, install them with `brew install gh awscli`.
+- Agents should proactively use `gh` and `aws` when deployment or production verification matters, especially for:
+  GitHub Actions deploy checks, failed workflow logs, ECS service health, CloudWatch logs, ECR image verification, and general infrastructure inspection.
+- Standard verification commands:
+  `node scripts/with-agent-env.mjs gh auth status`
+  `node scripts/with-agent-env.mjs aws sts get-caller-identity`
+- Common GitHub Actions commands:
+  `node scripts/with-agent-env.mjs gh run list --workflow deploy-production.yml --limit 5`
+  `node scripts/with-agent-env.mjs gh run view <run-id> --log-failed`
+  `node scripts/with-agent-env.mjs gh api repos/{owner}/{repo}/actions/runs --jq '.workflow_runs[0] | {status, conclusion, headBranch: .head_branch, updatedAt: .updated_at}'`
+- Common AWS operational commands:
+  `node scripts/with-agent-env.mjs aws logs describe-log-groups --log-group-name-prefix /ecs/warpy-prod-`
+  `node scripts/with-agent-env.mjs aws logs tail /ecs/warpy-prod-backend --since 30m`
+  `node scripts/with-agent-env.mjs aws ecs list-clusters`
+  `node scripts/with-agent-env.mjs aws ecs list-services --cluster <cluster-name-or-arn>`
+- Never print secrets into docs, issues, or commits. Use the wrapper, inspect only the command output you need, and keep `.env` untracked.
+
 ## Don't
 - Don’t introduce new patterns, abstractions, or heavy deps.
 - Don’t add code “just in case” or for completeness alone.
