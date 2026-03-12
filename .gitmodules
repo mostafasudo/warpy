@@ -1,0 +1,6 @@
+[submodule "landing"]
+	path = landing
+	url = git@github.com:LevwTech/warpy-landing.git
+[submodule "widget"]
+	path = widget
+	url = git@github.com:warpyai/widget.git

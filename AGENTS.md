@@ -24,6 +24,17 @@
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
 
+## Monorepo Structure
+This repo contains three projects as submodules or top-level directories:
+
+| Directory | Repo | Purpose |
+|-----------|------|---------|
+| `frontend/` + `backend/` | (this repo) | Core platform — dashboard, API, agent engine, and all backend services. |
+| `landing/` | `warpy-landing` (submodule) | Public marketing site / landing page. |
+| `widget/` | `widget` (submodule) | The embeddable JS widget that customers drop into their dashboards. |
+
+Submodules have their own git history. Commit inside the submodule first, then update the reference in the parent repo.
+
 ## Modes
 - **Ask mode:** answers are short, clear, and strictly concise.
 

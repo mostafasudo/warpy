@@ -32,13 +32,13 @@ If you change a feature/surface, update its equivalent doc file in `docs/` when 
 
 ## Landing page
 
-The marketing/landing site: [LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing).
+The marketing/landing site lives in the `landing/` submodule ([LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing)).
 
 ## Widget npm package
 
-The widget loader package is published as `@warpy-ai/widget`. Source repo: [warpyai/widget](https://github.com/warpyai/widget).
+The widget loader package is published as `@warpy-ai/widget`. Source lives in the `widget/` submodule ([warpyai/widget](https://github.com/warpyai/widget)).
 
-- Publish a new version: bump `package.json` version in `warpyai/widget`, then `pnpm publish --access public`.
+- Publish a new version: bump `package.json` version in `widget/`, then `pnpm publish --access public`.
 
 ## Adding an environment variable
 
