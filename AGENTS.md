@@ -51,6 +51,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
 - If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
 - Always automatically keep the public docs in `docs-site/` up to date when product behavior, setup steps, UI copy, tooling, security, or user-facing flows change.
+- Whenever browser access is needed for validation, debugging, reproduction, or automation, load `docs/chrome-cdp.md` first and prefer that live Chrome session workflow over separate browser instances.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.
@@ -121,7 +122,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - **Ask first:** package installs; deleting files; git push; full builds; e2e suites; DB-affecting scripts.
 
 ## Frontend specifics
-- **Validation:** when work involves frontend, validate it using real browser tools (e.g. Chrome) rather than relying solely on tests or static checks.
+- **Validation:** when work involves frontend, validate it using a real browser rather than relying solely on tests or static checks. Load `docs/chrome-cdp.md` first and prefer that Chrome CDP workflow whenever browser access, inspection, validation, or automation is needed.
 - **React Query:** stable array keys; cache boundaries per feature; granular invalidation; retries/timeouts set; one mutation per file.
 - **Zustand:** tiny stores; selectors to avoid re-renders; no business logic in components.
 - **shadcdn:** use official components and patterns (built on Radix and Lucide); don't re-implement primitives.
@@ -156,6 +157,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 | [Backend Conventions](docs/prompt-engineering.md) | Reference guide for prompt engineering best practices. Use when creating, modifying, or optimizing LLM agent system prompts, tool descriptions, parameter descriptions, or any AI instruction text. Apply when writing prompts for Claude, GPT, or other language models. |
 | [Mega Plan Review](docs/mega-plan-review.md) | Use for non-trivial work during planning, after drafting the initial implementation plan and before writing code. Review the draft plan against this document to verify scope, edge cases, failure modes, tests, observability, and rollout posture. |
 | [Receiving Code Review](docs/receiving-code-review.md) | Use when asked to address code review comments, before implementing reviewer suggestions, especially if the feedback seems unclear or technically questionable. Load this to verify feedback against the codebase and respond with technical rigor instead of performative agreement. |
+| [Chrome CDP](docs/chrome-cdp.md) | Default browser guide. Load this whenever you need browser access for validation, inspection, reproduction, or automation so you can work against the user's live Chrome session instead of a separate browser instance. |
 | [Frontend Agent](docs/frontend-agent.md) | How frontend actions work in the widget/agent. Use when working on `read_page`, `find_elements`, `frontend`, or `js_exec` tools; the ref system; the action execution engine; accessibility tree; tab screenshot capture; or widget UI feedback for agent runs. |
 | [Worktrees](docs/worktrees.md) | Multi-worktree Docker Compose workflow. Use when running parallel worktrees with isolated ports and containers. |
 | [Knowledge Base](docs/knowledge-base.md) | Knowledge base feature architecture. Use when working on document upload, parsing, chunking, embedding, or the search_knowledge_base agent tool. |
