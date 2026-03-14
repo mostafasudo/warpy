@@ -30,6 +30,7 @@ This repo contains three projects as submodules or top-level directories:
 | Directory | Repo | Purpose |
 |-----------|------|---------|
 | `frontend/` + `backend/` | (this repo) | Core platform — dashboard, API, agent engine, and all backend services. |
+| `docs-site/` | `docs` (submodule) | Public Mintlify documentation site for customers and implementers. |
 | `landing/` | `warpy-landing` (submodule) | Public marketing site / landing page. |
 | `widget/` | `widget` (submodule) | The embeddable JS widget that customers drop into their dashboards. |
 
@@ -47,6 +48,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - Prefer the **minimum viable change** that delivers meaningful, measurable impact.
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
 - If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
+- Always automatically keep the public docs in `docs-site/` up to date when product behavior, setup steps, UI copy, tooling, security, or user-facing flows change.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.

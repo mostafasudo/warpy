@@ -4,3 +4,6 @@
 [submodule "widget"]
 	path = widget
 	url = git@github.com:warpyai/widget.git
+[submodule "docs-site"]
+	path = docs-site
+	url = git@github.com:LevwTech/docs.git
