@@ -18,8 +18,10 @@
 2. Create the plan using plan mode
 3. Apply `docs/mega-plan-review.md` to that plan
 4. Implement the plan and finish all TODOs
-5. Run the code review tool/skill for a careful review
-6. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
+5. Run the full frontend and backend testing sweep
+6. Run the code review tool/skill for a careful review
+7. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
+
 
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
