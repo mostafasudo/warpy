@@ -1,5 +1,6 @@
 import asyncio
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +16,11 @@ from ..core.logger import log_info, log_warning
 
 OPENAI_RESPONSE_TIMEOUT_SECONDS = 120
 OPENAI_RESPONSE_MAX_SIZE_BYTES = 10 * 1024 * 1024
+OPENAI_COMPACTION_THRESHOLDS = {
+    "gpt-5.4": 200_000,
+    "gpt-4o": 100_000,
+}
+DEFAULT_OPENAI_COMPACTION_THRESHOLD = 100_000
 
 
 @dataclass
@@ -29,6 +35,12 @@ class OpenAIResponsesTransportError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+
+@dataclass(frozen=True)
+class OpenAIResponsesInvocationResult:
+    message: AIMessage
+    input_items: list[dict[str, Any]]
 
 
 class OpenAIResponsesWebSocketSession:
@@ -57,9 +69,15 @@ class OpenAIResponsesWebSocketSession:
         await socket.close()
         log_info(self.scope, "close", "Closed OpenAI responses websocket")
 
-    async def ainvoke(self, messages: list[BaseMessage], tools: list[BaseTool]) -> AIMessage:
+    async def ainvoke(
+        self,
+        messages: list[BaseMessage],
+        tools: list[BaseTool],
+        *,
+        input_items: list[dict[str, Any]] | None = None,
+    ) -> OpenAIResponsesInvocationResult:
         async with self._invoke_lock:
-            full_input = self.messages_to_input_items(messages)
+            full_input = deepcopy(input_items) if input_items is not None else self.messages_to_input_items(messages)
             incremental_input, previous_response_id = self._build_request_input(full_input)
 
             payload_tools = [self.tool_to_responses_tool(tool) for tool in tools]
@@ -93,9 +111,13 @@ class OpenAIResponsesWebSocketSession:
                     tools=payload_tools,
                 )
 
+            next_input_items = self.build_next_input_items(full_input, response)
             self._previous_response_id = str(response.get("id") or "")
-            self._last_input_items = full_input
-            return self.response_to_ai_message(response)
+            self._last_input_items = next_input_items
+            return OpenAIResponsesInvocationResult(
+                message=self.response_to_ai_message(response),
+                input_items=next_input_items,
+            )
 
     async def _request_response(
         self,
@@ -199,6 +221,12 @@ class OpenAIResponsesWebSocketSession:
             "store": False,
             "input": input_items,
             "tools": tools,
+            "context_management": [
+                {
+                    "type": "compaction",
+                    "compact_threshold": self._get_compact_threshold(self.model),
+                }
+            ],
         }
         if self.temperature is not None and self._supports_temperature(self.model):
             payload["temperature"] = self.temperature
@@ -289,6 +317,14 @@ class OpenAIResponsesWebSocketSession:
         normalized = model.lower()
         # gpt-4o responses websocket requests clean-close when temperature is sent in our production path.
         return not (normalized.startswith("gpt-5") or normalized.startswith("gpt-4o"))
+
+    @staticmethod
+    def _get_compact_threshold(model: str) -> int:
+        normalized = model.lower()
+        for model_prefix, threshold in OPENAI_COMPACTION_THRESHOLDS.items():
+            if normalized.startswith(model_prefix):
+                return threshold
+        return DEFAULT_OPENAI_COMPACTION_THRESHOLD
 
     @classmethod
     def tool_to_responses_tool(cls, tool: BaseTool) -> dict[str, Any]:
@@ -413,6 +449,25 @@ class OpenAIResponsesWebSocketSession:
 
         content = "\n\n".join(part.strip() for part in text_parts if part and part.strip()).strip()
         return AIMessage(content=content, tool_calls=tool_calls)
+
+    @classmethod
+    def build_next_input_items(
+        cls,
+        current_input_items: list[dict[str, Any]],
+        response: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        next_input_items = deepcopy(current_input_items)
+        next_input_items.extend(deepcopy(response.get("output") or []))
+
+        latest_compaction_index = -1
+        for index, item in enumerate(next_input_items):
+            if str(item.get("type") or "") == "compaction":
+                latest_compaction_index = index
+
+        if latest_compaction_index >= 0:
+            return next_input_items[latest_compaction_index:]
+
+        return next_input_items
 
     @staticmethod
     def _append_text_part(text_parts: list[str], value: str) -> None:

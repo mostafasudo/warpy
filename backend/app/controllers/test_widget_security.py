@@ -42,7 +42,15 @@ class FakeExecutor:
     def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
         self.responses = []
 
-    async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+    async def run_step(
+        self,
+        user_message,
+        conversation_history,
+        tool_results=None,
+        pending_messages=None,
+        active_tool_ids=None,
+        pending_input_items=None,
+    ):
         if self.responses:
             return self.responses.pop(0)
         return StepResult(response="done", done=True, messages=[], active_tool_ids=[])

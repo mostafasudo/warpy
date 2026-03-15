@@ -119,6 +119,27 @@ def test_response_to_ai_message_dedupes_adjacent_duplicate_text():
     assert message.content == "Confirm deletion?"
 
 
+def test_build_next_input_items_keeps_suffix_from_latest_compaction():
+    current_input = [
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]},
+    ]
+    response = {
+        "id": "resp_1",
+        "output": [
+            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "working"}]},
+            {"type": "compaction", "encrypted_content": "compact_1"},
+            {"type": "function_call", "call_id": "call_1", "name": "find_tools", "arguments": "{}"},
+        ],
+    }
+
+    next_input = OpenAIResponsesWebSocketSession.build_next_input_items(current_input, response)
+
+    assert next_input == [
+        {"type": "compaction", "encrypted_content": "compact_1"},
+        {"type": "function_call", "call_id": "call_1", "name": "find_tools", "arguments": "{}"},
+    ]
+
+
 def test_ainvoke_retries_with_full_input_on_previous_response_not_found(monkeypatch):
     session = OpenAIResponsesWebSocketSession(api_key="sk_test", model="gpt-5.4", temperature=0.7)
     messages = [HumanMessage(content="hello")]
@@ -150,7 +171,7 @@ def test_ainvoke_retries_with_full_input_on_previous_response_not_found(monkeypa
 
     response = asyncio.run(session.ainvoke(messages, [build_tool("find_tools")]))
 
-    assert response.content == "done"
+    assert response.message.content == "done"
     assert len(calls) == 2
     assert calls[0]["previous_response_id"] is None
     assert calls[1]["previous_response_id"] is None
@@ -188,7 +209,7 @@ def test_ainvoke_retries_with_full_input_on_connection_closed(monkeypatch):
 
     response = asyncio.run(session.ainvoke(messages, [build_tool("find_tools")]))
 
-    assert response.content == "processed"
+    assert response.message.content == "processed"
     assert calls[0]["previous_response_id"] == "resp_1"
     assert calls[1]["previous_response_id"] is None
     assert calls[1]["input_items"] == OpenAIResponsesWebSocketSession.messages_to_input_items(messages)
@@ -219,7 +240,7 @@ def test_ainvoke_retries_with_full_input_on_connection_limit_error(monkeypatch):
 
     response = asyncio.run(session.ainvoke(messages, [build_tool("find_tools")]))
 
-    assert response.content == "ok"
+    assert response.message.content == "ok"
     assert calls["count"] == 2
 
 
@@ -273,7 +294,7 @@ def test_ainvoke_uses_incremental_input_only_for_append_only_history(monkeypatch
 
     response = asyncio.run(session.ainvoke(new_messages, []))
 
-    assert response.content == "ok"
+    assert response.message.content == "ok"
     assert calls == [
         {
             "input_items": OpenAIResponsesWebSocketSession.messages_to_input_items([HumanMessage(content="follow up")]),
@@ -312,7 +333,7 @@ def test_ainvoke_replays_full_input_after_history_is_pruned(monkeypatch):
 
     response = asyncio.run(session.ainvoke(new_messages, []))
 
-    assert response.content == "ok"
+    assert response.message.content == "ok"
     assert calls == [
         {
             "input_items": OpenAIResponsesWebSocketSession.messages_to_input_items(new_messages),
@@ -444,7 +465,7 @@ def test_ainvoke_serializes_concurrent_calls(monkeypatch):
 
     responses = asyncio.run(run_calls())
 
-    assert [response.content for response in responses] == ["one", "two"]
+    assert [response.message.content for response in responses] == ["one", "two"]
     assert call_order == ["start:one", "end:one", "start:two", "end:two"]
 
 
@@ -475,6 +496,7 @@ def test_create_response_omits_temperature_for_gpt5(monkeypatch):
 
     assert len(sent_payloads) == 1
     assert "temperature" not in sent_payloads[0]
+    assert sent_payloads[0]["context_management"] == [{"type": "compaction", "compact_threshold": 200000}]
 
 
 def test_create_response_omits_temperature_for_gpt4o(monkeypatch):
@@ -504,3 +526,4 @@ def test_create_response_omits_temperature_for_gpt4o(monkeypatch):
 
     assert len(sent_payloads) == 1
     assert "temperature" not in sent_payloads[0]
+    assert sent_payloads[0]["context_management"] == [{"type": "compaction", "compact_threshold": 100000}]

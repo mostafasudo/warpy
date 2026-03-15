@@ -52,7 +52,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - Operate with **extreme selectiveness, high taste, and high standards**. Every addition must be clearly justified and materially improve correctness, reliability, performance, or maintainability.
 - Whenever your changes make any code or test dead or unused, remove that code or test so the codebase only contains what is relevant and necessary.
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
-- When you change a feature or surface, update the equivalent doc file in `docs/` (internal documentation) when one exists. If the change affects public-facing product behavior or setup, also update the corresponding public documentation in `docs-site/`. Always keep `AGENTS.md` and the project `README.md` up to date as changes are made.
+- When you change a feature or surface, update the equivalent doc file in `docs/` (internal documentation) when one exists. If the change affects public-facing product behavior or setup, also update the corresponding public documentation in `docs-site/`. Always keep `AGENTS.md` and the project `README.md` up to date.
 - Keep the public docs in `docs-site/` automatically up to date whenever product behavior, setup, UI copy, tooling, security, or user-facing flows change. Only customer-facing information should be in `docs-site/`; put all internal implementation details in `docs/`, not in public docs.
 - Whenever browser access is needed for validation, debugging, reproduction, or automation, load `docs/chrome-cdp.md` first and prefer that live Chrome session workflow over separate browser instances.
 - **pnpm** for all JS tasks.

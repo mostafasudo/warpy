@@ -102,6 +102,7 @@ sequenceDiagram
 - The first claim for a request persists the user message once and stores its `user_message_id`; replays of the same request reuse that row instead of inserting another user message.
 - The most recently claimed active request for a conversation owns the run. "Most recent" is determined by the latest successful server-side ownership claim for that conversation. Older in-flight runs may finish their OpenAI call, but they fail the ownership check and are prevented from persisting assistant output, pending state, or socket responses. Their stale results are silently discarded on the server.
 - Waiting tool-call state is resumable only for the owning `requestId`. Replaying completed requests returns the already-persisted assistant message instead of executing again.
+- Widget resume state is stored as a versioned OpenAI Responses input window (`tool_context` / `pending_state`), not as a pruned LangChain transcript. The backend sends OpenAI server-side compaction on each `response.create` and persists the latest compacted window for reconnects and new sockets.
 - Message sequencing is allocated under a conversation lock and enforced by a unique `(conversation_id, sequence)` constraint so concurrent widget writes cannot produce duplicate sequence numbers.
 
 ## Decision path

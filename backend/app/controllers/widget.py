@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.encoders import jsonable_encoder
-from langchain_core.messages import messages_from_dict, messages_to_dict
+from langchain_core.messages import messages_from_dict
 from langsmith.run_helpers import trace as langsmith_trace
 from sqlalchemy.orm import Session
 
@@ -30,7 +30,6 @@ from ..schemas.widget import (
     WidgetMessagePayload,
 )
 from ..services.agent_chain import AgentExecutor
-from ..services.context_budget import prune_messages
 from ..services.openai_responses_ws import OpenAIResponsesTransportError, OpenAIResponsesWebSocketSession
 from ..services.agent_service import build_agent_executor_config
 from ..services.billing_service import consume_actions_for_tool_results, get_billing_actions_summary
@@ -66,6 +65,8 @@ router = APIRouter(prefix="/widget", tags=["widget"])
 INITIAL_SOCKET_REQUEST_TIMEOUT_SECONDS = 15
 SOCKET_REQUEST_TIMEOUT_SECONDS = 300
 MAX_WIDGET_TOOL_ITERATIONS = 25
+RESPONSES_INPUT_ITEMS_VERSION = 2
+RESPONSES_INPUT_ITEMS_FORMAT = "responses_input_items"
 
 
 class WidgetAuthFailure(Exception):
@@ -82,6 +83,10 @@ class WidgetRequestFailure(Exception):
         self.code = code
         self.message = message
         self.retriable = retriable
+
+
+class WidgetStateDecodeError(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -103,6 +108,7 @@ class WidgetPreloadResult:
     owner_token: str
     history: list[dict[str, str]]
     pending_messages: list | None
+    pending_input_items: list[dict[str, Any]] | None
     active_tool_ids: list[UUID] | None
     pending_tool_calls: list[dict[str, Any]]
     actions_remaining: int
@@ -110,16 +116,25 @@ class WidgetPreloadResult:
     resume_response: WidgetChatResponse | None = None
 
 
-def serialize_messages(messages: list) -> str:
-    return json.dumps(messages_to_dict(messages))
+@dataclass(frozen=True)
+class WidgetResponsesState:
+    messages: list
+    input_items: list[dict[str, Any]]
+    active_tool_ids: list[UUID]
+    tool_calls: list[dict[str, Any]]
+    legacy: bool = False
 
 
-def deserialize_messages(data: str) -> list:
-    try:
-        return messages_from_dict(json.loads(data))
-    except (json.JSONDecodeError, TypeError, KeyError) as exc:
-        log_error("WidgetController", "deserialize_messages", "Failed to deserialize", exc=exc)
-        return []
+def _serialize_responses_window(input_items: list[dict[str, Any]]) -> str:
+    return json.dumps(
+        jsonable_encoder(
+            {
+                "version": RESPONSES_INPUT_ITEMS_VERSION,
+                "format": RESPONSES_INPUT_ITEMS_FORMAT,
+                "input_items": input_items,
+            }
+        )
+    )
 
 
 def serialize_tool_call(call: Any) -> dict[str, Any]:
@@ -147,34 +162,144 @@ def serialize_tool_call(call: Any) -> dict[str, Any]:
     }
 
 
-def serialize_state(messages: list, active_tool_ids: list[UUID], tool_calls: list) -> str:
-    return json.dumps(jsonable_encoder({
-        "messages": messages_to_dict(messages),
-        "tool_ids": [str(tool_id) for tool_id in active_tool_ids],
-        "tool_calls": [serialize_tool_call(call) for call in tool_calls],
-    }))
+def _serialize_pending_state(
+    input_items: list[dict[str, Any]],
+    active_tool_ids: list[UUID],
+    tool_calls: list,
+) -> str:
+    return json.dumps(
+        jsonable_encoder(
+            {
+                "version": RESPONSES_INPUT_ITEMS_VERSION,
+                "format": RESPONSES_INPUT_ITEMS_FORMAT,
+                "input_items": input_items,
+                "tool_ids": [str(tool_id) for tool_id in active_tool_ids],
+                "tool_calls": [serialize_tool_call(call) for call in tool_calls],
+            }
+        )
+    )
 
 
-def deserialize_state(state: str) -> tuple[list, list[UUID], list[dict[str, Any]]]:
+def _parse_responses_input_items(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise WidgetStateDecodeError("Responses state input_items must be a list")
+    input_items: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise WidgetStateDecodeError("Responses state input_items must contain objects")
+        input_items.append(dict(item))
+    return input_items
+
+
+def _parse_tool_ids(payload: Any) -> list[UUID]:
+    if not isinstance(payload, list):
+        raise WidgetStateDecodeError("Pending state tool_ids must be a list")
+    tool_ids: list[UUID] = []
+    for tool_id in payload:
+        try:
+            tool_ids.append(UUID(str(tool_id)))
+        except (TypeError, ValueError) as exc:
+            raise WidgetStateDecodeError("Pending state contains an invalid tool_id") from exc
+    return tool_ids
+
+
+def _parse_serialized_tool_calls(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise WidgetStateDecodeError("Pending state tool_calls must be a list")
+    tool_calls: list[dict[str, Any]] = []
+    for call in payload:
+        if not isinstance(call, dict):
+            raise WidgetStateDecodeError("Pending state tool_calls must contain objects")
+        call_id = str(call.get("id") or "").strip()
+        if not call_id:
+            raise WidgetStateDecodeError("Pending state tool_calls must include id")
+        tool_calls.append(dict(call))
+    return tool_calls
+
+
+def _deserialize_legacy_messages(data: Any) -> list:
+    if not isinstance(data, list):
+        raise WidgetStateDecodeError("Legacy widget state must be a message list")
     try:
-        data = json.loads(state)
-        messages = messages_from_dict(data["messages"])
-        tool_ids = [UUID(tool_id) for tool_id in data["tool_ids"]]
+        return messages_from_dict(data)
+    except (TypeError, KeyError) as exc:
+        raise WidgetStateDecodeError("Legacy widget state could not be deserialized") from exc
+
+
+def deserialize_tool_context_state(data: str) -> WidgetResponsesState | None:
+    try:
+        payload = json.loads(data)
+    except json.JSONDecodeError as exc:
+        log_error("WidgetController", "deserialize_tool_context_state", "Failed to deserialize", exc=exc)
+        return None
+
+    try:
+        if isinstance(payload, dict) and (
+            payload.get("version") == RESPONSES_INPUT_ITEMS_VERSION
+            or payload.get("format") == RESPONSES_INPUT_ITEMS_FORMAT
+            or "input_items" in payload
+        ):
+            return WidgetResponsesState(
+                messages=[],
+                input_items=_parse_responses_input_items(payload.get("input_items")),
+                active_tool_ids=[],
+                tool_calls=[],
+                legacy=False,
+            )
+        messages = _deserialize_legacy_messages(payload)
+        return WidgetResponsesState(
+            messages=messages,
+            input_items=OpenAIResponsesWebSocketSession.messages_to_input_items(messages),
+            active_tool_ids=[],
+            tool_calls=[],
+            legacy=True,
+        )
+    except WidgetStateDecodeError as exc:
+        log_error("WidgetController", "deserialize_tool_context_state", "Failed to deserialize", exc=exc)
+        return None
+
+
+def deserialize_pending_state(state: str) -> WidgetResponsesState:
+    try:
+        payload = json.loads(state)
+    except json.JSONDecodeError as exc:
+        log_error("WidgetController", "deserialize_pending_state", "Failed to deserialize", exc=exc)
+        return WidgetResponsesState(messages=[], input_items=[], active_tool_ids=[], tool_calls=[], legacy=True)
+
+    try:
+        if isinstance(payload, dict) and (
+            payload.get("version") == RESPONSES_INPUT_ITEMS_VERSION
+            or payload.get("format") == RESPONSES_INPUT_ITEMS_FORMAT
+            or "input_items" in payload
+        ):
+            return WidgetResponsesState(
+                messages=[],
+                input_items=_parse_responses_input_items(payload.get("input_items")),
+                active_tool_ids=_parse_tool_ids(payload.get("tool_ids")),
+                tool_calls=_parse_serialized_tool_calls(payload.get("tool_calls")),
+                legacy=False,
+            )
+        if not isinstance(payload, dict):
+            raise WidgetStateDecodeError("Legacy pending state must be an object")
+        messages = _deserialize_legacy_messages(payload.get("messages"))
         tool_calls: list[dict[str, Any]] = []
-        for call in data.get("tool_calls") or []:
-            try:
-                if not isinstance(call, dict):
-                    continue
-                call_id = str(call.get("id") or "").strip()
-                if not call_id:
-                    continue
-                tool_calls.append(dict(call))
-            except Exception:
+        for call in payload.get("tool_calls") or []:
+            if not isinstance(call, dict):
                 continue
-        return messages, tool_ids, tool_calls
-    except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
-        log_error("WidgetController", "deserialize_state", "Failed to deserialize", exc=exc)
-        return [], [], []
+            call_id = str(call.get("id") or "").strip()
+            if not call_id:
+                continue
+            tool_calls.append(dict(call))
+        return WidgetResponsesState(
+            messages=messages,
+            input_items=OpenAIResponsesWebSocketSession.messages_to_input_items(messages),
+            active_tool_ids=[UUID(tool_id) for tool_id in payload.get("tool_ids") or []],
+            tool_calls=tool_calls,
+            legacy=True,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        log_error("WidgetController", "deserialize_pending_state", "Failed to deserialize", exc=exc)
+        return WidgetResponsesState(messages=[], input_items=[], active_tool_ids=[], tool_calls=[], legacy=True)
 
 
 def validate_widget_auth_token(agent_id: UUID, enabled: bool, token: str | None) -> None:
@@ -388,6 +513,7 @@ def preload_widget_request(
     request_id: str | None,
     owner_token: str | None,
     pending_messages,
+    pending_input_items: list[dict[str, Any]] | None,
     active_tool_ids,
     pending_tool_calls: list[dict[str, Any]],
     redis_client,
@@ -464,6 +590,7 @@ def preload_widget_request(
             )
 
         resolved_pending_messages = pending_messages
+        resolved_pending_input_items = pending_input_items
         resolved_active_tool_ids = active_tool_ids
         resolved_pending_tool_calls = list(pending_tool_calls)
         exclude_message_id = run.user_message_id if payload.message and run.user_message_id else None
@@ -476,10 +603,25 @@ def preload_widget_request(
                     "Request id belongs to a different user message",
                 )
 
-        if payload.tool_results and resolved_pending_messages is None:
+        if payload.tool_results and resolved_pending_input_items is None:
             pending_state = get_pending_state(session, resolved_conversation_id)
             if pending_state:
-                resolved_pending_messages, resolved_active_tool_ids, resolved_pending_tool_calls = deserialize_state(pending_state)
+                try:
+                    decoded_state = deserialize_pending_state(pending_state)
+                except WidgetStateDecodeError as exc:
+                    log_error("WidgetController", "preload_widget_request", "Invalid pending state", exc=exc)
+                    run.status = WidgetRunStatus.failed
+                    run.owner_token = None
+                    session.flush()
+                    raise WidgetRequestFailure(
+                        "PENDING_STATE_INVALID",
+                        "Couldn't resume this request. Please try again.",
+                        retriable=True,
+                    ) from exc
+                resolved_pending_messages = decoded_state.messages or None
+                resolved_pending_input_items = decoded_state.input_items
+                resolved_active_tool_ids = decoded_state.active_tool_ids
+                resolved_pending_tool_calls = decoded_state.tool_calls
 
         if payload.tool_results:
             if run.status == WidgetRunStatus.completed:
@@ -492,6 +634,7 @@ def preload_widget_request(
                     owner_token=resolved_owner_token,
                     history=[],
                     pending_messages=resolved_pending_messages,
+                    pending_input_items=resolved_pending_input_items,
                     active_tool_ids=resolved_active_tool_ids,
                     pending_tool_calls=resolved_pending_tool_calls,
                     actions_remaining=summary.total_remaining,
@@ -528,6 +671,7 @@ def preload_widget_request(
                     owner_token=resolved_owner_token,
                     history=[],
                     pending_messages=resolved_pending_messages,
+                    pending_input_items=resolved_pending_input_items,
                     active_tool_ids=resolved_active_tool_ids,
                     pending_tool_calls=resolved_pending_tool_calls,
                     actions_remaining=actions_remaining,
@@ -551,6 +695,7 @@ def preload_widget_request(
                     owner_token=resolved_owner_token,
                     history=[],
                     pending_messages=resolved_pending_messages,
+                    pending_input_items=resolved_pending_input_items,
                     active_tool_ids=resolved_active_tool_ids,
                     pending_tool_calls=resolved_pending_tool_calls,
                     actions_remaining=actions_remaining,
@@ -565,6 +710,7 @@ def preload_widget_request(
                     owner_token=resolved_owner_token,
                     history=[],
                     pending_messages=resolved_pending_messages,
+                    pending_input_items=resolved_pending_input_items,
                     active_tool_ids=resolved_active_tool_ids,
                     pending_tool_calls=resolved_pending_tool_calls,
                     actions_remaining=actions_remaining,
@@ -579,7 +725,22 @@ def preload_widget_request(
             if run.status == WidgetRunStatus.waiting_for_tools:
                 pending_state = get_pending_state(session, resolved_conversation_id)
                 if pending_state:
-                    resolved_pending_messages, resolved_active_tool_ids, resolved_pending_tool_calls = deserialize_state(pending_state)
+                    try:
+                        decoded_state = deserialize_pending_state(pending_state)
+                    except WidgetStateDecodeError as exc:
+                        log_error("WidgetController", "preload_widget_request", "Invalid pending state", exc=exc)
+                        run.status = WidgetRunStatus.failed
+                        run.owner_token = None
+                        session.flush()
+                        raise WidgetRequestFailure(
+                            "PENDING_STATE_INVALID",
+                            "Couldn't resume this request. Please try again.",
+                            retriable=True,
+                        ) from exc
+                    resolved_pending_messages = decoded_state.messages or None
+                    resolved_pending_input_items = decoded_state.input_items
+                    resolved_active_tool_ids = decoded_state.active_tool_ids
+                    resolved_pending_tool_calls = decoded_state.tool_calls
                 if can_replay_pending_tool_calls(resolved_pending_tool_calls):
                     return WidgetPreloadResult(
                         agent=resolved_agent,
@@ -588,6 +749,7 @@ def preload_widget_request(
                         owner_token=resolved_owner_token,
                         history=[],
                         pending_messages=resolved_pending_messages,
+                        pending_input_items=resolved_pending_input_items,
                         active_tool_ids=resolved_active_tool_ids,
                         pending_tool_calls=resolved_pending_tool_calls,
                         actions_remaining=actions_remaining,
@@ -626,10 +788,13 @@ def preload_widget_request(
         if not payload.message and not payload.tool_results:
             raise WidgetRequestFailure("INVALID_REQUEST", "Message or tool results required")
 
-        if not payload.tool_results and resolved_pending_messages is None:
+        if not payload.tool_results and resolved_pending_input_items is None:
             tool_context_data = get_tool_context(session, resolved_conversation_id)
             if tool_context_data:
-                resolved_pending_messages = deserialize_messages(tool_context_data)
+                decoded_context = deserialize_tool_context_state(tool_context_data)
+                if decoded_context is not None:
+                    resolved_pending_messages = decoded_context.messages or None
+                    resolved_pending_input_items = decoded_context.input_items
 
         return WidgetPreloadResult(
             agent=resolved_agent,
@@ -638,10 +803,19 @@ def preload_widget_request(
             owner_token=resolved_owner_token,
             history=history,
             pending_messages=resolved_pending_messages,
+            pending_input_items=resolved_pending_input_items,
             active_tool_ids=resolved_active_tool_ids,
             pending_tool_calls=resolved_pending_tool_calls,
             actions_remaining=actions_remaining,
         )
+
+
+def _build_result_input_items(result) -> list[dict[str, Any]]:
+    if result.responses_input_items:
+        return list(result.responses_input_items)
+    if result.messages:
+        return OpenAIResponsesWebSocketSession.messages_to_input_items(result.messages)
+    return []
 
 
 def persist_widget_result(
@@ -665,6 +839,7 @@ def persist_widget_result(
         run = get_widget_run(session, conversation_id, request_id, for_update=True)
         if not run:
             return False
+        result_input_items = _build_result_input_items(result)
         if result.done and result.response:
             if run.assistant_message_id is None:
                 assistant_message = save_widget_message(session, conversation_id, "assistant", result.response)
@@ -678,26 +853,22 @@ def persist_widget_result(
                     request_id=request_id,
                     owner_token=redact_owner_token(owner_token),
                 )
-            capped = prune_messages(result.messages, model=llm_config.chat_model)
             clear_pending_state(session, conversation_id)
-            save_tool_context(session, conversation_id, serialize_messages(capped))
+            save_tool_context(session, conversation_id, _serialize_responses_window(result_input_items))
             run.status = WidgetRunStatus.completed
             run.owner_token = None
             session.flush()
             return True
         if result.tool_calls:
-            capped_for_state = prune_messages(result.messages, model=llm_config.chat_model)
             save_pending_state(
                 session,
                 conversation_id,
-                serialize_state(capped_for_state, result.active_tool_ids, result.tool_calls),
+                _serialize_pending_state(result_input_items, result.active_tool_ids, result.tool_calls),
             )
             run.status = WidgetRunStatus.waiting_for_tools
             session.flush()
             return True
-        if result.messages:
-            capped_fallback = prune_messages(result.messages, model=llm_config.chat_model)
-            save_tool_context(session, conversation_id, serialize_messages(capped_fallback))
+        save_tool_context(session, conversation_id, _serialize_responses_window(result_input_items))
         clear_pending_state(session, conversation_id)
         run.status = WidgetRunStatus.completed
         run.owner_token = None
@@ -831,6 +1002,7 @@ async def widget_session(
     transport: OpenAIResponsesWebSocketSession | None = None
     executor: AgentExecutor | None = None
     pending_messages = None
+    pending_input_items: list[dict[str, Any]] | None = None
     active_tool_ids = None
     pending_tool_calls: list[dict[str, Any]] = []
     conversation_id: UUID | None = None
@@ -915,6 +1087,7 @@ async def widget_session(
                     request_id=request_id,
                     owner_token=owner_token,
                     pending_messages=pending_messages,
+                    pending_input_items=pending_input_items,
                     active_tool_ids=active_tool_ids,
                     pending_tool_calls=pending_tool_calls,
                     redis_client=redis_client,
@@ -943,6 +1116,7 @@ async def widget_session(
             request_id = preload.request_id
             owner_token = preload.owner_token
             pending_messages = preload.pending_messages
+            pending_input_items = preload.pending_input_items
             active_tool_ids = preload.active_tool_ids
             pending_tool_calls = preload.pending_tool_calls
             actions_remaining = preload.actions_remaining
@@ -1065,6 +1239,7 @@ async def widget_session(
                     tool_results=payload.tool_results,
                     pending_messages=pending_messages,
                     active_tool_ids=active_tool_ids,
+                    pending_input_items=pending_input_items,
                 )
             except OpenAIResponsesTransportError as error:
                 mark_widget_run_failed(conversation_id, request_id, owner_token)
@@ -1168,6 +1343,7 @@ async def widget_session(
 
             if result.tool_calls:
                 pending_messages = result.messages
+                pending_input_items = result.responses_input_items
                 active_tool_ids = result.active_tool_ids
                 pending_tool_calls = [serialize_tool_call(call) for call in result.tool_calls]
                 iteration_count += 1
@@ -1201,6 +1377,7 @@ async def widget_session(
                 continue
 
             pending_messages = result.messages
+            pending_input_items = result.responses_input_items
             active_tool_ids = result.active_tool_ids
             pending_tool_calls = []
             response = WidgetChatResponse(

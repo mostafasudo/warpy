@@ -31,10 +31,11 @@ from .openai_responses_ws import OpenAIResponsesWebSocketSession
 from .agent_execution import execute_backend_tool, get_enabled_tool
 from .agent_schema import SchemaFactory, serialize_args
 from .agent_tools import ToolSnapshot, create_find_elements_tool, create_find_tools_tool, create_frontend_actions_tool, create_js_exec_tool, create_read_page_tool, get_agent_tools
-from .context_budget import MAX_HISTORY_PAIRS, prune_messages, truncate_tool_result
+from .context_budget import truncate_tool_result
 from .tool_cache import ToolCache
 
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
+MAX_HISTORY_PAIRS = 10
 LANGUAGE_LABELS = {
     "arabic",
     "chinese",
@@ -152,6 +153,7 @@ class StepResult:
     suggestions: list[str] = field(default_factory=list)
     done: bool = False
     messages: list[BaseMessage] = field(default_factory=list)
+    responses_input_items: list[dict[str, Any]] = field(default_factory=list)
     active_tool_ids: list[UUID] = field(default_factory=list)
 
 
@@ -302,17 +304,27 @@ class AgentExecutor:
         self,
         runtime_messages: list[BaseMessage],
         tools: list[Any],
-    ) -> tuple[list[BaseMessage], AIMessage]:
-        runtime_messages = self._ensure_budget(runtime_messages)
+        responses_input_items: list[dict[str, Any]] | None = None,
+    ) -> tuple[list[BaseMessage], list[dict[str, Any]], AIMessage]:
         if self.responses_transport:
+            current_input_items = (
+                list(responses_input_items)
+                if responses_input_items is not None
+                else self.responses_transport.messages_to_input_items(runtime_messages)
+            )
             if not get_settings().langsmith_tracing:
-                response = await self.responses_transport.ainvoke(runtime_messages, tools)
-                return runtime_messages, response
+                response = await self.responses_transport.ainvoke(
+                    runtime_messages,
+                    tools,
+                    input_items=current_input_items,
+                )
+                return runtime_messages, response.input_items, response.message
             async with langsmith_trace(
                 "main-agent",
                 run_type="llm",
                 inputs={
                     "messages": messages_to_dict(runtime_messages),
+                    "input_items": current_input_items,
                     "tool_names": [getattr(tool, "name", str(tool)) for tool in tools],
                 },
                 tags=["main-agent"],
@@ -321,17 +333,22 @@ class AgentExecutor:
                     "model": getattr(self.responses_transport, "model", self._model),
                 },
             ) as run:
-                response = await self.responses_transport.ainvoke(runtime_messages, tools)
+                response = await self.responses_transport.ainvoke(
+                    runtime_messages,
+                    tools,
+                    input_items=current_input_items,
+                )
                 run.end(
                     outputs={
-                        "message": messages_to_dict([response])[0],
-                        "tool_call_count": len(response.tool_calls or []),
+                        "message": messages_to_dict([response.message])[0],
+                        "tool_call_count": len(response.message.tool_calls or []),
+                        "input_item_count": len(response.input_items),
                     }
                 )
-            return runtime_messages, response
+            return runtime_messages, response.input_items, response.message
         llm_with_tools = self.llm.bind_tools(tools)
         response = await llm_with_tools.ainvoke(runtime_messages, config={"tags": ["main-agent"]})
-        return runtime_messages, response
+        return runtime_messages, [], response
 
     def _get_tool_by_name(self, tool_name: str) -> Tool | ToolSnapshot | None:
         def resolve(session: Session) -> Tool | ToolSnapshot | None:
@@ -429,9 +446,6 @@ class AgentExecutor:
         else:
             content = text
         return ToolMessage(content=content, tool_call_id=result.id)
-
-    def _ensure_budget(self, messages: list[BaseMessage]) -> list[BaseMessage]:
-        return prune_messages(messages, model=self._model)
 
     async def _generate_max_iterations_response(self, user_input: str) -> str:
         prompt = f"""User message: "{user_input}"
@@ -616,7 +630,8 @@ Keep it brief and friendly."""
         conversation_history: list[dict[str, str]],
         tool_results: list[ToolResultPayload] | None = None,
         pending_messages: list[BaseMessage] | None = None,
-        active_tool_ids: list[UUID] | None = None
+        active_tool_ids: list[UUID] | None = None,
+        pending_input_items: list[dict[str, Any]] | None = None,
     ) -> StepResult:
         if active_tool_ids:
             self.active_tool_ids = list(active_tool_ids)
@@ -630,17 +645,31 @@ Keep it brief and friendly."""
         else:
             messages = self._build_messages_from_history(user_message, conversation_history)
         runtime_messages = list(messages)
+        responses_input_items: list[dict[str, Any]] = []
+        if self.responses_transport:
+            if pending_input_items is not None:
+                responses_input_items = list(pending_input_items)
+                if user_message:
+                    responses_input_items.extend(
+                        self.responses_transport.message_to_input_items(HumanMessage(content=user_message))
+                    )
+            else:
+                responses_input_items = self.responses_transport.messages_to_input_items(runtime_messages)
 
         if tool_results:
             for result in tool_results:
                 tool_message = self._build_tool_message(result)
                 messages.append(tool_message)
                 runtime_messages.append(tool_message)
+                if self.responses_transport:
+                    responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 recovery_note = self._build_frontend_recovery_note(result)
                 if recovery_note:
                     system_note = SystemMessage(content=recovery_note)
                     messages.append(system_note)
                     runtime_messages.append(system_note)
+                    if self.responses_transport:
+                        responses_input_items.extend(self.responses_transport.message_to_input_items(system_note))
 
         max_iterations = llm_config.max_iterations
         iteration = 0
@@ -648,7 +677,11 @@ Keep it brief and friendly."""
         while iteration < max_iterations:
             iteration += 1
             tools = self._get_tools()
-            runtime_messages, response = await self._invoke_main_agent(runtime_messages, tools)
+            runtime_messages, responses_input_items, response = await self._invoke_main_agent(
+                runtime_messages,
+                tools,
+                responses_input_items if self.responses_transport else None,
+            )
             messages.append(response)
             runtime_messages.append(response)
 
@@ -659,6 +692,7 @@ Keep it brief and friendly."""
                     suggestions=suggestions,
                     done=True,
                     messages=messages,
+                    responses_input_items=responses_input_items,
                     active_tool_ids=self.active_tool_ids
                 )
 
@@ -689,6 +723,8 @@ Keep it brief and friendly."""
                     tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
                     messages.append(tool_message)
                     runtime_messages.append(tool_message)
+                    if self.responses_transport:
+                        responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 elif tool_name in KNOWLEDGE_BASE_TOOL_NAMES:
                     tool = next((t for t in tools if t.name in KNOWLEDGE_BASE_TOOL_NAMES), None)
                     if tool:
@@ -702,6 +738,8 @@ Keep it brief and friendly."""
                     tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
                     messages.append(tool_message)
                     runtime_messages.append(tool_message)
+                    if self.responses_transport:
+                        responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 elif tool_name == "read_page":
                     try:
                         args = tool_args if isinstance(tool_args, dict) else {}
@@ -720,6 +758,8 @@ Keep it brief and friendly."""
                         )
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
+                        if self.responses_transport:
+                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 elif tool_name == "find_elements":
                     try:
                         args = tool_args if isinstance(tool_args, dict) else {}
@@ -737,6 +777,8 @@ Keep it brief and friendly."""
                         )
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
+                        if self.responses_transport:
+                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 elif tool_name == "frontend":
                     try:
                         pending_tool_calls.append(ToolCallPayload(
@@ -754,6 +796,8 @@ Keep it brief and friendly."""
                         )
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
+                        if self.responses_transport:
+                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 elif tool_name == "js_exec":
                     try:
                         args = tool_args if isinstance(tool_args, dict) else {}
@@ -771,6 +815,8 @@ Keep it brief and friendly."""
                         )
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
+                        if self.responses_transport:
+                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                 else:
                     tool = next((item for item in tools if item.name == tool_name), None)
                     tool_metadata = self._extract_tool_metadata(tool)
@@ -791,6 +837,8 @@ Keep it brief and friendly."""
                             )
                             messages.append(tool_message)
                             runtime_messages.append(tool_message)
+                            if self.responses_transport:
+                                responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                             continue
                         resolved_tool_type = tool_metadata.get("toolType", "backend") if tool_metadata else getattr(fallback_tool, "tool_type", "backend")
                         fallback_method = getattr(fallback_tool, "method", None)
@@ -826,12 +874,15 @@ Keep it brief and friendly."""
                         )
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
+                        if self.responses_transport:
+                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
 
             if pending_tool_calls:
                 return StepResult(
                     tool_calls=pending_tool_calls,
                     done=False,
                     messages=messages,
+                    responses_input_items=responses_input_items,
                     active_tool_ids=self.active_tool_ids
                 )
 
@@ -849,6 +900,7 @@ Keep it brief and friendly."""
             suggestions=suggestions,
             done=True,
             messages=messages,
+            responses_input_items=responses_input_items,
             active_tool_ids=self.active_tool_ids
         )
 
@@ -870,7 +922,6 @@ Keep it brief and friendly."""
             iteration += 1
             tools = self._get_tools()
             llm_with_tools = self.llm.bind_tools(tools)
-            messages = self._ensure_budget(messages)
             response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
             messages.append(response)
             if not response.tool_calls:

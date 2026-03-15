@@ -18,6 +18,8 @@ from app.schemas.auth import ClerkSession
 from app.services.agent_chain import StepResult
 from app.services.billing_service import get_or_create_billing_account
 
+EMPTY_V2_TOOL_CONTEXT = '{"version": 2, "format": "responses_input_items", "input_items": []}'
+
 
 @pytest.fixture(autouse=True)
 def configure_settings(monkeypatch: pytest.MonkeyPatch):
@@ -52,7 +54,15 @@ class FakeExecutor:
         self.calls = []
         self.responses = []
 
-    async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+    async def run_step(
+        self,
+        user_message,
+        conversation_history,
+        tool_results=None,
+        pending_messages=None,
+        active_tool_ids=None,
+        pending_input_items=None,
+    ):
         self.calls.append({
             "user_message": user_message,
             "history": conversation_history,
@@ -153,7 +163,15 @@ def test_widget_session_returns_dynamic_suggestions(client: TestClient, monkeypa
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             return StepResult(
                 response="Here is the summary.",
                 suggestions=["Create another invoice", "Show unpaid invoices"],
@@ -283,7 +301,15 @@ def test_widget_session_hidden_request_replays_without_polluting_future_history(
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             executor_calls.append({"user_message": user_message, "history": conversation_history})
             return StepResult(response="allowed response", done=True, messages=[], active_tool_ids=[])
 
@@ -355,7 +381,7 @@ def test_widget_session_hidden_request_replays_without_polluting_future_history(
         ("assistant_hidden", ASSISTANT_UNAVAILABLE_MESSAGE),
         ("user", "allowed prompt"),
         ("assistant", "allowed response"),
-        ("tool_context", "[]"),
+        ("tool_context", EMPTY_V2_TOOL_CONTEXT),
     ]
 
 
@@ -380,7 +406,15 @@ def test_widget_session_hides_after_consuming_last_action_on_tool_result(client:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
                 return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
@@ -433,7 +467,15 @@ def test_widget_session_js_exec_consumes_billing_action(client: TestClient, monk
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
                 return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
@@ -491,7 +533,15 @@ def test_widget_session_rechecks_user_rate_limit_on_follow_up_requests(client: T
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
                 pytest.fail("tool_results should not be processed after rate limiting")
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
@@ -559,7 +609,15 @@ def test_widget_session_caps_follow_up_tool_iterations(client: TestClient, monke
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeLoopingExecutor)
@@ -613,7 +671,15 @@ def test_widget_session_tool_results_skip_consumption_when_flag_false(client: Te
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
                 return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
@@ -699,7 +765,15 @@ def test_widget_session_uses_short_lived_sessions_per_phase(client: TestClient, 
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
 
     session_entries = {"count": 0}
@@ -797,10 +871,36 @@ def test_widget_session_handles_tool_calls_and_final_response(client: TestClient
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
-                return StepResult(response="done via websocket", done=True, messages=[], active_tool_ids=[])
-            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
+                return StepResult(
+                    response="done via websocket",
+                    done=True,
+                    messages=[],
+                    responses_input_items=[
+                        {"type": "compaction", "encrypted_content": "compact_1"},
+                        {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "done via websocket"}]},
+                    ],
+                    active_tool_ids=[],
+                )
+            return StepResult(
+                tool_calls=[tool_call],
+                done=False,
+                messages=[],
+                responses_input_items=[
+                    {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "start"}]},
+                    {"type": "function_call", "call_id": "tc_ws_1", "name": "get_user", "arguments": '{"id":"123"}'},
+                ],
+                active_tool_ids=[],
+            )
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeSocketExecutor)
 
@@ -852,7 +952,15 @@ def test_widget_session_replays_completed_request_without_duplicate_persistence(
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             call_count["value"] += 1
             return StepResult(response="done once", done=True, messages=[], active_tool_ids=[])
 
@@ -889,7 +997,7 @@ def test_widget_session_replays_completed_request_without_duplicate_persistence(
     assert messages == [
         ("user", "hello"),
         ("assistant", "done once"),
-        ("tool_context", "[]"),
+        ("tool_context", EMPTY_V2_TOOL_CONTEXT),
     ]
 
 
@@ -903,7 +1011,15 @@ def test_widget_session_replays_completed_request_without_conversation_id_after_
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             call_count["value"] += 1
             return StepResult(response="done once", done=True, messages=[], active_tool_ids=[])
 
@@ -1045,7 +1161,15 @@ def test_widget_session_same_request_replay_drops_stale_in_flight_result(client:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             call_count["value"] += 1
             if call_count["value"] == 1:
                 started.set()
@@ -1104,7 +1228,7 @@ def test_widget_session_same_request_replay_drops_stale_in_flight_result(client:
     assert messages == [
         ("user", "hello"),
         ("assistant", "fresh response"),
-        ("tool_context", "[]"),
+        ("tool_context", EMPTY_V2_TOOL_CONTEXT),
     ]
 
     from app.core.database import session_scope
@@ -1128,7 +1252,15 @@ def test_widget_session_newer_request_supersedes_older_in_flight_result(client: 
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if user_message == "old request":
                 started.set()
                 assert await asyncio.to_thread(release.wait, 2)
@@ -1177,7 +1309,7 @@ def test_widget_session_newer_request_supersedes_older_in_flight_result(client: 
         ("user", "old request"),
         ("user", "new request"),
         ("assistant", "fresh new response"),
-        ("tool_context", "[]"),
+        ("tool_context", EMPTY_V2_TOOL_CONTEXT),
     ]
 
 
@@ -1226,7 +1358,15 @@ def test_widget_session_replayed_tool_results_are_idempotent_for_same_request(cl
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
                 return StepResult(response="tool done once", done=True, messages=[], active_tool_ids=[])
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
@@ -1322,6 +1462,10 @@ def test_widget_session_restores_pending_state_on_new_socket(client: TestClient,
     from app.schemas.widget import ToolCallPayload
 
     pending_tool_id = uuid4()
+    pending_input_items_expected = [
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "start"}]},
+        {"type": "function_call", "call_id": "tc_ws_resume", "name": "get_user", "arguments": '{"id":"123"}'},
+    ]
     tool_call = ToolCallPayload(
         id="tc_ws_resume",
         tool_id=pending_tool_id,
@@ -1339,15 +1483,33 @@ def test_widget_session_restores_pending_state_on_new_socket(client: TestClient,
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             if tool_results:
-                assert [message.content for message in pending_messages] == ["pending websocket state"]
                 assert active_tool_ids == [pending_tool_id]
-                return StepResult(response="resumed via websocket", done=True, messages=[], active_tool_ids=[])
+                assert pending_input_items == pending_input_items_expected
+                assert pending_messages is None
+                return StepResult(
+                    response="resumed via websocket",
+                    done=True,
+                    messages=[],
+                    responses_input_items=pending_input_items + [
+                        {"type": "function_call_output", "call_id": "tc_ws_resume", "output": '{"ok": true}'},
+                    ],
+                    active_tool_ids=[],
+                )
             return StepResult(
                 tool_calls=[tool_call],
                 done=False,
                 messages=[HumanMessage(content="pending websocket state")],
+                responses_input_items=list(pending_input_items_expected),
                 active_tool_ids=[pending_tool_id],
             )
 
@@ -1389,6 +1551,205 @@ def test_widget_session_restores_pending_state_on_new_socket(client: TestClient,
     assert second["response"]["messages"] == [{"role": "assistant", "content": "resumed via websocket"}]
 
 
+def test_widget_session_rewrites_legacy_pending_state_to_v2(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    import json
+
+    from fastapi.encoders import jsonable_encoder
+    from langchain_core.messages import messages_to_dict
+    from app.core.database import session_scope
+    from app.schemas.widget import ToolCallPayload
+    from app.services.openai_responses_ws import OpenAIResponsesWebSocketSession
+    from app.services.widget_service import get_tool_context, save_pending_state
+
+    pending_tool_id = uuid4()
+    legacy_messages = [HumanMessage(content="legacy pending websocket state")]
+    expected_input_items = OpenAIResponsesWebSocketSession.messages_to_input_items(legacy_messages)
+    tool_call = ToolCallPayload(
+        id="tc_ws_legacy",
+        tool_id=pending_tool_id,
+        name="get_user",
+        tool_type="backend",
+        method="GET",
+        path="/users/{id}",
+        params={"id": "123"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeLegacyPendingExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
+            if tool_results:
+                assert pending_input_items == expected_input_items
+                assert active_tool_ids == [pending_tool_id]
+                return StepResult(
+                    response="legacy resumed",
+                    done=True,
+                    messages=[],
+                    responses_input_items=[
+                        {"type": "compaction", "encrypted_content": "compact_1"},
+                        {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "legacy resumed"}]},
+                    ],
+                    active_tool_ids=[],
+                )
+            return StepResult(
+                tool_calls=[tool_call],
+                done=False,
+                messages=[],
+                responses_input_items=[{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "start"}]}],
+                active_tool_ids=[pending_tool_id],
+            )
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeLegacyPendingExecutor)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_ws_legacy"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "start"},
+        )
+    conversation_id = first["response"]["conversationId"]
+
+    with session_scope() as db_session:
+        save_pending_state(
+            db_session,
+            UUID(conversation_id),
+            json.dumps(
+                jsonable_encoder(
+                    {
+                        "messages": messages_to_dict(legacy_messages),
+                        "tool_ids": [str(pending_tool_id)],
+                        "tool_calls": [tool_call.model_dump(by_alias=True)],
+                    }
+                )
+            ),
+        )
+
+    with client.websocket_connect("/widget/session") as websocket:
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": conversation_id,
+                "requestId": request_id,
+                "toolResults": [{"id": "tc_ws_legacy", "statusCode": 200, "consumeAction": False, "body": {"ok": True}}],
+            },
+        )
+
+    assert second["type"] == "chat.response"
+    assert second["response"]["done"] is True
+    assert second["response"]["messages"] == [{"role": "assistant", "content": "legacy resumed"}]
+
+    with session_scope() as db_session:
+        saved_context = json.loads(get_tool_context(db_session, UUID(conversation_id)))
+    assert saved_context["version"] == 2
+    assert saved_context["format"] == "responses_input_items"
+
+
+def test_widget_session_emits_retriable_error_for_invalid_v2_pending_state(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    import json
+
+    from app.core.database import session_scope
+    from app.schemas.widget import ToolCallPayload
+    from app.services.widget_service import save_pending_state
+
+    tool_call = ToolCallPayload(
+        id="tc_ws_invalid",
+        tool_id=uuid4(),
+        name="get_user",
+        tool_type="backend",
+        method="GET",
+        path="/users/{id}",
+        params={"id": "123"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeInvalidPendingExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
+            return StepResult(
+                tool_calls=[tool_call],
+                done=False,
+                messages=[],
+                responses_input_items=[{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "start"}]}],
+                active_tool_ids=[],
+            )
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeInvalidPendingExecutor)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_ws_invalid"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "start"},
+        )
+    conversation_id = first["response"]["conversationId"]
+
+    with session_scope() as db_session:
+        save_pending_state(
+            db_session,
+            UUID(conversation_id),
+            json.dumps(
+                {
+                    "version": 2,
+                    "format": "responses_input_items",
+                    "input_items": "invalid",
+                    "tool_ids": [],
+                    "tool_calls": [],
+                }
+            ),
+        )
+
+    with client.websocket_connect("/widget/session") as websocket:
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": conversation_id,
+                "requestId": request_id,
+                "toolResults": [{"id": "tc_ws_invalid", "statusCode": 200, "consumeAction": False, "body": {"ok": True}}],
+            },
+        )
+
+    assert second == {
+        "type": "chat.error",
+        "error": {
+            "code": "PENDING_STATE_INVALID",
+            "message": "Couldn't resume this request. Please try again.",
+            "retriable": True,
+        },
+    }
+
+
 def test_widget_session_emits_auth_error(client: TestClient):
     from app.core.database import session_scope
     from app.models import Agent
@@ -1427,7 +1788,15 @@ def test_widget_session_emits_transport_error(client: TestClient, monkeypatch: p
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             raise OpenAIResponsesTransportError(
                 code="openai_api_key_missing",
                 message="OpenAI API key missing",
@@ -1491,7 +1860,15 @@ def test_widget_session_emits_timeout_waiting_for_next_request(client: TestClien
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeTimeoutSocketExecutor)
@@ -1637,32 +2014,36 @@ def test_widget_transcribe_stream_limit(client: TestClient, monkeypatch: pytest.
     assert called["count"] == 0
 
 
-def test_widget_session_uses_pruned_tool_context_on_done(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, messages_from_dict, messages_to_dict
+def test_widget_session_persists_v2_tool_context_on_done(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    import json
 
-    raw_messages = [
-        SystemMessage(content="sys"),
-        HumanMessage(content="q"),
-        ToolMessage(content="x" * 50_000, tool_call_id="c1"),
+    persisted_input_items = [
+        {"type": "compaction", "encrypted_content": "compact_1"},
+        {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "done"}]},
     ]
-    pruned_messages = raw_messages[:2]
 
     class FakeExecutorWithLargeMessages:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
-            return StepResult(response="done", done=True, messages=raw_messages, active_tool_ids=[])
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
+            return StepResult(
+                response="done",
+                done=True,
+                messages=[],
+                responses_input_items=persisted_input_items,
+                active_tool_ids=[],
+            )
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeMessages)
-    prune_calls: list[tuple[list, str]] = []
-
-    def fake_prune_messages(messages, model="gpt-4o", budget=None):
-        prune_calls.append((messages, model))
-        assert messages == raw_messages
-        return pruned_messages
-
-    monkeypatch.setattr("app.controllers.widget.prune_messages", fake_prune_messages)
 
     saved_content: list[str] = []
 
@@ -1689,23 +2070,23 @@ def test_widget_session_uses_pruned_tool_context_on_done(client: TestClient, mon
 
     assert response["type"] == "chat.response"
     assert response["response"]["done"] is True
-    assert len(prune_calls) == 1
     assert len(saved_content) == 1
+    payload = json.loads(saved_content[0])
+    assert payload == {
+        "version": 2,
+        "format": "responses_input_items",
+        "input_items": persisted_input_items,
+    }
+
+
+def test_widget_session_persists_v2_pending_state_on_tool_calls(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     import json
-    saved_messages = messages_from_dict(json.loads(saved_content[0]))
-    assert messages_to_dict(saved_messages) == messages_to_dict(pruned_messages)
-
-
-def test_widget_session_uses_pruned_pending_state_on_tool_calls(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, messages_from_dict, messages_to_dict
     from app.schemas.widget import ToolCallPayload
 
-    raw_messages = [
-        SystemMessage(content="sys"),
-        HumanMessage(content="q"),
-        ToolMessage(content="y" * 50_000, tool_call_id="c1"),
+    persisted_input_items = [
+        {"type": "compaction", "encrypted_content": "compact_1"},
+        {"type": "function_call", "call_id": "tc_1", "name": "do_thing", "arguments": "{}"},
     ]
-    pruned_messages = raw_messages[:2]
     tool_call = ToolCallPayload(
         id="tc_1",
         tool_id=uuid4(),
@@ -1723,18 +2104,24 @@ def test_widget_session_uses_pruned_pending_state_on_tool_calls(client: TestClie
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
-        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
-            return StepResult(tool_calls=[tool_call], done=False, messages=raw_messages, active_tool_ids=[])
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
+            return StepResult(
+                tool_calls=[tool_call],
+                done=False,
+                messages=[],
+                responses_input_items=persisted_input_items,
+                active_tool_ids=[],
+            )
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeState)
-    prune_calls: list[tuple[list, str]] = []
-
-    def fake_prune_messages(messages, model="gpt-4o", budget=None):
-        prune_calls.append((messages, model))
-        assert messages == raw_messages
-        return pruned_messages
-
-    monkeypatch.setattr("app.controllers.widget.prune_messages", fake_prune_messages)
 
     saved_messages: list[str] = []
 
@@ -1761,9 +2148,9 @@ def test_widget_session_uses_pruned_pending_state_on_tool_calls(client: TestClie
 
     assert response["type"] == "chat.response"
     assert response["response"]["done"] is False
-    assert len(prune_calls) == 1
     assert len(saved_messages) == 1
-    import json
     state_data = json.loads(saved_messages[0])
-    persisted_messages = messages_from_dict(state_data["messages"])
-    assert messages_to_dict(persisted_messages) == messages_to_dict(pruned_messages)
+    assert state_data["version"] == 2
+    assert state_data["format"] == "responses_input_items"
+    assert state_data["input_items"] == persisted_input_items
+    assert state_data["tool_calls"][0]["id"] == "tc_1"

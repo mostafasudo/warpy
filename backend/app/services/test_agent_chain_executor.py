@@ -8,7 +8,8 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from app.core.agent_custom_system_prompt import DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
-from app.services.agent_chain import AgentExecutor
+from app.services.agent_chain import AgentExecutor, MAX_HISTORY_PAIRS
+from app.services.openai_responses_ws import OpenAIResponsesInvocationResult, OpenAIResponsesWebSocketSession
 from app.schemas.widget import ToolResultPayload
 
 
@@ -23,7 +24,7 @@ class DummyLLM:
         return self
 
     async def ainvoke(self, _messages, **_kwargs):
-        self.invocations.append(_messages)
+        self.invocations.append(list(_messages))
         return self.responses.pop(0)
 
 
@@ -325,19 +326,23 @@ def test_run_step_ignores_invalid_widget_suggestions(monkeypatch):
     assert result.suggestions == []
 
 
-def test_invoke_main_agent_prunes_messages_before_responses_transport(monkeypatch):
+def test_invoke_main_agent_uses_responses_transport_input_items():
     class DummyResponsesTransport:
         def __init__(self):
             self.messages = None
             self.tools = None
+            self.input_items = None
 
-        async def ainvoke(self, messages, tools):
+        async def ainvoke(self, messages, tools, *, input_items=None):
             self.messages = messages
             self.tools = tools
-            return AIMessage(content="done", tool_calls=[])
+            self.input_items = input_items
+            return OpenAIResponsesInvocationResult(
+                message=AIMessage(content="done", tool_calls=[]),
+                input_items=[{"type": "compaction", "encrypted_content": "abc"}],
+            )
 
     original_messages = [SystemMessage(content="sys"), HumanMessage(content="hello")]
-    pruned_messages = [SystemMessage(content="pruned"), HumanMessage(content="hello")]
     transport = DummyResponsesTransport()
     executor = AgentExecutor(
         session=None,
@@ -346,13 +351,15 @@ def test_invoke_main_agent_prunes_messages_before_responses_transport(monkeypatc
         responses_transport=transport,
     )
 
-    monkeypatch.setattr("app.services.agent_chain.prune_messages", lambda messages, model: pruned_messages)
+    runtime_messages, input_items, response = asyncio.run(
+        executor._invoke_main_agent(original_messages, [], [{"type": "message", "role": "user", "content": "hello"}])
+    )
 
-    runtime_messages, response = asyncio.run(executor._invoke_main_agent(original_messages, []))
-
-    assert runtime_messages is pruned_messages
-    assert transport.messages is pruned_messages
+    assert runtime_messages is original_messages
+    assert transport.messages is original_messages
     assert transport.tools == []
+    assert transport.input_items == [{"type": "message", "role": "user", "content": "hello"}]
+    assert input_items == [{"type": "compaction", "encrypted_content": "abc"}]
     assert response.content == "done"
 
 
@@ -362,8 +369,15 @@ def test_invoke_main_agent_traces_responses_transport_with_main_agent_tag(monkey
     class DummyResponsesTransport:
         model = "gpt-5.4"
 
-        async def ainvoke(self, messages, tools):
-            return AIMessage(content="done", tool_calls=[])
+        @staticmethod
+        def messages_to_input_items(messages):
+            return OpenAIResponsesWebSocketSession.messages_to_input_items(messages)
+
+        async def ainvoke(self, messages, tools, *, input_items=None):
+            return OpenAIResponsesInvocationResult(
+                message=AIMessage(content="done", tool_calls=[]),
+                input_items=input_items or [],
+            )
 
     class FakeTrace:
         def __init__(self, name, run_type="chain", **kwargs):
@@ -396,12 +410,13 @@ def test_invoke_main_agent_traces_responses_transport_with_main_agent_tag(monkey
         responses_transport=DummyResponsesTransport(),
     )
 
-    runtime_messages, response = asyncio.run(
+    runtime_messages, input_items, response = asyncio.run(
         executor._invoke_main_agent([SystemMessage(content="sys"), HumanMessage(content="hello")], [])
     )
 
     assert response.content == "done"
     assert runtime_messages[0].content == "sys"
+    assert input_items[0]["role"] == "system"
     assert len(traces) == 1
     trace = traces[0]
     assert trace.name == "main-agent"
@@ -410,6 +425,7 @@ def test_invoke_main_agent_traces_responses_transport_with_main_agent_tag(monkey
     assert trace.kwargs["metadata"]["transport"] == "openai_responses_websocket"
     assert trace.kwargs["metadata"]["model"] == "gpt-5.4"
     assert trace.outputs["tool_call_count"] == 0
+    assert trace.outputs["input_item_count"] == len(input_items)
 
 
 def test_sanitize_localized_reply_strips_language_name_prefix():
@@ -671,7 +687,7 @@ def test_build_tool_message_error_ignores_screenshot():
     assert "timeout" in msg.content
 
 
-def test_run_step_prunes_messages_before_invoke(monkeypatch):
+def test_run_step_invokes_llm_with_history_and_latest_user_message(monkeypatch):
     responses = [AIMessage(content="ok", tool_calls=[])]
     llm = DummyLLM(responses)
     monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
@@ -680,9 +696,8 @@ def test_run_step_prunes_messages_before_invoke(monkeypatch):
     result = asyncio.run(executor.run_step("hello", []))
     assert result.done is True
     invoked_messages = llm.invocations[0]
-    from app.services.context_budget import count_messages_tokens, get_token_budget
-    total = count_messages_tokens(invoked_messages, "gpt-4o")
-    assert total <= get_token_budget("gpt-4o")
+    assert invoked_messages[0].content == executor._system_prompt
+    assert invoked_messages[-1].content == "hello"
 
 
 def test_run_truncates_tool_results(monkeypatch):
@@ -711,7 +726,6 @@ def test_build_messages_limits_history(monkeypatch):
     monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
     monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
-    from app.services.context_budget import MAX_HISTORY_PAIRS
     history = []
     for i in range(MAX_HISTORY_PAIRS + 20):
         history.append({"role": "user", "content": f"msg {i}"})
