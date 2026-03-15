@@ -23,7 +23,6 @@
 6. Run the code review tool/skill for a careful review
 7. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
 
-
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
 
@@ -55,6 +54,9 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - When you change a feature or surface, update the equivalent doc file in `docs/` (internal documentation) when one exists. If the change affects public-facing product behavior or setup, also update the corresponding public documentation in `docs-site/`. Always keep `AGENTS.md` and the project `README.md` up to date.
 - Keep the public docs in `docs-site/` automatically up to date whenever product behavior, setup, UI copy, tooling, security, or user-facing flows change. Only customer-facing information should be in `docs-site/`; put all internal implementation details in `docs/`, not in public docs.
 - Whenever browser access is needed for validation, debugging, reproduction, or automation, load `docs/chrome-cdp.md` first and prefer that live Chrome session workflow over separate browser instances.
+- **When the instruction says "ship it", that means:**  
+  run all tests, then commit and push the changes (excluding any changes to `frontend/index.html`).  
+  After you push, monitor the deployment until it completes, and keep checking the health of the deployment to ensure it is healthy.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.
