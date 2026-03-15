@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 from uuid import UUID
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from app.models import HttpMethod
 from app.services import agent_tools
 from app.services.agent_tools import (
+    ToolSnapshot,
     create_backend_tool,
     create_find_tools_tool,
     create_find_elements_tool,
@@ -54,6 +56,10 @@ class DummySession:
                 return iter(self._tools)
         enabled = [tool for tool in self._tools if getattr(tool, "agent_enabled", True)]
         return Result(enabled)
+
+    def scalar(self, _query):
+        enabled = [tool for tool in self._tools if getattr(tool, "agent_enabled", True)]
+        return enabled[0] if enabled else None
 
     def all(self):
         return self._tools
@@ -169,6 +175,105 @@ def test_create_find_tools_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch
     response = json.loads(tool.invoke("anything"))
     assert len(response) == 1
     assert response[0]["id"] == str(enabled.id)
+
+
+def test_create_backend_tool_uses_session_provider(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+    tool_record = DummyTool(
+        "12121212-1212-1212-1212-121212121212",
+        "/users/{id}",
+        HttpMethod.get,
+        {
+            "function": {
+                "name": "getUser",
+                "description": "Fetch user",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "params": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        }
+                    },
+                    "required": ["params"],
+                },
+            }
+        },
+    )
+    sessions: list[DummySession] = []
+
+    @contextmanager
+    def session_provider():
+        session = DummySession([tool_record])
+        sessions.append(session)
+        yield session
+
+    def fake_execute(session, user_id, loaded_tool_record, args, conversation_id=None):
+        captured["session"] = session
+        captured["user_id"] = user_id
+        captured["tool"] = loaded_tool_record
+        captured["args"] = args
+        return {"ok": True}
+
+    monkeypatch.setattr(agent_tools, "execute_backend_tool", fake_execute)
+
+    tool = create_backend_tool(
+        None,
+        "user_1",
+        ToolSnapshot.from_record(tool_record),
+        session_provider=session_provider,
+    )
+    result = tool.invoke({"params": {"id": "9"}})
+
+    assert json.loads(result) == {"ok": True}
+    assert len(sessions) == 1
+    assert captured["session"] is sessions[0]
+    assert captured["tool"] is tool_record
+    assert captured["args"] == {"params": {"id": "9"}}
+
+
+def test_create_backend_tool_reload_safely_when_given_snapshot_and_session(monkeypatch: pytest.MonkeyPatch):
+    captured = {}
+    tool_record = DummyTool(
+        "56565656-5656-5656-5656-565656565656",
+        "/users/{id}",
+        HttpMethod.get,
+        {
+            "function": {
+                "name": "getUser",
+                "description": "Fetch user",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "params": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        }
+                    },
+                    "required": ["params"],
+                },
+            }
+        },
+    )
+    session = DummySession([tool_record])
+
+    def fake_execute(session, user_id, loaded_tool_record, args, conversation_id=None):
+        captured["session"] = session
+        captured["tool"] = loaded_tool_record
+        captured["args"] = args
+        return {"ok": True}
+
+    monkeypatch.setattr(agent_tools, "execute_backend_tool", fake_execute)
+
+    tool = create_backend_tool(session, "user_1", ToolSnapshot.from_record(tool_record))
+    result = tool.invoke({"params": {"id": "9"}})
+
+    assert json.loads(result) == {"ok": True}
+    assert captured["session"] is session
+    assert captured["tool"] is tool_record
+    assert captured["args"] == {"params": {"id": "9"}}
 
 
 def test_get_agent_tools_empty_list():

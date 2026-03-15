@@ -146,10 +146,6 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
   }
 };
 
-export type HealthResponse = {
-  status: string;
-};
-
 export type {
   ActivityConversationDetailResponse,
   ActivityConversationsResponse,
@@ -187,7 +183,6 @@ export type {
 } from "@/types";
 
 export const apiClient = {
-  health: () => request<HealthResponse>("/health"),
   getConfig: () => request<ConfigResponse>("/config"),
   updateConfig: (payload: ConfigResponse) =>
     request<ConfigResponse>("/config", {

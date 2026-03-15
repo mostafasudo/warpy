@@ -2,20 +2,30 @@ import importlib
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models import Agent, AuthType, SessionHeader, StorageSource
+from app.models import Agent, AuthType, Message, SessionHeader, StorageSource, WidgetRunStatus
 from app.services.widget_service import (
+    claim_widget_run,
+    claim_widget_run_for_request,
+    clear_pending_state,
+    clear_widget_run_owner,
     create_widget_conversation,
     get_agent_by_id,
     get_pending_state,
     get_tool_context,
+    get_widget_chat_history,
     get_widget_config,
     get_widget_conversation,
-    get_widget_messages,
+    get_widget_run,
+    get_widget_run_by_agent_request,
+    is_widget_run_owned,
+    save_pending_state,
     save_tool_context,
     save_widget_message,
+    supersede_other_widget_runs,
 )
 
 
@@ -46,6 +56,16 @@ def db_session():
         yield session
     finally:
         session.close()
+
+
+def _conversation_messages(db_session: Session, conversation_id):
+    return list(
+        db_session.scalars(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.sequence)
+        ).all()
+    )
 
 
 def test_get_agent_by_id_not_found(db_session: Session):
@@ -148,7 +168,7 @@ def test_get_widget_conversation_found(db_session: Session):
     assert result.id == conversation.id
 
 
-def test_save_and_get_widget_messages(db_session: Session):
+def test_save_widget_message_persists_messages_in_sequence_order(db_session: Session):
     agent = Agent(user_id="user_1")
     db_session.add(agent)
     db_session.flush()
@@ -158,7 +178,7 @@ def test_save_and_get_widget_messages(db_session: Session):
     save_widget_message(db_session, conversation.id, "user", "hello")
     save_widget_message(db_session, conversation.id, "assistant", "hi there")
 
-    messages = get_widget_messages(db_session, conversation.id)
+    messages = _conversation_messages(db_session, conversation.id)
     assert len(messages) == 2
     assert messages[0].role == "user"
     assert messages[0].content == "hello"
@@ -194,9 +214,48 @@ def test_messages_ordered_by_sequence_not_uuid(db_session: Session):
     save_widget_message(db_session, conversation.id, "user", "third")
     save_widget_message(db_session, conversation.id, "assistant", "fourth")
 
-    messages = get_widget_messages(db_session, conversation.id)
+    messages = _conversation_messages(db_session, conversation.id)
     contents = [m.content for m in messages]
     assert contents == ["first", "second", "third", "fourth"]
+
+
+def test_get_widget_chat_history_excludes_internal_state_rows(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_widget_message(db_session, conversation.id, "user", "first")
+    save_pending_state(db_session, conversation.id, "internal")
+    save_tool_context(db_session, conversation.id, "tool context")
+    save_widget_message(db_session, conversation.id, "assistant", "second")
+
+    history = get_widget_chat_history(db_session, conversation.id)
+
+    assert history == [
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "second"},
+    ]
+
+
+def test_get_widget_chat_history_can_exclude_current_user_message(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_widget_message(db_session, conversation.id, "user", "first")
+    save_widget_message(db_session, conversation.id, "assistant", "reply")
+    current = save_widget_message(db_session, conversation.id, "user", "current")
+
+    history = get_widget_chat_history(db_session, conversation.id, exclude_message_id=current.id)
+
+    assert history == [
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "reply"},
+    ]
 
 
 def test_save_and_get_tool_context(db_session: Session):
@@ -245,10 +304,113 @@ def test_get_pending_state_returns_latest(db_session: Session):
     conversation = create_widget_conversation(db_session, agent.id)
 
     save_widget_message(db_session, conversation.id, "user", "hello")
-    save_widget_message(db_session, conversation.id, "pending_state", "state_data")
+    save_pending_state(db_session, conversation.id, "state_data")
 
     result = get_pending_state(db_session, conversation.id)
     assert result == "state_data"
+
+
+def test_save_pending_state_updates_existing_and_removes_stale_rows(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_widget_message(db_session, conversation.id, "pending_state", "old")
+    save_widget_message(db_session, conversation.id, "pending_state", "older")
+    save_pending_state(db_session, conversation.id, "latest")
+
+    messages = _conversation_messages(db_session, conversation.id)
+    pending_messages = [message for message in messages if message.role == "pending_state"]
+
+    assert len(pending_messages) == 1
+    assert pending_messages[0].content == "latest"
+
+
+def test_clear_pending_state_removes_existing_rows(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    save_pending_state(db_session, conversation.id, "state_data")
+    clear_pending_state(db_session, conversation.id)
+
+    assert get_pending_state(db_session, conversation.id) is None
+
+
+def test_widget_run_claim_supersede_and_clear_owner(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    conversation = create_widget_conversation(db_session, agent.id)
+
+    run, created = claim_widget_run(db_session, agent.id, conversation.id, "req_1", "owner_1")
+    assert created is True
+    assert run.status == WidgetRunStatus.running
+    assert is_widget_run_owned(db_session, conversation.id, "req_1", "owner_1") is True
+
+    reclaimed, created = claim_widget_run(db_session, agent.id, conversation.id, "req_1", "owner_2")
+    assert created is False
+    assert reclaimed.id == run.id
+    assert reclaimed.owner_token == "owner_2"
+    reclaimed.status = WidgetRunStatus.waiting_for_tools
+    db_session.flush()
+
+    claim_widget_run(db_session, agent.id, conversation.id, "req_2", "owner_3")
+    superseded = supersede_other_widget_runs(db_session, conversation.id, "req_2")
+
+    assert superseded == ["req_1"]
+    assert is_widget_run_owned(db_session, conversation.id, "req_1", "owner_2") is False
+
+    superseded_run = get_widget_run(db_session, conversation.id, "req_1")
+    assert superseded_run is not None
+    assert superseded_run.status == WidgetRunStatus.superseded
+    assert superseded_run.owner_token is None
+
+    clear_widget_run_owner(db_session, conversation.id, "req_2", "owner_3")
+    active_run = get_widget_run(db_session, conversation.id, "req_2")
+    assert active_run is not None
+    assert active_run.owner_token is None
+
+
+def test_claim_widget_run_for_request_reuses_existing_conversation_without_conversation_id(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    first, created = claim_widget_run_for_request(db_session, agent.id, "req_1", "owner_1")
+    assert created is True
+
+    second, created = claim_widget_run_for_request(db_session, agent.id, "req_1", "owner_2")
+    assert created is False
+    assert second.id == first.id
+    assert second.conversation_id == first.conversation_id
+    assert second.owner_token == "owner_2"
+
+    by_agent = get_widget_run_by_agent_request(db_session, agent.id, "req_1")
+    assert by_agent is not None
+    assert by_agent.id == first.id
+
+
+def test_claim_widget_run_for_request_does_not_reclaim_completed_owner(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    run, _created = claim_widget_run_for_request(db_session, agent.id, "req_done", "owner_1")
+    run.status = WidgetRunStatus.completed
+    run.owner_token = None
+    db_session.flush()
+
+    reclaimed, created = claim_widget_run_for_request(db_session, agent.id, "req_done", "owner_2")
+
+    assert created is False
+    assert reclaimed.id == run.id
+    assert reclaimed.owner_token is None
 
 
 def test_get_pending_state_not_found(db_session: Session):
@@ -260,5 +422,3 @@ def test_get_pending_state_not_found(db_session: Session):
 
     result = get_pending_state(db_session, conversation.id)
     assert result is None
-
-

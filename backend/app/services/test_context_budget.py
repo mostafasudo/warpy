@@ -44,6 +44,17 @@ def test_count_tokens_default_model():
     assert count_tokens("test") == count_tokens("test", "gpt-4o")
 
 
+def test_count_tokens_large_string_matches_encoder():
+    text = "word " * 4_000
+    encoder = _get_encoder("gpt-4o")
+    assert count_tokens(text, "gpt-4o") == len(encoder.encode(text))
+
+
+def test_count_tokens_stop_at_short_circuits_large_text():
+    result = count_tokens("x" * 200_000, "gpt-4o", stop_at=1_000)
+    assert result > 1_000
+
+
 def test_get_encoder_caches():
     enc1 = _get_encoder("gpt-4o")
     enc2 = _get_encoder("gpt-4o")
@@ -219,7 +230,7 @@ def test_truncate_tool_result_trims_elements_list():
 
 
 def test_truncate_tool_result_hard_truncate_fallback():
-    content = "x" * 200_000
+    content = "word " * 14_000
     result = truncate_tool_result(content, "gpt-4o")
     assert count_tokens(result, "gpt-4o") <= MAX_TOOL_RESULT_TOKENS
     assert result.endswith("...[content truncated to fit context window]")
@@ -264,6 +275,34 @@ def test_prune_messages_within_budget():
 
 def test_prune_messages_empty():
     assert prune_messages([], "gpt-4o") == []
+
+
+def test_prune_messages_recounts_exact_tokens_before_pruning(monkeypatch):
+    sys_msg = SystemMessage(content="sys")
+    smaller = AIMessage(content="smaller")
+    larger = AIMessage(content="larger")
+    latest = HumanMessage(content="latest")
+    messages = [sys_msg, smaller, larger, latest]
+
+    exact_tokens = {
+        "sys": 10,
+        "smaller": 60,
+        "larger": 200,
+        "latest": 10,
+    }
+
+    def fake_count_message_tokens(message, model="gpt-4o", stop_at=None):
+        content = str(message.content)
+        if stop_at is not None and content in {"smaller", "larger"}:
+            return stop_at + 1
+        return exact_tokens[content]
+
+    monkeypatch.setattr("app.services.context_budget.count_message_tokens", fake_count_message_tokens)
+
+    result = prune_messages(messages, "gpt-4o", budget=220)
+
+    assert smaller in result
+    assert larger not in result
 
 
 def test_prune_messages_preserves_system_and_last_human():

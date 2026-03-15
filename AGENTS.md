@@ -38,6 +38,7 @@ This repo contains three projects as submodules or top-level directories:
 | `widget/` | `widget` (submodule) | The embeddable JS widget that customers drop into their dashboards. |
 
 Submodules have their own git history. Commit inside the submodule first, then update the reference in the parent repo.
+`docs-site/` is public customer-facing documentation. Do not put internal-only implementation details, engineering notes, or private operational guidance there.
 
 ## Modes
 - **Ask mode:** answers are short, clear, and strictly concise.
@@ -47,11 +48,12 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.
+- Code must be **efficient, performant, and as scalable as possible** (i.e., easy to extend and build upon, and able to smoothly support millions of users) at all times.
 - Operate with **extreme selectiveness, high taste, and high standards**. Every addition must be clearly justified and materially improve correctness, reliability, performance, or maintainability.
-- Prefer the **minimum viable change** that delivers meaningful, measurable impact.
+- Whenever your changes make any code or test dead or unused, remove that code or test so the codebase only contains what is relevant and necessary.
 - Follow existing patterns only. Always match naming, structure, and usage found elsewhere in the codebase.
-- If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
-- Always automatically keep the public docs in `docs-site/` up to date when product behavior, setup steps, UI copy, tooling, security, or user-facing flows change.
+- When you change a feature or surface, update the equivalent doc file in `docs/` (internal documentation) when one exists. If the change affects public-facing product behavior or setup, also update the corresponding public documentation in `docs-site/`. Always keep `AGENTS.md` and the project `README.md` up to date as changes are made.
+- Keep the public docs in `docs-site/` automatically up to date whenever product behavior, setup, UI copy, tooling, security, or user-facing flows change. Only customer-facing information should be in `docs-site/`; put all internal implementation details in `docs/`, not in public docs.
 - Whenever browser access is needed for validation, debugging, reproduction, or automation, load `docs/chrome-cdp.md` first and prefer that live Chrome session workflow over separate browser instances.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
@@ -107,6 +109,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). All ot
 - Don’t add code “just in case” or for completeness alone.
 - Don’t mock components; mock **HTTP layer only**: `apiDashboardMock`, `apiV1Mock`.
 - Don’t use `document.querySelectorAll` in tests.
+- Don’t give `frontend/index.html` review weight. Treat changes there as local testing noise, ignore them during review, and never push that file unless the user explicitly asks for it.
 
 ## Commands (file-scoped first)
 - **Typecheck TS:** `pnpm tsc --noEmit path/to/file.tsx`

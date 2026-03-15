@@ -14,6 +14,7 @@ RESPONSE_HEADROOM_RATIO = 0.20
 MIN_RESPONSE_HEADROOM = 4_096
 MAX_TOOL_RESULT_TOKENS = 12_000
 MAX_HISTORY_PAIRS = 10
+TOKEN_COUNT_CHUNK_CHARS = 2_048
 
 _encoders: dict[str, tiktoken.Encoding] = {}
 
@@ -29,28 +30,47 @@ def _get_encoder(model: str) -> tiktoken.Encoding:
     return _encoders[name]
 
 
-def count_tokens(text: str, model: str = "gpt-4o") -> int:
+def _count_tokens_with_encoder(
+    encoder: tiktoken.Encoding,
+    text: str,
+    stop_at: int | None = None,
+) -> int:
     if not text:
         return 0
-    return len(_get_encoder(model).encode(text))
+    if stop_at is None:
+        return len(encoder.encode(text))
+
+    total = 0
+    for start in range(0, len(text), TOKEN_COUNT_CHUNK_CHARS):
+        total += len(encoder.encode(text[start:start + TOKEN_COUNT_CHUNK_CHARS]))
+        if total > stop_at:
+            return total
+    return total
+
+
+def count_tokens(text: str, model: str = "gpt-4o", stop_at: int | None = None) -> int:
+    if not text:
+        return 0
+    return _count_tokens_with_encoder(_get_encoder(model), text, stop_at=stop_at)
 
 
 IMAGE_TOKEN_COST_LOW = 85
 IMAGE_TOKEN_COST_HIGH = 765
 
 
-def _count_content_tokens(content: object, model: str) -> int:
+def _count_content_tokens(content: object, model: str, stop_at: int | None = None) -> int:
     if isinstance(content, str):
-        return count_tokens(content, model)
+        return count_tokens(content, model, stop_at=stop_at)
     if isinstance(content, list):
         total = 0
         for block in content:
+            remaining = None if stop_at is None else max(stop_at - total, 0)
             if not isinstance(block, dict):
-                total += count_tokens(str(block), model)
+                total += count_tokens(str(block), model, stop_at=remaining)
                 continue
             block_type = block.get("type", "")
             if block_type == "text":
-                total += count_tokens(block.get("text", ""), model)
+                total += count_tokens(block.get("text", ""), model, stop_at=remaining)
             elif block_type == "image_url":
                 detail = "auto"
                 img = block.get("image_url")
@@ -58,17 +78,27 @@ def _count_content_tokens(content: object, model: str) -> int:
                     detail = img.get("detail", "auto")
                 total += IMAGE_TOKEN_COST_LOW if detail == "low" else IMAGE_TOKEN_COST_HIGH
             else:
-                total += count_tokens(str(block), model)
+                total += count_tokens(str(block), model, stop_at=remaining)
+            if stop_at is not None and total > stop_at:
+                return total
         return total
-    return count_tokens(str(content), model) if content else 0
+    return count_tokens(str(content), model, stop_at=stop_at) if content else 0
 
 
-def count_message_tokens(message: BaseMessage, model: str = "gpt-4o") -> int:
+def count_message_tokens(
+    message: BaseMessage,
+    model: str = "gpt-4o",
+    stop_at: int | None = None,
+) -> int:
     overhead = 4
-    tokens = overhead + _count_content_tokens(message.content or "", model)
+    content_limit = None if stop_at is None else max(stop_at - overhead, 0)
+    tokens = overhead + _count_content_tokens(message.content or "", model, stop_at=content_limit)
+    if stop_at is not None and tokens > stop_at:
+        return tokens
     if isinstance(message, AIMessage) and message.tool_calls:
         try:
-            tokens += count_tokens(json.dumps(message.tool_calls), model)
+            tool_limit = None if stop_at is None else max(stop_at - tokens, 0)
+            tokens += count_tokens(json.dumps(message.tool_calls), model, stop_at=tool_limit)
         except (TypeError, ValueError):
             tokens += 200
     return tokens
@@ -89,7 +119,7 @@ def get_token_budget(model: str) -> int:
 
 
 def truncate_tool_result(content: str, model: str = "gpt-4o", max_tokens: int = MAX_TOOL_RESULT_TOKENS) -> str:
-    if count_tokens(content, model) <= max_tokens:
+    if count_tokens(content, model, stop_at=max_tokens) <= max_tokens:
         return content
 
     try:
@@ -97,7 +127,7 @@ def truncate_tool_result(content: str, model: str = "gpt-4o", max_tokens: int = 
         if isinstance(data, dict):
             data = _truncate_json_dict(data, model, max_tokens)
             result = json.dumps(data)
-            if count_tokens(result, model) <= max_tokens:
+            if count_tokens(result, model, stop_at=max_tokens) <= max_tokens:
                 return result
     except (json.JSONDecodeError, TypeError):
         pass
@@ -114,7 +144,7 @@ def _truncate_json_dict(data: dict, model: str, max_tokens: int) -> dict:
             body[key] = "[truncated]"
 
     result = json.dumps(data)
-    if count_tokens(result, model) <= max_tokens:
+    if count_tokens(result, model, stop_at=max_tokens) <= max_tokens:
         return data
 
     body = data.get("body", data)
@@ -124,7 +154,7 @@ def _truncate_json_dict(data: dict, model: str, max_tokens: int) -> dict:
                 original_len = len(body[list_key])
                 while len(body[list_key]) > 1:
                     result = json.dumps(data)
-                    if count_tokens(result, model) <= max_tokens:
+                    if count_tokens(result, model, stop_at=max_tokens) <= max_tokens:
                         break
                     body[list_key] = body[list_key][:len(body[list_key]) // 2]
                 if len(body[list_key]) < original_len:
@@ -169,6 +199,9 @@ def prune_messages(
     if budget is None:
         budget = get_token_budget(model)
 
+    approximate_total = sum(count_message_tokens(m, model, stop_at=budget) for m in messages)
+    if approximate_total <= budget:
+        return messages
     msg_tokens = [count_message_tokens(m, model) for m in messages]
     total = sum(msg_tokens)
     if total <= budget:
@@ -262,7 +295,7 @@ def prune_messages(
             running_total -= msg_tokens[i]
 
     pruned = [m for i, m in enumerate(messages) if i not in removed]
-    pruned_total = count_messages_tokens(pruned, model)
+    pruned_total = running_total
 
     log_info(
         "ContextBudget", "prune_messages",

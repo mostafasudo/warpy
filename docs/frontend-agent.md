@@ -66,23 +66,43 @@ sequenceDiagram
   participant L as LLM
 
   U->>W: "Change filters to last 30 days"
-  W->>B: /widget/chat (message)
+  W->>B: WS /widget/session (chat.request)
   B->>L: find_tools + screen autopilot tools
   L-->>B: read_page(filter="interactive")
   B-->>W: toolCalls[type=read_page]
   W->>U: Screen share prompt (if not already sharing)
   U-->>W: Share / Skip / auto-skip after 20s
   W->>W: Build accessibility tree + capture screenshot (if sharing)
-  W->>B: toolResults (tree with ref IDs + screenshot)
+  W->>B: same socket (chat.request with toolResults)
   B->>L: ToolMessage (tree context)
   L-->>B: frontend(goal="Apply filter", actions=[{action:"click", ref:"ref_7"}, ...])
   B-->>W: toolCalls[type=frontend]
   W->>W: Resolve refs, execute actions sequentially
-  W->>B: toolResults (frontend actions)
+  W->>B: same socket (chat.request with toolResults)
   B->>L: ToolMessage (results)
   L-->>B: Final response
   B-->>W: Assistant message summary + follow-up suggestions
 ```
+
+## Route ownership
+- Warpy-managed widget routes always call Warpy's API origin: `GET /widget/config/{agentId}`, `WS /widget/session`, and `POST /widget/transcribe`.
+- The customer-configured `baseUrl` is only for customer-owned routes:
+  - backend tool execution against the host product API
+  - the optional widget token refresh endpoint that returns `{ token }` and then calls Warpy server-to-server
+- Do not reuse `baseUrl` for Warpy widget routes even if the customer backend lives on the same domain.
+
+## Turn identity and ownership
+- Each websocket `chat.request` must include a non-empty client-generated `requestId`.
+- The widget reuses that same `requestId` for:
+  - the initial `chat.request`
+  - every follow-up `chat.request` carrying `toolResults`
+  - auto-resume after reload/navigation
+- Backend persistence is keyed canonically by `(agent_id, request_id)` in `widget_runs`.
+- Replays that arrive before the client has learned `conversationId` reclaim the original conversation through that agent-scoped run identity.
+- The first claim for a request persists the user message once and stores its `user_message_id`; replays of the same request reuse that row instead of inserting another user message.
+- The most recently claimed active request for a conversation owns the run. "Most recent" is determined by the latest successful server-side ownership claim for that conversation. Older in-flight runs may finish their OpenAI call, but they fail the ownership check and are prevented from persisting assistant output, pending state, or socket responses. Their stale results are silently discarded on the server.
+- Waiting tool-call state is resumable only for the owning `requestId`. Replaying completed requests returns the already-persisted assistant message instead of executing again.
+- Message sequencing is allocated under a conversation lock and enforced by a unique `(conversation_id, sequence)` constraint so concurrent widget writes cannot produce duplicate sequence numbers.
 
 ## Decision path
 ```mermaid
@@ -285,13 +305,13 @@ When `read_page` is called, the widget attempts to capture a screenshot of the c
 
 Flow:
 1. On the first `read_page` call, the widget shows an inline prompt asking the user to share the current tab.
-2. The prompt includes a 20-second countdown. If the user doesn't act, it auto-skips and continues without a screenshot.
+2. The prompt includes a 20-second countdown. If the user doesn't act, it auto-skips, treats that the same as **Skip**, and continues without a screenshot.
 3. The user can click **Share** (triggers the browser's tab-sharing picker) or **Skip**.
 4. `getDisplayMedia` is configured with `preferCurrentTab: true`, `selfBrowserSurface: "include"`, `monitorTypeSurfaces: "exclude"`, and `surfaceSwitching: "exclude"` to restrict sharing to the current tab only.
 5. Once sharing is active, every subsequent `read_page` call captures a frame without re-prompting.
 6. The frame is drawn to an offscreen canvas and exported as `image/webp` at 0.75 quality, then included in the tool result as a base64 data URL in the `screenshot` field.
 
-The sharing bar persists across messages (including empty/new-chat state) so the user always has a visible **Stop** control. Sharing is fully optional — the agent receives the accessibility tree regardless.
+The sharing bar persists across messages (including empty/new-chat state) so the user always has a visible **Stop** control. Clicking **Skip** or letting the timeout expire suppresses re-prompts until the user starts a **New chat** or reloads the page. Sharing is fully optional — the agent receives the accessibility tree regardless.
 
 ## Action execution engine
 The widget executes actions sequentially to preserve correct UI state. It simulates user events to trigger framework handlers (React/Vue/Angular):

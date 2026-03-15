@@ -35,12 +35,18 @@ def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
     return datetime.fromisoformat(raw_ts), UUID(raw_id)
 
 
-def _encode_message_cursor(sequence: int) -> str:
-    return str(sequence)
+def _encode_message_cursor(sequence: int, created_at: datetime, item_id: UUID) -> str:
+    return f"{sequence}|{created_at.isoformat()}|{item_id}"
 
 
-def _decode_message_cursor(cursor: str) -> int:
-    return int(cursor)
+def _decode_message_cursor(cursor: str) -> tuple[int, datetime, UUID]:
+    parts = cursor.split("|", maxsplit=2)
+    if len(parts) == 1:
+        return int(parts[0]), datetime.max.replace(tzinfo=UTC), UUID(int=(1 << 128) - 1)
+    if len(parts) != 3:
+        raise ValueError("Invalid message cursor")
+    raw_sequence, raw_ts, raw_id = parts
+    return int(raw_sequence), datetime.fromisoformat(raw_ts), UUID(raw_id)
 
 
 def _is_safe_description(value: str) -> bool:
@@ -245,16 +251,25 @@ def get_activity_conversation_detail(
         Message.role.in_(("user", "assistant")),
     )
     if message_cursor:
-        cursor_seq = _decode_message_cursor(message_cursor)
-        msg_query = msg_query.where(Message.sequence < cursor_seq)
+        cursor_seq, cursor_time, cursor_id = _decode_message_cursor(message_cursor)
+        msg_query = msg_query.where(or_(
+            Message.sequence < cursor_seq,
+            and_(
+                Message.sequence == cursor_seq,
+                or_(
+                    Message.created_at < cursor_time,
+                    and_(Message.created_at == cursor_time, Message.id < cursor_id),
+                ),
+            ),
+        ))
     messages = list(session.scalars(
-        msg_query.order_by(Message.sequence.desc()).limit(message_limit + 1)
+        msg_query.order_by(Message.sequence.desc(), Message.created_at.desc(), Message.id.desc()).limit(message_limit + 1)
     ).all())
 
     next_message_cursor = None
     if len(messages) > message_limit:
         messages.pop()
-        next_message_cursor = _encode_message_cursor(messages[-1].sequence)
+        next_message_cursor = _encode_message_cursor(messages[-1].sequence, messages[-1].created_at, messages[-1].id)
     messages.reverse()
 
     action_query = select(ConversationAction).where(

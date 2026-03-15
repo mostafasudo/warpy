@@ -113,6 +113,7 @@ class WidgetChatRequest(BaseModel):
 
     agent_id: UUID = Field(alias="agentId")
     conversation_id: UUID | None = Field(default=None, alias="conversationId")
+    request_id: str | None = Field(default=None, alias="requestId")
     message: str | None = None
     tool_results: list[ToolResultPayload] = Field(default=[], alias="toolResults")
 
@@ -121,12 +122,45 @@ class WidgetChatResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     conversation_id: UUID = Field(alias="conversationId")
+    request_id: str | None = Field(default=None, alias="requestId")
     messages: list[WidgetMessagePayload] = []
     tool_calls: list[ToolCallPayload] = Field(default=[], alias="toolCalls")
     suggestions: list[str] = Field(default_factory=list, alias="suggestions", max_length=WIDGET_SUGGESTION_MAX_COUNT)
     done: bool = False
     is_widget_hidden: bool = Field(default=False, alias="isWidgetHidden")
     actions_remaining: int = Field(default=0, alias="actionsRemaining")
+
+
+class WidgetSocketRequestEnvelope(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: Literal["chat.request"]
+    request: WidgetChatRequest
+    widget_token: str | None = Field(default=None, alias="widgetToken")
+
+
+class WidgetSocketResponseEnvelope(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: Literal["chat.response"] = "chat.response"
+    response: WidgetChatResponse
+
+
+class WidgetSocketErrorPayload(BaseModel):
+    code: str
+    message: str
+    retriable: bool = False
+
+
+class WidgetSocketErrorEnvelope(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: Literal["chat.error"] = "chat.error"
+    error: WidgetSocketErrorPayload
+
+
+class WidgetSocketKeepaliveEnvelope(BaseModel):
+    type: Literal["keepalive"] = "keepalive"
 
 
 class TranscriptionResponse(BaseModel):

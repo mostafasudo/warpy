@@ -159,7 +159,7 @@ pnpm worktree stop    # tear down
 See [docs/worktrees.md](docs/worktrees.md) for full reference (commands, port allocation, promote, clean).
 
 ## Optional Widget JWT Auth (Advanced Security)
-If you enable **Require signed widget token** on the Agent page, the widget will require a short‑lived JWT for `/widget/chat` (and will refresh it via the configured refresh endpoint path).
+If you enable **Require signed widget token** on the Agent page, the widget will require a short-lived JWT for `WS /widget/session` runs and protected widget endpoints such as `POST /widget/transcribe`. The widget refreshes it via the configured refresh endpoint path and includes it in the first websocket `chat.request`.
 
 Required backend env:
 - `WIDGET_JWT_SECRET` (signing secret for widget JWTs)

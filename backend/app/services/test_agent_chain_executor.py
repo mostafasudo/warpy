@@ -1,5 +1,6 @@
 import asyncio
 import json
+from contextlib import contextmanager
 from uuid import UUID
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -106,6 +107,52 @@ def test_parse_tool_ids_handles_invalid_json():
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]))
     assert executor._parse_tool_ids_from_response("not-json") == []
     assert executor._parse_tool_ids_from_response("{}") == []
+
+
+def test_get_valid_tool_ids_uses_session_provider():
+    tool_id = UUID("44444444-4444-4444-4444-444444444444")
+    sessions = []
+    session_open = {"value": False}
+
+    class ToolRow:
+        @property
+        def id(self):
+            if not session_open["value"]:
+                raise AssertionError("tool id accessed after session close")
+            return tool_id
+
+    class DummySessionWithTools:
+        def __init__(self):
+            self.tool_rows = [ToolRow()]
+
+        def scalars(self, _query):
+            class Result:
+                def __init__(self, rows):
+                    self._rows = rows
+
+                def all(self):
+                    return self._rows
+
+            return Result(self.tool_rows)
+
+    @contextmanager
+    def session_provider():
+        session = DummySessionWithTools()
+        sessions.append(session)
+        session_open["value"] = True
+        yield session
+        session_open["value"] = False
+
+    executor = AgentExecutor(
+        session=None,
+        user_id="user",
+        llm_client=DummyLLM([]),
+        session_provider=session_provider,
+    )
+    executor.active_tool_ids = [tool_id]
+
+    assert executor._get_valid_tool_ids() == {tool_id}
+    assert len(sessions) == 1
 
 
 def test_run_step_handles_read_page_tool(monkeypatch):
@@ -220,6 +267,35 @@ def test_run_step_returns_response_directly(monkeypatch):
     assert result.suggestions == []
 
 
+def test_run_step_handles_tool_metadata_without_valid_identifier(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "backend_tool", "args": {}}]),
+        AIMessage(content="done", tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    invalid_tool = StructuredTool.from_function(
+        func=lambda **_kwargs: "ok",
+        name="backend_tool",
+        description="backend_tool",
+        args_schema=DummyArgs,
+    )
+    invalid_tool.metadata = {"warpy_tool": {"toolType": "backend"}}
+
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [invalid_tool])
+
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
+    result = asyncio.run(executor.run_step("hello", []))
+
+    assert result.done is True
+    assert result.response == "done"
+    follow_up_messages = llm.invocations[1]
+    assert any(
+        isinstance(message, ToolMessage) and "no valid identifier" in str(message.content)
+        for message in follow_up_messages
+    )
+
+
 def test_run_step_generates_widget_suggestions_when_enabled(monkeypatch):
     responses = [
         AIMessage(content="The invoice is ready.", tool_calls=[]),
@@ -247,6 +323,93 @@ def test_run_step_ignores_invalid_widget_suggestions(monkeypatch):
     result = asyncio.run(executor.run_step("Create an invoice", []))
     assert result.done is True
     assert result.suggestions == []
+
+
+def test_invoke_main_agent_prunes_messages_before_responses_transport(monkeypatch):
+    class DummyResponsesTransport:
+        def __init__(self):
+            self.messages = None
+            self.tools = None
+
+        async def ainvoke(self, messages, tools):
+            self.messages = messages
+            self.tools = tools
+            return AIMessage(content="done", tool_calls=[])
+
+    original_messages = [SystemMessage(content="sys"), HumanMessage(content="hello")]
+    pruned_messages = [SystemMessage(content="pruned"), HumanMessage(content="hello")]
+    transport = DummyResponsesTransport()
+    executor = AgentExecutor(
+        session=None,
+        user_id="user",
+        llm_client=DummyLLM([]),
+        responses_transport=transport,
+    )
+
+    monkeypatch.setattr("app.services.agent_chain.prune_messages", lambda messages, model: pruned_messages)
+
+    runtime_messages, response = asyncio.run(executor._invoke_main_agent(original_messages, []))
+
+    assert runtime_messages is pruned_messages
+    assert transport.messages is pruned_messages
+    assert transport.tools == []
+    assert response.content == "done"
+
+
+def test_invoke_main_agent_traces_responses_transport_with_main_agent_tag(monkeypatch):
+    traces = []
+
+    class DummyResponsesTransport:
+        model = "gpt-5.4"
+
+        async def ainvoke(self, messages, tools):
+            return AIMessage(content="done", tool_calls=[])
+
+    class FakeTrace:
+        def __init__(self, name, run_type="chain", **kwargs):
+            self.name = name
+            self.run_type = run_type
+            self.kwargs = kwargs
+            self.outputs = None
+            traces.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def end(self, *, outputs=None, error=None):
+            self.outputs = outputs
+            self.error = error
+
+    monkeypatch.setattr(
+        "app.services.agent_chain.get_settings",
+        lambda: type("Settings", (), {"openai_api_key": "", "langsmith_tracing": True})(),
+    )
+    monkeypatch.setattr("app.services.agent_chain.langsmith_trace", lambda *args, **kwargs: FakeTrace(*args, **kwargs))
+
+    executor = AgentExecutor(
+        session=None,
+        user_id="user",
+        llm_client=DummyLLM([]),
+        responses_transport=DummyResponsesTransport(),
+    )
+
+    runtime_messages, response = asyncio.run(
+        executor._invoke_main_agent([SystemMessage(content="sys"), HumanMessage(content="hello")], [])
+    )
+
+    assert response.content == "done"
+    assert runtime_messages[0].content == "sys"
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.name == "main-agent"
+    assert trace.run_type == "llm"
+    assert trace.kwargs["tags"] == ["main-agent"]
+    assert trace.kwargs["metadata"]["transport"] == "openai_responses_websocket"
+    assert trace.kwargs["metadata"]["model"] == "gpt-5.4"
+    assert trace.outputs["tool_call_count"] == 0
 
 
 def test_sanitize_localized_reply_strips_language_name_prefix():

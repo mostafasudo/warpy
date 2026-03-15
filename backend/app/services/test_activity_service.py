@@ -1,5 +1,5 @@
-from datetime import date
-from uuid import uuid4
+from datetime import UTC, date, datetime
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -58,11 +58,21 @@ def test_action_label_falls_back_when_name_is_missing():
 
 def test_message_cursor_encode_decode_roundtrip():
     seq = 42
-    encoded = _encode_message_cursor(seq)
+    created_at = datetime(2026, 3, 15, 12, 0, tzinfo=UTC)
+    item_id = uuid4()
+    encoded = _encode_message_cursor(seq, created_at, item_id)
     decoded = _decode_message_cursor(encoded)
-    assert decoded == seq
+    assert decoded == (seq, created_at, item_id)
 
 
 def test_message_cursor_encodes_to_string():
-    encoded = _encode_message_cursor(123)
-    assert encoded == "123"
+    encoded = _encode_message_cursor(123, datetime(2026, 3, 15, 12, 0, tzinfo=UTC), uuid4())
+    assert encoded.count("|") == 2
+
+
+def test_message_cursor_decodes_legacy_sequence_only_format():
+    sequence, created_at, item_id = _decode_message_cursor("123")
+
+    assert sequence == 123
+    assert created_at == datetime.max.replace(tzinfo=UTC)
+    assert item_id == UUID(int=(1 << 128) - 1)

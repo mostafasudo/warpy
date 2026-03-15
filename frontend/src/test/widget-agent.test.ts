@@ -1,11 +1,12 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import { fireEvent, waitFor } from "@testing-library/react"
+import { act, fireEvent, waitFor } from "@testing-library/react"
 
 const AGENT_ID = "widget-agent-id"
 const SCRIPT_SRC = "http://localhost:5173/widget/agent.js"
 const WIDGET_CONTAINER_ID = "cta-widget-container"
+const STORAGE_KEY = "cta_widget_state"
 const UI_STORAGE_KEY = "cta_widget_ui_state"
 const PAGE_PUSH_OFFSET_VAR = "--cta-widget-push-offset"
 const PAGE_PUSH_ACTIVE_ATTR = "data-cta-widget-push-active"
@@ -29,6 +30,63 @@ type WidgetDom = {
   host: HTMLElement
   panel: HTMLDivElement
   toggle: HTMLButtonElement
+}
+
+type WidgetSocketMessage = {
+  type: string
+  request?: Record<string, unknown>
+  widgetToken?: string
+}
+
+class MockWebSocket {
+  static CLOSED = 3
+  static CLOSING = 2
+  static CONNECTING = 0
+  static OPEN = 1
+  static instances: MockWebSocket[] = []
+  static handler: ((socket: MockWebSocket, message: WidgetSocketMessage) => void) | null = null
+
+  static reset() {
+    MockWebSocket.instances = []
+    MockWebSocket.handler = null
+  }
+
+  onclose: ((event: Event) => void) | null = null
+  onerror: ((event: Event) => void) | null = null
+  onmessage: ((event: MessageEvent<string>) => void) | null = null
+  onopen: ((event: Event) => void) | null = null
+  readyState = MockWebSocket.CONNECTING
+  sent: WidgetSocketMessage[] = []
+  url: string
+
+  constructor(url: string) {
+    this.url = url
+    MockWebSocket.instances.push(this)
+    setTimeout(() => {
+      this.readyState = MockWebSocket.OPEN
+      this.onopen?.(new Event("open"))
+    }, 0)
+  }
+
+  close() {
+    if (this.readyState >= MockWebSocket.CLOSING) return
+    this.readyState = MockWebSocket.CLOSED
+    this.onclose?.(new Event("close"))
+  }
+
+  send(data: string) {
+    const parsed = JSON.parse(data) as WidgetSocketMessage
+    this.sent.push(parsed)
+    MockWebSocket.handler?.(this, parsed)
+  }
+
+  receive(data: unknown) {
+    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent<string>)
+  }
+
+  fail() {
+    this.onerror?.(new Event("error"))
+  }
 }
 
 function createConfig(overrides: WidgetConfig = {}): Required<WidgetConfig> {
@@ -86,13 +144,22 @@ function readUiState() {
   return JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}") as { panelWidth?: number }
 }
 
+function readWidgetState() {
+  return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}") as {
+    activeQuery?: string | null
+    activeRequestId?: string | null
+    conversationId?: string | null
+    interruptedByNavigation?: boolean
+  }
+}
+
 function getWidth(panel: HTMLDivElement) {
   return Number.parseInt(panel.style.width || "0", 10)
 }
 
 async function loadWidget(
   configOverrides: WidgetConfig = {},
-  options: { mockConfigFetch?: boolean } = {}
+  options: { baseUrl?: string, mockConfigFetch?: boolean } = {}
 ): Promise<WidgetDom> {
   const config = createConfig(configOverrides)
   if (options.mockConfigFetch !== false) {
@@ -102,6 +169,7 @@ async function loadWidget(
   const script = document.createElement("script")
   script.src = SCRIPT_SRC
   script.setAttribute("data-agent-id", AGENT_ID)
+  script.setAttribute("data-base-url", options.baseUrl ?? "http://localhost:8000")
   document.body.appendChild(script)
 
   window.eval(widgetSource)
@@ -139,6 +207,13 @@ async function openPanel(widget: WidgetDom) {
 describe("widget desktop resize", () => {
   beforeEach(() => {
     global.fetch = jest.fn() as unknown as typeof fetch
+    ;(global as typeof globalThis & { WebSocket: typeof WebSocket }).WebSocket = MockWebSocket as unknown as typeof WebSocket
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: MockWebSocket,
+    })
+    MockWebSocket.reset()
     document.head.innerHTML = ""
     document.body.innerHTML = ""
     document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
@@ -242,17 +317,27 @@ describe("widget desktop resize", () => {
       widgetSuggestionsEnabled: true,
       widgetStarterSuggestions: ["Show recent invoices", "Create a refund"]
     })
-    const chatBodies: Array<Record<string, unknown>> = []
 
-    ;(global.fetch as jest.Mock).mockImplementation(async (input, init) => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
       const url = String(input)
       if (url.includes("/widget/config/")) {
         return createJsonResponse(config)
       }
-      if (url.endsWith("/widget/chat")) {
-        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>
-        chatBodies.push(body)
-        return createJsonResponse({
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      expect(socket.url).toBe("ws://localhost:8000/widget/session")
+      expect(message.type).toBe("chat.request")
+      expect(message.request).toMatchObject({
+        agentId: AGENT_ID,
+        conversationId: null,
+        message: "Create a refund",
+      })
+      socket.receive({ type: "keepalive" })
+      socket.receive({
+        type: "chat.response",
+        response: {
           conversationId: "conversation-1",
           messages: [{ role: "assistant", content: "Here is the update." }],
           toolCalls: [],
@@ -260,10 +345,9 @@ describe("widget desktop resize", () => {
           done: true,
           isWidgetHidden: false,
           actionsRemaining: 5,
-        })
-      }
-      throw new Error(`Unexpected fetch: ${url}`)
-    })
+        },
+      })
+    }
 
     const widget = await loadWidget({}, { mockConfigFetch: false })
     await openPanel(widget)
@@ -280,12 +364,8 @@ describe("widget desktop resize", () => {
     fireEvent.click(starterButton!)
 
     await waitFor(() => {
-      expect(chatBodies).toHaveLength(1)
-      expect(chatBodies[0]).toMatchObject({
-        agentId: AGENT_ID,
-        conversationId: null,
-        message: "Create a refund",
-      })
+      expect(MockWebSocket.instances).toHaveLength(1)
+      expect(MockWebSocket.instances[0]?.sent).toHaveLength(1)
     })
 
     await waitFor(() => {
@@ -293,5 +373,488 @@ describe("widget desktop resize", () => {
       expect(suggestionTexts).toEqual(["Send it to finance", "Create another invoice"])
     })
     expect(shadowRoot.textContent).toContain("Here is the update.")
+  })
+
+  it("keeps Warpy widget routes on the Warpy API even when a customer base URL is configured", async () => {
+    const config = createConfig()
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      expect(url).toBe(`http://localhost:8000/widget/config/${AGENT_ID}`)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(config)
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      expect(socket.url).toBe("ws://localhost:8000/widget/session")
+      expect(message.type).toBe("chat.request")
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [{ role: "assistant", content: "Done." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget({}, { baseUrl: "https://example.com/api", mockConfigFetch: false })
+    await openPanel(widget)
+
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+    fireEvent.change(input, { target: { value: "Hello" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1)
+      expect(MockWebSocket.instances[0]?.url).toBe("ws://localhost:8000/widget/session")
+    })
+  })
+
+  it("sends tool results over the same websocket in the original order", async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-3",
+            messages: [],
+            toolCalls: [
+              { id: "tc_1", type: "find_elements", name: "find_elements", findQuery: "save button" },
+              { id: "tc_2", type: "find_elements", name: "find_elements", findQuery: "cancel button" },
+            ],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request).toMatchObject({
+        agentId: AGENT_ID,
+        conversationId: "conversation-3",
+      })
+      expect(request.toolResults).toEqual([
+        { id: "tc_1", statusCode: 200, body: expect.any(Object) },
+        { id: "tc_2", statusCode: 200, body: expect.any(Object) },
+      ])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-3",
+          messages: [{ role: "assistant", content: "Finished." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Check the page" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1)
+      expect(MockWebSocket.instances[0]?.sent).toHaveLength(2)
+      expect(shadowRoot.textContent).toContain("Finished.")
+    })
+  })
+
+  it("reuses one requestId across the full widget turn and clears it after completion", async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    let requestId = ""
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        expect(typeof request.requestId).toBe("string")
+        expect(request.requestId).toBeTruthy()
+        requestId = String(request.requestId)
+        expect(readWidgetState().activeRequestId).toBe(requestId)
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-request-id",
+            requestId,
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "find_elements", name: "find_elements", findQuery: "save button" }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.requestId).toBe(requestId)
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-request-id",
+          requestId,
+          messages: [{ role: "assistant", content: "Finished." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Check request id flow" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances[0]?.sent).toHaveLength(2)
+      expect(shadowRoot.textContent).toContain("Finished.")
+    })
+    expect(readWidgetState().activeRequestId).toBeNull()
+  })
+
+  it("auto-resumes with the saved activeRequestId after navigation interruption", async () => {
+    jest.useFakeTimers()
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        messages: [],
+        conversationId: "conversation-resume",
+        activeQuery: "Resume this request",
+        activeRequestId: "req_resume_saved",
+        interruptedByNavigation: true,
+        voice: {},
+        auth: {},
+        ui: {},
+        suggestions: [],
+      }))
+
+      ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes("/widget/config/")) {
+          return createJsonResponse(createConfig())
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      })
+
+      MockWebSocket.handler = (socket, message) => {
+        const request = message.request || {}
+        expect(request.requestId).toBe("req_resume_saved")
+        expect(request.conversationId).toBe("conversation-resume")
+        expect(request.message).toBe("Resume this request")
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-resume",
+            requestId: "req_resume_saved",
+            messages: [{ role: "assistant", content: "Resumed." }],
+            toolCalls: [],
+            suggestions: [],
+            done: true,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+      }
+
+      const widget = await loadWidget()
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500)
+      })
+
+      const shadowRoot = getShadowRoot(widget)
+      await waitFor(() => {
+        expect(MockWebSocket.instances[0]?.sent).toHaveLength(1)
+        expect(shadowRoot.textContent).toContain("Resumed.")
+      })
+      expect(readWidgetState().activeRequestId).toBeNull()
+      expect(readWidgetState().interruptedByNavigation).toBe(false)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it("auto-resumes with the saved activeRequestId even when conversationId is still null", async () => {
+    jest.useFakeTimers()
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        messages: [],
+        conversationId: null,
+        activeQuery: "Resume without conversation",
+        activeRequestId: "req_resume_without_conversation",
+        interruptedByNavigation: true,
+        voice: {},
+        auth: {},
+        ui: {},
+        suggestions: [],
+      }))
+
+      ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes("/widget/config/")) {
+          return createJsonResponse(createConfig())
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      })
+
+      MockWebSocket.handler = (socket, message) => {
+        const request = message.request || {}
+        expect(request.requestId).toBe("req_resume_without_conversation")
+        expect(request.conversationId).toBeNull()
+        expect(request.message).toBe("Resume without conversation")
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-resume-new",
+            requestId: "req_resume_without_conversation",
+            messages: [{ role: "assistant", content: "Resumed without conversation." }],
+            toolCalls: [],
+            suggestions: [],
+            done: true,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+      }
+
+      const widget = await loadWidget()
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500)
+      })
+
+      const shadowRoot = getShadowRoot(widget)
+      await waitFor(() => {
+        expect(MockWebSocket.instances[0]?.sent).toHaveLength(1)
+        expect(shadowRoot.textContent).toContain("Resumed without conversation.")
+      })
+      expect(readWidgetState().conversationId).toBe("conversation-resume-new")
+      expect(readWidgetState().activeRequestId).toBeNull()
+      expect(readWidgetState().interruptedByNavigation).toBe(false)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it("ignores stale chat responses that carry a different requestId", async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      const requestId = String(request.requestId)
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-stale",
+          requestId: "req_stale_other",
+          messages: [{ role: "assistant", content: "Stale response" }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-stale",
+          requestId,
+          messages: [{ role: "assistant", content: "Fresh response" }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Ignore stale response" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Fresh response")
+    })
+    expect(shadowRoot.textContent).not.toContain("Stale response")
+  })
+
+  it("clears the activeRequestId when starting a new chat", async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = () => {
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+    const newChat = shadowRoot.querySelector(".cta-widget-new-chat") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Leave request pending" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(readWidgetState().activeRequestId).toBeTruthy()
+    })
+
+    fireEvent.click(newChat)
+
+    await waitFor(() => {
+      expect(readWidgetState().activeRequestId).toBeNull()
+      expect(readWidgetState().activeQuery).toBeNull()
+    })
+  })
+
+  it("treats screen-share timeout like skip for the rest of the active run", async () => {
+    jest.useFakeTimers()
+    try {
+      ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes("/widget/config/")) {
+          return createJsonResponse(createConfig())
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      })
+
+      let toolRound = 0
+      MockWebSocket.handler = (socket, message) => {
+        const request = message.request || {}
+        if (request.message) {
+          socket.receive({
+            type: "chat.response",
+            response: {
+              conversationId: "conversation-4",
+              messages: [],
+              toolCalls: [{ id: "tc_1", type: "read_page", name: "read_page", readPageOptions: { filter: "interactive" } }],
+              suggestions: [],
+              done: false,
+              isWidgetHidden: false,
+              actionsRemaining: 5,
+            },
+          })
+          return
+        }
+
+        toolRound += 1
+        expect(request).toMatchObject({
+          agentId: AGENT_ID,
+          conversationId: "conversation-4",
+          toolResults: [{ id: toolRound === 1 ? "tc_1" : "tc_2", statusCode: 200, body: expect.any(Object) }],
+        })
+
+        if (toolRound === 1) {
+          socket.receive({
+            type: "chat.response",
+            response: {
+              conversationId: "conversation-4",
+              messages: [],
+              toolCalls: [{ id: "tc_2", type: "read_page", name: "read_page", readPageOptions: { filter: "interactive" } }],
+              suggestions: [],
+              done: false,
+              isWidgetHidden: false,
+              actionsRemaining: 5,
+            },
+          })
+          return
+        }
+
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-4",
+            messages: [{ role: "assistant", content: "Finished without screenshots." }],
+            toolCalls: [],
+            suggestions: [],
+            done: true,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+      }
+
+      const widget = await loadWidget()
+      await openPanel(widget)
+      const shadowRoot = getShadowRoot(widget)
+      const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+      const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+      fireEvent.change(input, { target: { value: "Check the page twice" } })
+      fireEvent.click(send)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0)
+      })
+
+      expect(shadowRoot.textContent).toContain("Share this tab for a clearer view")
+      expect(MockWebSocket.instances).toHaveLength(1)
+      expect(MockWebSocket.instances[0]?.sent).toHaveLength(1)
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(20000)
+      })
+
+      expect(MockWebSocket.instances[0]?.sent).toHaveLength(3)
+      expect(shadowRoot.textContent).toContain("Finished without screenshots.")
+      expect(shadowRoot.textContent).not.toContain("Share this tab for a clearer view")
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

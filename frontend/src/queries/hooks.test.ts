@@ -5,7 +5,6 @@ const queryMock = { useQuery: jest.fn(), useMutation: jest.fn(), useQueryClient:
 jest.mock("@tanstack/react-query", () => queryMock)
 
 const apiClient: Record<string, any> = {
-  health: jest.fn(),
   getConfig: jest.fn(),
   updateConfig: jest.fn(),
   listTools: jest.fn(),
@@ -35,23 +34,6 @@ describe("react-query hooks", () => {
     queryMock.useMutation.mockReset()
     queryMock.useQueryClient.mockReset()
     queryMock.useInfiniteQuery.mockReset()
-  })
-
-  it("configures health query", () => {
-    queryMock.useQuery.mockImplementation((options: any) => {
-      options.queryFn()
-      return { data: "ok" }
-    })
-    const { useHealthQuery } = require("./use-health")
-    ;(apiClient.health as any).mockResolvedValue({ status: "ok" })
-
-    const result = useHealthQuery()
-
-    expect(result.data).toBe("ok")
-    expect(apiClient.health).toHaveBeenCalled()
-    expect(queryMock.useQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ queryKey: ["health"], retry: false })
-    )
   })
 
   it("fetches config", () => {

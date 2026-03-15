@@ -1,11 +1,13 @@
 import json
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable, ContextManager
 from uuid import UUID
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage, messages_to_dict
 from langchain_openai import ChatOpenAI
+from langsmith.run_helpers import trace as langsmith_trace
 from redis import Redis
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,9 +27,10 @@ from ..schemas.widget import (
     WIDGET_SUGGESTION_MAX_COUNT,
     WIDGET_SUGGESTION_MAX_LENGTH,
 )
-from .agent_execution import execute_backend_tool
+from .openai_responses_ws import OpenAIResponsesWebSocketSession
+from .agent_execution import execute_backend_tool, get_enabled_tool
 from .agent_schema import SchemaFactory, serialize_args
-from .agent_tools import create_find_elements_tool, create_find_tools_tool, create_frontend_actions_tool, create_js_exec_tool, create_read_page_tool, get_agent_tools
+from .agent_tools import ToolSnapshot, create_find_elements_tool, create_find_tools_tool, create_frontend_actions_tool, create_js_exec_tool, create_read_page_tool, get_agent_tools
 from .context_budget import MAX_HISTORY_PAIRS, prune_messages, truncate_tool_result
 from .tool_cache import ToolCache
 
@@ -155,7 +158,7 @@ class StepResult:
 class AgentExecutor:
     def __init__(
         self,
-        session: Session,
+        session: Session | None,
         user_id: str,
         conversation_id: UUID | None = None,
         redis_client: Redis | None = None,
@@ -165,8 +168,11 @@ class AgentExecutor:
         knowledge_base_enabled: bool = False,
         widget_suggestions_enabled: bool = False,
         custom_user_system_prompt: str = DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
+        responses_transport: OpenAIResponsesWebSocketSession | None = None,
+        session_provider: Callable[[], ContextManager[Session]] | None = None,
     ):
         self.session = session
+        self.session_provider = session_provider
         self.user_id = user_id
         self.conversation_id = conversation_id
         self.frontend_capability_enabled = frontend_capability_enabled
@@ -185,11 +191,34 @@ class AgentExecutor:
             temperature=llm_config.temperature,
             api_key=settings.openai_api_key
         )
+        self.responses_transport = responses_transport
         self._model = llm_config.chat_model
         self.active_tool_ids: list[UUID] = []
         self._tool_cache: ToolCache | None = None
         if conversation_id:
             self._tool_cache = ToolCache(redis_client, conversation_id)
+
+    @contextmanager
+    def _session_context(self):
+        if self.session_provider is not None:
+            with self.session_provider() as session:
+                yield session
+            return
+        if self.session is None:
+            raise RuntimeError("AgentExecutor requires a database session")
+        yield self.session
+
+    def _with_session(self, operation):
+        with self._session_context() as session:
+            return operation(session)
+
+    @staticmethod
+    def _extract_tool_metadata(tool: Any) -> dict[str, Any] | None:
+        if tool is None:
+            return None
+        metadata = getattr(tool, "metadata", None) or {}
+        raw = metadata.get("warpy_tool")
+        return raw if isinstance(raw, dict) else None
 
     def _parse_tool_ids_from_response(self, content: str) -> list[UUID]:
         try:
@@ -203,14 +232,18 @@ class AgentExecutor:
     def _get_valid_tool_ids(self) -> set[UUID]:
         if not self.active_tool_ids:
             return set()
-        tools = self.session.scalars(
-            select(Tool).where(
-                Tool.id.in_(self.active_tool_ids),
-                Tool.user_id == self.user_id,
-                Tool.agent_enabled.is_(True)
-            )
-        ).all()
-        return {tool.id for tool in tools}
+        return self._with_session(
+            lambda session: {
+                tool.id
+                for tool in session.scalars(
+                    select(Tool).where(
+                        Tool.id.in_(self.active_tool_ids),
+                        Tool.user_id == self.user_id,
+                        Tool.agent_enabled.is_(True)
+                    )
+                ).all()
+            }
+        )
 
     def _sync_cache(self) -> None:
         if not self._tool_cache:
@@ -233,9 +266,14 @@ class AgentExecutor:
         self._tool_cache.save()
 
     def _get_tools(self):
-        tools = [
-            create_find_tools_tool(self.session, self.user_id),
-        ]
+        if self.session_provider is not None:
+            tools = [
+                create_find_tools_tool(None, self.user_id, session_provider=self.session_provider),
+            ]
+        else:
+            tools = [
+                create_find_tools_tool(self.session, self.user_id),
+            ]
         if self.frontend_capability_enabled:
             tools.append(create_read_page_tool())
             tools.append(create_find_elements_tool())
@@ -243,26 +281,73 @@ class AgentExecutor:
             tools.append(create_js_exec_tool())
         if self.knowledge_base_enabled:
             from .agent_tools import create_search_knowledge_base_tool
-            tools.append(create_search_knowledge_base_tool(self.session, self.user_id))
+            if self.session_provider is not None:
+                tools.append(create_search_knowledge_base_tool(None, self.user_id, session_provider=self.session_provider))
+            else:
+                tools.append(create_search_knowledge_base_tool(self.session, self.user_id))
+        get_agent_tools_kwargs = {}
+        if self.session_provider is not None:
+            get_agent_tools_kwargs["session_provider"] = self.session_provider
         tools.extend(get_agent_tools(
             self.session,
             self.user_id,
             self.active_tool_ids,
             self.schema_factory,
             conversation_id=self.conversation_id,
+            **get_agent_tools_kwargs,
         ))
         return tools
 
-    def _get_tool_by_name(self, tool_name: str) -> Tool | None:
-        for tool_id in self.active_tool_ids:
-            tool = self.session.get(Tool, tool_id)
-            if tool and tool.agent_enabled:
-                tool_spec = tool.tool or {}
-                function_spec = tool_spec.get("function", {})
-                name = function_spec.get("name", f"tool_{tool.id}")
-                if name == tool_name:
-                    return tool
-        return None
+    async def _invoke_main_agent(
+        self,
+        runtime_messages: list[BaseMessage],
+        tools: list[Any],
+    ) -> tuple[list[BaseMessage], AIMessage]:
+        runtime_messages = self._ensure_budget(runtime_messages)
+        if self.responses_transport:
+            if not get_settings().langsmith_tracing:
+                response = await self.responses_transport.ainvoke(runtime_messages, tools)
+                return runtime_messages, response
+            async with langsmith_trace(
+                "main-agent",
+                run_type="llm",
+                inputs={
+                    "messages": messages_to_dict(runtime_messages),
+                    "tool_names": [getattr(tool, "name", str(tool)) for tool in tools],
+                },
+                tags=["main-agent"],
+                metadata={
+                    "transport": "openai_responses_websocket",
+                    "model": getattr(self.responses_transport, "model", self._model),
+                },
+            ) as run:
+                response = await self.responses_transport.ainvoke(runtime_messages, tools)
+                run.end(
+                    outputs={
+                        "message": messages_to_dict([response])[0],
+                        "tool_call_count": len(response.tool_calls or []),
+                    }
+                )
+            return runtime_messages, response
+        llm_with_tools = self.llm.bind_tools(tools)
+        response = await llm_with_tools.ainvoke(runtime_messages, config={"tags": ["main-agent"]})
+        return runtime_messages, response
+
+    def _get_tool_by_name(self, tool_name: str) -> Tool | ToolSnapshot | None:
+        def resolve(session: Session) -> Tool | ToolSnapshot | None:
+            for tool_id in self.active_tool_ids:
+                tool = session.get(Tool, tool_id)
+                if tool and tool.agent_enabled:
+                    tool_spec = tool.tool or {}
+                    function_spec = tool_spec.get("function", {})
+                    name = function_spec.get("name", f"tool_{tool.id}")
+                    if name == tool_name:
+                        return ToolSnapshot.from_record(tool) if self.session_provider is not None else tool
+            return None
+
+        if self.session is None and self.session_provider is None:
+            return None
+        return self._with_session(resolve)
 
     def _build_messages_from_history(
         self,
@@ -282,6 +367,43 @@ class AgentExecutor:
 
     def _truncate_tool_content(self, content: str) -> str:
         return truncate_tool_result(content, model=self._model)
+
+    def _execute_backend_tool_call(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, Any],
+        tool_call_id: str | None,
+        tool_metadata: dict[str, Any] | None,
+        fallback_tool: Tool | ToolSnapshot | None,
+    ) -> str:
+        serialized = serialize_args(tool_args)
+        filtered = {key: value for key, value in serialized.items() if value is not None}
+
+        def execute(session: Session) -> dict[str, Any]:
+            tool_record: Tool | None = None
+            if tool_metadata and tool_metadata.get("id"):
+                try:
+                    tool_record = get_enabled_tool(session, self.user_id, UUID(str(tool_metadata["id"])))
+                except (TypeError, ValueError):
+                    tool_record = None
+            elif isinstance(fallback_tool, ToolSnapshot):
+                tool_record = get_enabled_tool(session, self.user_id, fallback_tool.id)
+            elif isinstance(fallback_tool, Tool):
+                tool_record = fallback_tool
+            if tool_record is None:
+                return {"error": f"Tool '{tool_name}' not found"}
+            return execute_backend_tool(
+                session,
+                self.user_id,
+                tool_record,
+                filtered,
+                conversation_id=self.conversation_id,
+                tool_call_id=tool_call_id,
+            )
+
+        result = self._with_session(execute)
+        return self._truncate_tool_content(json.dumps(result, indent=2))
 
     @staticmethod
     def _extract_screenshot(body: Any) -> str | None:
@@ -526,9 +648,7 @@ Keep it brief and friendly."""
         while iteration < max_iterations:
             iteration += 1
             tools = self._get_tools()
-            llm_with_tools = self.llm.bind_tools(tools)
-            runtime_messages = self._ensure_budget(runtime_messages)
-            response = await llm_with_tools.ainvoke(runtime_messages, config={"tags": ["main-agent"]})
+            runtime_messages, response = await self._invoke_main_agent(runtime_messages, tools)
             messages.append(response)
             runtime_messages.append(response)
 
@@ -652,15 +772,37 @@ Keep it brief and friendly."""
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
                 else:
-                    tool = self._get_tool_by_name(tool_name)
-                    if tool:
+                    tool = next((item for item in tools if item.name == tool_name), None)
+                    tool_metadata = self._extract_tool_metadata(tool)
+                    fallback_tool = self._get_tool_by_name(tool_name) if tool is None else None
+                    if tool_metadata or fallback_tool:
+                        resolved_tool_id: UUID | None = None
+                        if tool_metadata and tool_metadata.get("id"):
+                            try:
+                                resolved_tool_id = UUID(str(tool_metadata["id"]))
+                            except (TypeError, ValueError):
+                                resolved_tool_id = None
+                        elif fallback_tool:
+                            resolved_tool_id = fallback_tool.id
+                        if resolved_tool_id is None:
+                            tool_message = ToolMessage(
+                                content=f"Tool '{tool_name}' has no valid identifier",
+                                tool_call_id=tool_call["id"],
+                            )
+                            messages.append(tool_message)
+                            runtime_messages.append(tool_message)
+                            continue
+                        resolved_tool_type = tool_metadata.get("toolType", "backend") if tool_metadata else getattr(fallback_tool, "tool_type", "backend")
+                        fallback_method = getattr(fallback_tool, "method", None)
+                        resolved_method = tool_metadata.get("method") if tool_metadata else (fallback_method.value if fallback_method else None)
+                        resolved_path = tool_metadata.get("path") if tool_metadata else getattr(fallback_tool, "path", None)
                         serialized = serialize_args(tool_args)
                         filtered = {k: v for k, v in serialized.items() if v is not None}
-                        if getattr(tool, "tool_type", "backend") == "frontend":
+                        if resolved_tool_type == "frontend":
                             pending_tool_calls.append(ToolCallPayload(
                                 id=tool_call["id"],
                                 type="frontend",
-                                toolId=tool.id,
+                                toolId=resolved_tool_id,
                                 name=tool_name,
                                 params=filtered,
                             ))
@@ -668,10 +810,10 @@ Keep it brief and friendly."""
                         pending_tool_calls.append(ToolCallPayload(
                             id=tool_call["id"],
                             type="backend",
-                            toolId=tool.id,
+                            toolId=resolved_tool_id,
                             name=tool_name,
-                            method=tool.method.value,
-                            path=tool.path,
+                            method=resolved_method,
+                            path=resolved_path,
                             params=filtered.get("params", {}),
                             query=filtered.get("query", {}),
                             body=filtered.get("body", {}),
@@ -779,25 +921,31 @@ Keep it brief and friendly."""
                     ))
                     continue
 
-                tool = self._get_tool_by_name(tool_name)
-                if tool:
-                    if getattr(tool, "tool_type", "backend") == "frontend":
+                tool_metadata = self._extract_tool_metadata(tool)
+                fallback_tool = self._get_tool_by_name(tool_name) if tool is None else None
+                if tool is not None and tool_metadata is None:
+                    try:
+                        tool_result = tool.invoke(tool_args)
+                    except Exception as error:
+                        log_error("AgentExecutor", "run", f"Tool execution failed: {tool_name}", exc=error)
+                        tool_result = f"Error executing tool: {str(error)}"
+                    messages.append(ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"]))
+                    continue
+                if tool or fallback_tool:
+                    resolved_tool_type = tool_metadata.get("toolType", "backend") if tool_metadata else getattr(fallback_tool, "tool_type", "backend")
+                    if resolved_tool_type == "frontend":
                         messages.append(ToolMessage(
                             content="Frontend tools require the widget runtime",
                             tool_call_id=tool_call["id"]
                         ))
                         continue
-                    serialized = serialize_args(tool_args)
-                    filtered = {k: v for k, v in serialized.items() if v is not None}
-                    result = execute_backend_tool(
-                        self.session,
-                        self.user_id,
-                        tool,
-                        filtered,
-                        conversation_id=self.conversation_id,
+                    tool_result = self._execute_backend_tool_call(
+                        tool_name=tool_name,
+                        tool_args=tool_args,
                         tool_call_id=tool_call.get("id"),
+                        tool_metadata=tool_metadata,
+                        fallback_tool=fallback_tool,
                     )
-                    tool_result = self._truncate_tool_content(json.dumps(result, indent=2))
                     messages.append(ToolMessage(content=tool_result, tool_call_id=tool_call["id"]))
                     continue
 

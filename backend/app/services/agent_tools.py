@@ -1,5 +1,7 @@
 import json
-from typing import Any
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Callable, ContextManager
 from uuid import UUID
 
 from langchain_core.tools import StructuredTool
@@ -9,8 +11,71 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..models import Tool
 from .embedding_service import search_similar_tools
-from .agent_execution import execute_backend_tool
+from .agent_execution import execute_backend_tool, get_enabled_tool
 from .agent_schema import SchemaFactory, serialize_args
+
+
+@dataclass(frozen=True)
+class ToolSnapshot:
+    id: UUID
+    tool_type: str
+    method: str | None
+    path: str | None
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+    @classmethod
+    def from_record(cls, tool: Tool) -> "ToolSnapshot":
+        tool_spec = tool.tool or {}
+        function_spec = tool_spec.get("function", {})
+        default_method = tool.method.value if tool.method else "GET"
+        default_path = tool.path or "/"
+        return cls(
+            id=tool.id,
+            tool_type=getattr(tool, "tool_type", "backend"),
+            method=tool.method.value if tool.method else None,
+            path=tool.path,
+            name=function_spec.get("name", f"tool_{tool.id}"),
+            description=function_spec.get("description", f"{default_method} {default_path}"),
+            parameters=function_spec.get("parameters", {"type": "object", "properties": {}}),
+        )
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "id": str(self.id),
+            "toolType": self.tool_type,
+            "method": self.method,
+            "path": self.path,
+            "name": self.name,
+            "description": self.description,
+        }
+
+
+SessionProvider = Callable[[], ContextManager[Session]]
+
+
+@contextmanager
+def _session_context(session: Session | None, session_provider: SessionProvider | None):
+    if session_provider is not None:
+        with session_provider() as provided_session:
+            yield provided_session
+        return
+    if session is None:
+        raise RuntimeError("Agent tool execution requires a database session")
+    yield session
+
+
+def _load_agent_tools_from_session(session: Session, user_id: str, tool_ids: list[UUID]) -> list[Tool]:
+    if not tool_ids:
+        return []
+    return session.scalars(
+        select(Tool).where(
+            Tool.id.in_(tool_ids),
+            Tool.user_id == user_id,
+            Tool.agent_enabled.is_(True),
+        )
+    ).all()
 
 
 class FindToolsInput(BaseModel):
@@ -101,37 +166,43 @@ class JsExecInput(BaseModel):
     )
 
 
-def create_find_tools_tool(session: Session, user_id: str) -> StructuredTool:
+def create_find_tools_tool(
+    session: Session | None,
+    user_id: str,
+    *,
+    session_provider: SessionProvider | None = None,
+) -> StructuredTool:
     def find_tools(query: str) -> str:
-        tool_ids = search_similar_tools(session, user_id, query)
-        if not tool_ids:
-            return json.dumps([], indent=2)
-        tools = session.scalars(
-            select(Tool).where(
-                Tool.id.in_(tool_ids),
-                Tool.user_id == user_id,
-                Tool.agent_enabled.is_(True)
-            ).options(selectinload(Tool.feature))
-        ).all()
-        if not tools:
-            return json.dumps([], indent=2)
-        result = []
-        for tool in tools:
-            tool_spec = tool.tool or {}
-            function = tool_spec.get("function", {})
-            is_backend = getattr(tool, "tool_type", "backend") == "backend"
-            result.append(
-                {
-                    "id": str(tool.id),
-                    "toolType": "backend" if is_backend else "frontend",
-                    "method": tool.method.value if is_backend and tool.method else None,
-                    "path": tool.path if is_backend else None,
-                    "name": function.get("name", ""),
-                    "description": function.get("description", ""),
-                    "feature": getattr(tool.feature, "name", "")
-                }
-            )
-        return json.dumps(result, indent=2)
+        with _session_context(session, session_provider) as db_session:
+            tool_ids = search_similar_tools(db_session, user_id, query)
+            if not tool_ids:
+                return json.dumps([], indent=2)
+            tools = db_session.scalars(
+                select(Tool).where(
+                    Tool.id.in_(tool_ids),
+                    Tool.user_id == user_id,
+                    Tool.agent_enabled.is_(True),
+                ).options(selectinload(Tool.feature))
+            ).all()
+            if not tools:
+                return json.dumps([], indent=2)
+            result = []
+            for tool in tools:
+                tool_spec = tool.tool or {}
+                function = tool_spec.get("function", {})
+                is_backend = getattr(tool, "tool_type", "backend") == "backend"
+                result.append(
+                    {
+                        "id": str(tool.id),
+                        "toolType": "backend" if is_backend else "frontend",
+                        "method": tool.method.value if is_backend and tool.method else None,
+                        "path": tool.path if is_backend else None,
+                        "name": function.get("name", ""),
+                        "description": function.get("description", ""),
+                        "feature": getattr(tool.feature, "name", ""),
+                    }
+                )
+            return json.dumps(result, indent=2)
 
     return StructuredTool.from_function(
         func=find_tools,
@@ -217,54 +288,63 @@ def create_js_exec_tool() -> StructuredTool:
 
 
 def create_backend_tool(
-    session: Session,
+    session: Session | None,
     user_id: str,
-    tool: Tool,
+    tool: Tool | ToolSnapshot,
     schema_factory: SchemaFactory | None = None,
     conversation_id: UUID | None = None,
+    *,
+    session_provider: SessionProvider | None = None,
 ) -> StructuredTool:
     factory = schema_factory or SchemaFactory()
-    tool_spec = tool.tool or {}
-    function_spec = tool_spec.get("function", {})
-    name = function_spec.get("name", f"tool_{tool.id}")
-    default_method = tool.method.value if tool.method else "GET"
-    default_path = tool.path or "/"
-    description = function_spec.get("description", f"{default_method} {default_path}")
-    parameters = function_spec.get("parameters", {"type": "object", "properties": {}})
-    InputModel = factory.model_from_schema(f"{name}Input", parameters)
+    snapshot = tool if isinstance(tool, ToolSnapshot) else ToolSnapshot.from_record(tool)
+    InputModel = factory.model_from_schema(f"{snapshot.name}Input", snapshot.parameters)
 
     def execute_func(**kwargs: Any) -> str:
         serialized = serialize_args(kwargs)
         filtered = {key: value for key, value in serialized.items() if value is not None}
-        result = execute_backend_tool(session, user_id, tool, filtered, conversation_id=conversation_id)
+        with _session_context(session, session_provider) as db_session:
+            if session_provider is not None or isinstance(tool, ToolSnapshot):
+                tool_record = get_enabled_tool(db_session, user_id, snapshot.id)
+            else:
+                tool_record = tool
+            if not tool_record:
+                return json.dumps({"error": f"Tool '{snapshot.name}' not found"}, indent=2)
+            result = execute_backend_tool(
+                db_session,
+                user_id,
+                tool_record,
+                filtered,
+                conversation_id=conversation_id,
+            )
         return json.dumps(result, indent=2)
 
-    return StructuredTool.from_function(
+    structured_tool = StructuredTool.from_function(
         func=execute_func,
-        name=name,
-        description=description,
+        name=snapshot.name,
+        description=snapshot.description,
         args_schema=InputModel
     )
+    structured_tool.metadata = {**(structured_tool.metadata or {}), "warpy_tool": snapshot.to_metadata()}
+    return structured_tool
 
 
-def create_frontend_tool(tool: Tool, schema_factory: SchemaFactory | None = None) -> StructuredTool:
+def create_frontend_tool(tool: Tool | ToolSnapshot, schema_factory: SchemaFactory | None = None) -> StructuredTool:
     factory = schema_factory or SchemaFactory()
-    tool_spec = tool.tool or {}
-    function_spec = tool_spec.get("function", {})
-    name = function_spec.get("name", f"frontend_tool_{tool.id}")
-    description = function_spec.get("description", "Run a frontend tool handler in the browser")
-    parameters = function_spec.get("parameters", {"type": "object", "properties": {}})
-    InputModel = factory.model_from_schema(f"{name}Input", parameters)
+    snapshot = tool if isinstance(tool, ToolSnapshot) else ToolSnapshot.from_record(tool)
+    InputModel = factory.model_from_schema(f"{snapshot.name}Input", snapshot.parameters)
 
     def execute_func(**_kwargs: Any) -> str:
         return json.dumps({"status": "queued"})
 
-    return StructuredTool.from_function(
+    structured_tool = StructuredTool.from_function(
         func=execute_func,
-        name=name,
-        description=description,
+        name=snapshot.name,
+        description=snapshot.description or "Run a frontend tool handler in the browser",
         args_schema=InputModel
     )
+    structured_tool.metadata = {**(structured_tool.metadata or {}), "warpy_tool": snapshot.to_metadata()}
+    return structured_tool
 
 
 
@@ -274,13 +354,19 @@ class SearchKnowledgeBaseInput(BaseModel):
     )
 
 
-def create_search_knowledge_base_tool(session: Session, user_id: str) -> StructuredTool:
+def create_search_knowledge_base_tool(
+    session: Session | None,
+    user_id: str,
+    *,
+    session_provider: SessionProvider | None = None,
+) -> StructuredTool:
     def search_kb(query: str) -> str:
         from .knowledge_embedding_service import search_knowledge_base
-        results = search_knowledge_base(session, user_id, query)
-        if not results:
-            return json.dumps({"results": [], "message": "No relevant content found in the knowledge base."})
-        return json.dumps({"results": results}, indent=2)
+        with _session_context(session, session_provider) as db_session:
+            results = search_knowledge_base(db_session, user_id, query)
+            if not results:
+                return json.dumps({"results": [], "message": "No relevant content found in the knowledge base."})
+            return json.dumps({"results": results}, indent=2)
 
     return StructuredTool.from_function(
         func=search_kb,
@@ -296,22 +382,38 @@ def create_search_knowledge_base_tool(session: Session, user_id: str) -> Structu
 
 
 def get_agent_tools(
-    session: Session,
+    session: Session | None,
     user_id: str,
     tool_ids: list[UUID],
     schema_factory: SchemaFactory | None = None,
     conversation_id: UUID | None = None,
+    *,
+    session_provider: SessionProvider | None = None,
 ) -> list[StructuredTool]:
     if not tool_ids:
         return []
-    tools = session.scalars(
-        select(Tool).where(
-            Tool.id.in_(tool_ids),
-            Tool.user_id == user_id,
-            Tool.agent_enabled.is_(True)
-        )
-    ).all()
     factory = schema_factory or SchemaFactory()
+    if session_provider is not None:
+        with _session_context(session, session_provider) as db_session:
+            snapshots = [ToolSnapshot.from_record(tool) for tool in _load_agent_tools_from_session(db_session, user_id, tool_ids)]
+        agent_tools: list[StructuredTool] = []
+        for snapshot in snapshots:
+            if snapshot.tool_type == "frontend":
+                agent_tools.append(create_frontend_tool(snapshot, factory))
+                continue
+            agent_tools.append(
+                create_backend_tool(
+                    None,
+                    user_id,
+                    snapshot,
+                    factory,
+                    conversation_id=conversation_id,
+                    session_provider=session_provider,
+                )
+            )
+        return agent_tools
+
+    tools = _load_agent_tools_from_session(session, user_id, tool_ids)
     agent_tools: list[StructuredTool] = []
     for tool in tools:
         if getattr(tool, "tool_type", "backend") == "frontend":

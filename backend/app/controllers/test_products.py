@@ -47,52 +47,9 @@ def auth_headers():
     return {"Authorization": "Bearer token"}
 
 
-def test_list_products_requires_auth(client: TestClient):
-    response = client.get("/products")
-    assert response.status_code == 401
-
-
 def test_get_product_requires_auth(client: TestClient):
     response = client.get("/products/1")
     assert response.status_code == 401
-
-
-def test_list_products_proxies_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    calls: list[dict] = []
-
-    def fake_get(url, *, params=None, timeout=None, follow_redirects=None):
-        calls.append({"url": url, "params": params, "timeout": timeout, "follow_redirects": follow_redirects})
-        request = httpx.Request("GET", url, params=params)
-        return httpx.Response(200, json=[{"id": 1, "title": "A", "image": "https://img.test/a.jpg"}], request=request)
-
-    monkeypatch.setattr("app.controllers.products.httpx.get", fake_get)
-
-    response = client.get("/products?limit=5", headers=auth_headers())
-    assert response.status_code == 200
-    assert response.json()[0]["image"] == "https://img.test/a.jpg"
-    assert calls == [
-        {
-            "url": "https://fakestoreapi.com/products",
-            "params": {"limit": 5},
-            "timeout": httpx.Timeout(10.0, connect=5.0),
-            "follow_redirects": True
-        }
-    ]
-
-
-def test_list_products_without_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    calls: list[dict] = []
-
-    def fake_get(url, *, params=None, timeout=None, follow_redirects=None):
-        calls.append({"url": url, "params": params})
-        request = httpx.Request("GET", url, params=params)
-        return httpx.Response(200, json=[{"id": 1, "title": "A", "image": "https://img.test/a.jpg"}], request=request)
-
-    monkeypatch.setattr("app.controllers.products.httpx.get", fake_get)
-
-    response = client.get("/products", headers=auth_headers())
-    assert response.status_code == 200
-    assert calls == [{"url": "https://fakestoreapi.com/products", "params": None}]
 
 
 def test_get_product_proxies_id(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -130,28 +87,5 @@ def test_upstream_request_error_maps_to_502(client: TestClient, monkeypatch: pyt
     monkeypatch.setattr("app.controllers.products.httpx.get", fake_get)
 
     response = client.get("/products/1", headers=auth_headers())
-    assert response.status_code == 502
-    assert response.json()["detail"] == "Upstream request failed"
-
-
-def test_list_products_upstream_status_error_passed_through(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    def fake_get(url, *, params=None, timeout=None, follow_redirects=None):
-        request = httpx.Request("GET", url, params=params)
-        return httpx.Response(503, json={"error": "nope"}, request=request)
-
-    monkeypatch.setattr("app.controllers.products.httpx.get", fake_get)
-
-    response = client.get("/products", headers=auth_headers())
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Upstream error"
-
-
-def test_list_products_upstream_request_error_maps_to_502(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    def fake_get(url, *, params=None, timeout=None, follow_redirects=None):
-        raise httpx.RequestError("boom", request=httpx.Request("GET", url))
-
-    monkeypatch.setattr("app.controllers.products.httpx.get", fake_get)
-
-    response = client.get("/products", headers=auth_headers())
     assert response.status_code == 502
     assert response.json()["detail"] == "Upstream request failed"

@@ -53,6 +53,13 @@
     return error;
   }
 
+  function createRequestId() {
+    if (typeof crypto !== "undefined" && crypto && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+  }
+
   function isAbortError(error) {
     return Boolean(error && (error.name === "AbortError" || error.code === "ABORT_ERR"));
   }
@@ -463,6 +470,8 @@
 
   function resolveApiUrl() {
     try {
+      // Warpy-managed widget routes always go to Warpy's API origin.
+      // data-base-url is reserved for customer-owned backend calls only.
       const host = window.location && window.location.hostname ? window.location.hostname : "";
       const localHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
       const isLocal = localHosts.has(host);
@@ -2660,6 +2669,7 @@
 
   async function executeEndpointToolCall(toolCall, baseUrl, headerConfig, signal) {
     throwIfAborted(signal);
+    // Backend tools execute against the customer-configured base URL, not Warpy's API.
     const sessionHeaders = buildHeaders(headerConfig);
     const path = substitutePath(toolCall.path, toolCall.params || {});
     const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
@@ -4459,6 +4469,7 @@
     if (!state.auth) state.auth = {};
     if (!state.ui) state.ui = {};
     if (!Array.isArray(state.suggestions)) state.suggestions = [];
+    if (typeof state.activeRequestId !== "string") state.activeRequestId = null;
     const savedUi = loadUiState();
     if (savedUi && typeof savedUi.launcherY === "number") {
       state.ui.launcherY = clamp(savedUi.launcherY, 0, 1);
@@ -4484,7 +4495,7 @@
     let isNavigatingAway = false;
     window.addEventListener("pagehide", () => {
       isNavigatingAway = true;
-      if (isLoading && state.activeQuery) {
+      if (isLoading && state.activeQuery && state.activeRequestId) {
         state.interruptedByNavigation = true;
         saveState(state);
       }
@@ -5416,6 +5427,7 @@
         const timeout = setTimeout(() => {
           clearScreenShareCountdown();
           if (screenSharePromiseResolve === resolve) {
+            screenShareDismissed = true;
             screenSharePromiseResolve = null;
             renderMessages();
             resolve(false);
@@ -5792,6 +5804,7 @@
       if (!config.baseUrl) {
         throw new Error("Missing baseUrl");
       }
+      // The refresh endpoint is customer-owned and proxies to Warpy server-to-server.
       const url = new URL(widgetRefreshEndpointPath, config.baseUrl.endsWith("/") ? config.baseUrl : config.baseUrl + "/");
       const sessionHeaders = buildHeaders(headerConfig);
       const res = await fetchWithTimeout(url.toString(), { method: "POST", headers: sessionHeaders });
@@ -5808,29 +5821,198 @@
       saveState(state);
     }
 
-    async function postWidgetChat(body, signal) {
-      await ensureConfigLoaded();
-      const makeRequest = () =>
-        fetchWithTimeout(`${apiUrl}/widget/chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(widgetAuthToken ? { Authorization: `Bearer ${widgetAuthToken}` } : {}),
-          },
-          body: JSON.stringify(body),
-          signal,
-        });
+    function buildWidgetSessionUrl(baseUrl) {
+      const normalizedBase = String(baseUrl || "").trim();
+      if (!normalizedBase) {
+        throw new Error("Missing API base URL for WebSocket session");
+      }
+      // Widget session traffic always targets Warpy's API base, never the customer backend baseUrl.
+      const url = new URL("widget/session", normalizedBase.endsWith("/") ? normalizedBase : `${normalizedBase}/`);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      return url.toString();
+    }
 
-      let response = await makeRequest();
-      if (response.status === 401) {
-        const errorBody = await response.json().catch(() => null);
-        const code = errorBody && errorBody.detail && errorBody.detail.code;
-        if (code === "WIDGET_AUTH_REQUIRED" || code === "WIDGET_AUTH_INVALID") {
-          await refreshWidgetToken();
-          response = await makeRequest();
+    function createWidgetSocketError(code, message, retriable) {
+      const error = new Error(message || "Widget session failed");
+      error.code = code || "WIDGET_SESSION_FAILED";
+      error.retriable = retriable === true;
+      return error;
+    }
+
+    function executeWidgetSession(initialRequest, signal) {
+      return new Promise((resolve, reject) => {
+        let finished = false;
+        let toolIterations = 0;
+        let currentConversationId = initialRequest.conversationId || null;
+        let currentRequestId = initialRequest.requestId || null;
+        const websocket = new WebSocket(buildWidgetSessionUrl(apiUrl));
+
+        function closeSocket() {
+          if (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING) {
+            try {
+              websocket.close(1000, "done");
+            } catch (_error) {
+            }
+          }
+        }
+
+        function cleanup() {
+          if (signal) {
+            signal.removeEventListener("abort", onAbort);
+          }
+          websocket.onopen = null;
+          websocket.onmessage = null;
+          websocket.onerror = null;
+          websocket.onclose = null;
+        }
+
+        function finish(fn) {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          fn();
+        }
+
+        function fail(error) {
+          finish(() => {
+            closeSocket();
+            reject(error);
+          });
+        }
+
+        function succeed(response) {
+          finish(() => {
+            closeSocket();
+            resolve(response);
+          });
+        }
+
+        function sendRequest(request) {
+          if (finished || websocket.readyState !== WebSocket.OPEN) {
+            fail(new Error("Widget session failed"));
+            return;
+          }
+          websocket.send(JSON.stringify({
+            type: "chat.request",
+            request,
+            ...(widgetAuthToken ? { widgetToken: widgetAuthToken } : {}),
+          }));
+        }
+
+        async function handleResponse(response) {
+          if (finished) return;
+          if (response.requestId) {
+            const responseRequestId = String(response.requestId);
+            if (currentRequestId && responseRequestId !== currentRequestId) {
+              return;
+            }
+            currentRequestId = responseRequestId;
+          }
+          if (response.conversationId) {
+            currentConversationId = response.conversationId;
+            state.conversationId = response.conversationId;
+            saveState(state);
+          }
+
+          if (shouldHideWidget(response) || response.done || !response.toolCalls || response.toolCalls.length === 0) {
+            succeed(response);
+            return;
+          }
+
+          if (++toolIterations > 25) {
+            fail(new Error("Too many tool call iterations"));
+            return;
+          }
+
+          try {
+            const toolResults = await runToolCalls(response.toolCalls, signal);
+            if (finished) return;
+            sendRequest({
+              agentId: config.agentId,
+              conversationId: currentConversationId,
+              requestId: currentRequestId,
+              toolResults,
+            });
+          } catch (error) {
+            fail(error);
+          }
+        }
+
+        function onAbort() {
+          fail(createAbortError());
+        }
+
+        if (signal) {
+          if (signal.aborted) {
+            closeSocket();
+            reject(createAbortError());
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
+
+        websocket.onopen = () => {
+          sendRequest(initialRequest);
+        };
+
+        websocket.onmessage = (event) => {
+          if (finished) return;
+          let data = null;
+          try {
+            data = JSON.parse(String(event.data || "{}"));
+          } catch (_error) {
+            fail(new Error("Widget session failed"));
+            return;
+          }
+
+          if (!data || data.type === "keepalive") {
+            return;
+          }
+
+          if (data.type === "chat.error") {
+            const socketError = data.error || {};
+            fail(createWidgetSocketError(socketError.code, socketError.message, socketError.retriable));
+            return;
+          }
+
+          if (data.type !== "chat.response" || !data.response) {
+            fail(new Error("Widget session failed"));
+            return;
+          }
+
+          void handleResponse(data.response);
+        };
+
+        websocket.onerror = () => {
+          if (!finished) {
+            fail(new Error("Widget session failed"));
+          }
+        };
+
+        websocket.onclose = () => {
+          if (!finished) {
+            fail(signal && signal.aborted ? createAbortError() : new Error("Widget session failed"));
+          }
+        };
+      });
+    }
+
+    async function runWidgetSession(initialRequest, signal) {
+      await ensureConfigLoaded();
+      let refreshedAuth = false;
+      while (true) {
+        try {
+          return await executeWidgetSession(initialRequest, signal);
+        } catch (error) {
+          const code = error && error.code ? String(error.code) : "";
+          if (!refreshedAuth && (code === "WIDGET_AUTH_REQUIRED" || code === "WIDGET_AUTH_INVALID")) {
+            await refreshWidgetToken();
+            refreshedAuth = true;
+            continue;
+          }
+          throw error;
         }
       }
-      return response;
     }
 
     // ─── Chat & Messaging ───────────────────────────────────────────────────
@@ -5885,6 +6067,9 @@
       refMap.clear();
       const runEpoch = chatEpoch;
       const isRunStale = () => runEpoch !== chatEpoch;
+      const requestId = options && typeof options.requestId === "string" && options.requestId.trim()
+        ? options.requestId.trim()
+        : createRequestId();
 
       const skipUserEcho = options && options.skipUserEcho === true;
       if (!skipUserEcho) {
@@ -5901,60 +6086,19 @@
       let shouldHide = false;
 
       state.activeQuery = messageText;
+      state.activeRequestId = requestId;
       saveState(state);
 
       try {
-        const payload = {
+        const data = await runWidgetSession({
           agentId: config.agentId,
           conversationId: state.conversationId,
+          requestId,
           message: messageText,
-        };
-
-        let response = await postWidgetChat(payload, runAbortController.signal);
+        }, runAbortController.signal);
         if (isRunStale()) return;
-
-        if (!response.ok) {
-          throw new Error("Chat request failed");
-        }
-
-        let data = await response.json();
-        if (isRunStale()) return;
-        state.conversationId = data.conversationId;
-        saveState(state);
 
         shouldHide = shouldHideWidget(data);
-        if (!shouldHide) {
-          const MAX_ITERATIONS = 25;
-          let iterations = 0;
-          while (!data.done && !shouldHide) {
-            if (isRunStale()) return;
-            if (++iterations > MAX_ITERATIONS) {
-              throw new Error("Too many tool call iterations");
-            }
-
-            if (data.toolCalls && data.toolCalls.length > 0) {
-              const toolResults = await runToolCalls(data.toolCalls, runAbortController.signal);
-              if (isRunStale()) return;
-
-              response = await postWidgetChat({
-                agentId: config.agentId,
-                conversationId: state.conversationId,
-                toolResults,
-              }, runAbortController.signal);
-              if (isRunStale()) return;
-
-              if (!response.ok) {
-                throw new Error("Tool result request failed");
-              }
-
-              data = await response.json();
-              if (isRunStale()) return;
-              shouldHide = shouldHideWidget(data);
-            } else {
-              break;
-            }
-          }
-        }
 
         if (!shouldHide && data.messages && data.messages.length > 0) {
           if (isRunStale()) return;
@@ -5991,6 +6135,7 @@
         }
         setLoading(false);
         state.activeQuery = null;
+        state.activeRequestId = null;
         if (!isNavigatingAway) saveState(state);
       }
       if (isRunStale()) return;
@@ -6063,6 +6208,8 @@
       }
       state.messages = [];
       state.conversationId = null;
+      state.activeQuery = null;
+      state.activeRequestId = null;
       state.suggestions = [];
       saveState(state);
       setUnread(false);
@@ -6183,11 +6330,12 @@
       saveState(state);
       setTimeout(() => {
         openPanel();
-        sendMessage(state.activeQuery, { skipUserEcho: true });
+        sendMessage(state.activeQuery, { skipUserEcho: true, requestId: state.activeRequestId });
       }, 500);
     } else {
       state.interruptedByNavigation = false;
       state.activeQuery = null;
+      state.activeRequestId = null;
       saveState(state);
     }
 

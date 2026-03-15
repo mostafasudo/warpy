@@ -26,6 +26,14 @@ class AuthType(str, enum.Enum):
     none = "none"
 
 
+class WidgetRunStatus(str, enum.Enum):
+    running = "running"
+    waiting_for_tools = "waiting_for_tools"
+    completed = "completed"
+    superseded = "superseded"
+    failed = "failed"
+
+
 class DocumentStatus(str, enum.Enum):
     processing = "processing"
     ready = "ready"
@@ -266,12 +274,40 @@ class Conversation(Base):
 
     agent = relationship("Agent", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.sequence")
+    widget_runs = relationship("WidgetRun", back_populates="conversation", cascade="all, delete-orphan")
+
+
+class WidgetRun(Base):
+    __tablename__ = "widget_runs"
+    __table_args__ = (
+        UniqueConstraint("agent_id", "request_id", name="uq_widget_runs_agent_request"),
+        Index("ix_widget_runs_conversation_request", "conversation_id", "request_id"),
+        Index("ix_widget_runs_conversation_status", "conversation_id", "status"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    request_id = Column(Text, nullable=False)
+    status = Column(
+        Enum(WidgetRunStatus, name="widget_run_status", native_enum=False, validate_strings=True),
+        nullable=False,
+        server_default=WidgetRunStatus.running.value,
+        default=WidgetRunStatus.running,
+    )
+    owner_token = Column(Text, nullable=True)
+    user_message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
+    assistant_message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    conversation = relationship("Conversation", back_populates="widget_runs")
 
 
 class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
-        Index("ix_messages_conversation_sequence", "conversation_id", "sequence"),
+        UniqueConstraint("conversation_id", "sequence", name="uq_messages_conversation_sequence"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

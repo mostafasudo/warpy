@@ -73,6 +73,16 @@ def _record_action(
         log_error("AgentChain", "execute_backend_tool", "Failed to record action", exc=exc, tool_id=str(tool.id))
 
 
+def get_enabled_tool(session: Session, user_id: str, tool_id: UUID) -> Tool | None:
+    return session.scalar(
+        select(Tool).where(
+            Tool.id == tool_id,
+            Tool.user_id == user_id,
+            Tool.agent_enabled.is_(True),
+        )
+    )
+
+
 def execute_backend_tool(
     session: Session,
     user_id: str,

@@ -1,12 +1,10 @@
-from uuid import UUID
-
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..core.agent_custom_system_prompt import DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
 from ..core.logger import log_info
-from ..models import Agent, Conversation, Message
+from ..models import Agent
 from .billing_service import get_or_create_billing_account
 
 
@@ -57,55 +55,6 @@ def build_agent_executor_config(agent: Agent | None) -> dict[str, bool | str]:
             else DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
         ),
     }
-
-
-def create_conversation(session: Session, agent_id: UUID, participant: str) -> Conversation:
-    conversation = Conversation(agent_id=agent_id, participant=participant)
-    session.add(conversation)
-    session.flush()
-    log_info("AgentService", "create_conversation", "Conversation created", agent_id=str(agent_id))
-    return conversation
-
-
-def get_conversation(session: Session, conversation_id: UUID, user_id: str) -> Conversation | None:
-    return session.scalar(
-        select(Conversation)
-        .join(Agent)
-        .where(Conversation.id == conversation_id, Agent.user_id == user_id)
-        .options(selectinload(Conversation.messages))
-    )
-
-
-def list_conversations(session: Session, agent_id: UUID) -> list[Conversation]:
-    return list(session.scalars(
-        select(Conversation)
-        .where(Conversation.agent_id == agent_id)
-        .order_by(Conversation.updated_at.desc())
-    ).all())
-
-
-def save_message(session: Session, conversation_id: UUID, role: str, content: str) -> Message:
-    conversation = session.get(Conversation, conversation_id)
-    if conversation:
-        conversation.updated_at = func.now()
-    next_seq = (session.scalar(
-        select(func.coalesce(func.max(Message.sequence), 0))
-        .where(Message.conversation_id == conversation_id)
-    ) or 0) + 1
-    message = Message(conversation_id=conversation_id, role=role, content=content, sequence=next_seq)
-    session.add(message)
-    session.flush()
-    return message
-
-
-def get_messages(session: Session, conversation_id: UUID) -> list[Message]:
-    return list(session.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.sequence)
-    ).all())
-
-
 def update_frontend_capability(
     session: Session,
     user_id: str,

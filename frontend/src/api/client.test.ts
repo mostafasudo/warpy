@@ -15,9 +15,9 @@ describe("apiClient", () => {
   })
 
   it("resolves JSON payload", async () => {
-    mockFetch(jsonResponse({ status: "ready" }))
+    mockFetch(jsonResponse({ baseUrl: { local: "http://localhost" }, headers: {} }))
 
-    await expect(apiClient.health()).resolves.toEqual({ status: "ready" })
+    await expect(apiClient.getConfig()).resolves.toEqual({ baseUrl: { local: "http://localhost" }, headers: {} })
   })
 
   it("exposes configured base URL", () => {
@@ -27,19 +27,19 @@ describe("apiClient", () => {
   it("throws descriptive errors", async () => {
     mockFetch(textResponse("down", 503))
 
-    await expect(apiClient.health()).rejects.toThrow("down")
+    await expect(apiClient.getConfig()).rejects.toThrow("down")
   })
 
   it("extracts detail from JSON errors", async () => {
     mockFetch(jsonResponse({ detail: "Generate a widget API key before enabling signed widget tokens." }, 400))
 
-    await expect(apiClient.health()).rejects.toThrow("Generate a widget API key before enabling signed widget tokens.")
+    await expect(apiClient.getConfig()).rejects.toThrow("Generate a widget API key before enabling signed widget tokens.")
   })
 
   it("falls back to status code when message is empty", async () => {
     mockFetch(textResponse("", 502))
 
-    await expect(apiClient.health()).rejects.toThrow("Request failed with 502")
+    await expect(apiClient.getConfig()).rejects.toThrow("Request failed with 502")
   })
 
   it("throws when response is empty", async () => {
@@ -59,7 +59,7 @@ describe("apiClient", () => {
       .mockImplementation(async (_input, init) => {
         const headers = init?.headers as Headers | undefined
         expect(headers?.get("Authorization")).toBe("Bearer token-123")
-        return jsonResponse({ status: "ready" })
+        return jsonResponse({ baseUrl: { local: "http://localhost" }, headers: {} })
       })
 
     const getToken = jest.fn(async () => "token-123")
@@ -67,7 +67,7 @@ describe("apiClient", () => {
         Clerk?: { session?: { getToken?: typeof getToken } }
       }).Clerk = { session: { getToken } }
 
-    await expect(apiClient.health()).resolves.toEqual({ status: "ready" })
+    await expect(apiClient.getConfig()).resolves.toEqual({ baseUrl: { local: "http://localhost" }, headers: {} })
     expect(fetchSpy).toHaveBeenCalled()
     expect(getToken).toHaveBeenCalled()
   })

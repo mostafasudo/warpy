@@ -137,19 +137,38 @@ def test_widget_auth_required_when_enabled(client: TestClient):
     )
     deploy_draft(client)
 
-    unauthorized = client.post("/widget/chat", json={"agentId": agent_id, "message": "hello"})
-    assert unauthorized.status_code == 401
-    assert unauthorized.json()["detail"]["code"] == "WIDGET_AUTH_REQUIRED"
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": "req_security_unauthorized", "message": "hello"},
+            }
+        )
+        unauthorized = websocket.receive_json()
+
+    assert unauthorized == {
+        "type": "chat.error",
+        "error": {
+            "code": "WIDGET_AUTH_REQUIRED",
+            "message": "Signed widget token required",
+            "retriable": False,
+        },
+    }
 
     token_res = client.post("/widget-token", headers={"Authorization": f"Bearer {api_key}"})
     token = token_res.json()["token"]
-    authorized = client.post(
-        "/widget/chat",
-        json={"agentId": agent_id, "message": "hello"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert authorized.status_code == 200
-    assert authorized.json()["done"] is True
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "widgetToken": token,
+                "request": {"agentId": agent_id, "requestId": "req_security_authorized", "message": "hello"},
+            }
+        )
+        authorized = websocket.receive_json()
+
+    assert authorized["type"] == "chat.response"
+    assert authorized["response"]["done"] is True
 
 
 def test_widget_security_refresh_endpoint_validation(client: TestClient):

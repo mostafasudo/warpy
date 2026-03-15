@@ -1,7 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.widget import FrontendActionPayload, ToolCallPayload, WidgetChatResponse
+from app.schemas.widget import (
+    FrontendActionPayload,
+    ToolCallPayload,
+    WidgetChatResponse,
+    WidgetSocketErrorEnvelope,
+    WidgetSocketRequestEnvelope,
+)
 
 
 def test_frontend_action_payload_allows_up_to_three_alternatives():
@@ -121,3 +127,61 @@ def test_widget_chat_response_rejects_more_than_three_suggestions():
                 "actionsRemaining": 5,
             }
         )
+
+
+def test_widget_socket_request_envelope_accepts_widget_token():
+    payload = WidgetSocketRequestEnvelope.model_validate(
+        {
+            "type": "chat.request",
+            "widgetToken": "jwt",
+            "request": {
+                "agentId": "11111111-1111-1111-1111-111111111111",
+                "message": "hello",
+            },
+        }
+    )
+    assert payload.widget_token == "jwt"
+    assert payload.request.message == "hello"
+
+
+def test_widget_socket_request_and_response_accept_request_id():
+    request = WidgetSocketRequestEnvelope.model_validate(
+        {
+            "type": "chat.request",
+            "request": {
+                "agentId": "11111111-1111-1111-1111-111111111111",
+                "conversationId": "22222222-2222-2222-2222-222222222222",
+                "requestId": "req_123",
+                "message": "hello",
+            },
+        }
+    )
+    response = WidgetChatResponse.model_validate(
+        {
+            "conversationId": "22222222-2222-2222-2222-222222222222",
+            "requestId": "req_123",
+            "messages": [],
+            "toolCalls": [],
+            "suggestions": [],
+            "done": True,
+            "isWidgetHidden": False,
+            "actionsRemaining": 5,
+        }
+    )
+
+    assert request.request.request_id == "req_123"
+    assert response.request_id == "req_123"
+
+
+def test_widget_socket_error_envelope_shape():
+    payload = WidgetSocketErrorEnvelope.model_validate(
+        {
+            "type": "chat.error",
+            "error": {
+                "code": "WIDGET_AUTH_REQUIRED",
+                "message": "Signed widget token required",
+                "retriable": False,
+            },
+        }
+    )
+    assert payload.error.code == "WIDGET_AUTH_REQUIRED"

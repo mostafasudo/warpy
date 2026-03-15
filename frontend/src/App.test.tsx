@@ -33,10 +33,6 @@ jest.mock("@/queries/use-features", () => ({
   }))
 }))
 
-jest.mock("@/queries/use-health", () => ({
-  useHealthQuery: jest.fn(() => ({ data: { status: "ok" }, isPending: false }))
-}))
-
 const renderApp = () => {
   const queryClient = new QueryClient({
     defaultOptions: {

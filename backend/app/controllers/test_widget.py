@@ -1,12 +1,19 @@
 import importlib
+import asyncio
+import time
+from threading import Event
+from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import HumanMessage
+from sqlalchemy import func, select
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.llm_config import LLMConfig
 from app.main import create_app
-from app.models import BillingAccount
+from app.models import BillingAccount, BillingActionConsumption, Conversation, ConversationAction, Message
 from app.schemas.auth import ClerkSession
 from app.services.agent_chain import StepResult
 from app.services.billing_service import get_or_create_billing_account
@@ -69,6 +76,52 @@ def auth_headers():
     return {"Authorization": "Bearer token"}
 
 
+def send_widget_request(websocket, request: dict, *, widget_token: str | None = None) -> dict:
+    request_payload = dict(request)
+    last_request_id = getattr(websocket, "_warpy_request_id", None)
+    request_id = request_payload.get("requestId") or last_request_id or f"req_{uuid4()}"
+    request_payload["requestId"] = request_id
+    setattr(websocket, "_warpy_request_id", request_id)
+    payload = {"type": "chat.request", "request": request_payload}
+    if widget_token:
+        payload["widgetToken"] = widget_token
+    websocket.send_json(payload)
+    return websocket.receive_json()
+
+
+def _conversation_messages(conversation_id: UUID) -> list[tuple[str, str]]:
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        return list(session.execute(
+            select(Message.role, Message.content)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.sequence, Message.created_at, Message.id)
+        ).all())
+
+
+def _conversation_id_for_agent(agent_id: str) -> UUID:
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        conversation = session.scalar(
+            select(Conversation)
+            .where(Conversation.agent_id == UUID(agent_id))
+            .order_by(Conversation.created_at.desc())
+        )
+        assert conversation is not None
+        return conversation.id
+
+
+def _wait_for(predicate, timeout: float = 1.5) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    assert predicate()
+
+
 def test_widget_config_not_found(client: TestClient):
     response = client.get(f"/widget/config/{uuid4()}")
     assert response.status_code == 404
@@ -95,7 +148,7 @@ def test_widget_config_returns_headers(client: TestClient):
     assert body["widgetStarterSuggestions"] == []
 
 
-def test_widget_chat_returns_dynamic_suggestions(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_widget_session_returns_dynamic_suggestions(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     class FakeExecutorWithSuggestions:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
@@ -131,12 +184,66 @@ def test_widget_chat_returns_dynamic_suggestions(client: TestClient, monkeypatch
     )
     assert update.status_code == 200
 
-    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "Help me with invoices"})
-    assert response.status_code == 200
-    assert response.json()["suggestions"] == ["Create another invoice", "Show unpaid invoices"]
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "message": "Help me with invoices"},
+        )
+
+    assert response["type"] == "chat.response"
+    assert response["response"]["suggestions"] == ["Create another invoice", "Show unpaid invoices"]
 
 
-def test_widget_hides_when_actions_exhausted(client: TestClient):
+def test_widget_session_creates_langsmith_trace(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    traces = []
+
+    class FakeTrace:
+        def __init__(self, name, run_type="chain", **kwargs):
+            self.name = name
+            self.run_type = run_type
+            self.kwargs = kwargs
+            self.outputs = None
+            self.error = None
+            traces.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def end(self, *, outputs=None, error=None):
+            self.outputs = outputs
+            self.error = error
+
+    monkeypatch.setattr("app.controllers.widget.langsmith_trace", lambda *args, **kwargs: FakeTrace(*args, **kwargs))
+    monkeypatch.setattr(
+        "app.controllers.widget.get_settings",
+        lambda: type("Settings", (), {"openai_api_key": "", "langsmith_tracing": True})(),
+    )
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "message": "Help me create a feature"},
+        )
+
+    assert response["type"] == "chat.response"
+    assert len(traces) == 1
+    trace = traces[0]
+    assert trace.name == "widget-session"
+    assert trace.run_type == "chain"
+    assert trace.kwargs["tags"] == ["widget-session"]
+    assert trace.kwargs["inputs"]["message"] == "Help me create a feature"
+    assert trace.outputs["status"] == "completed"
+    assert trace.outputs["tool_call_count"] == 0
+    assert trace.error is None
+
+
+def test_widget_session_hides_when_actions_exhausted(client: TestClient):
     from app.core.database import session_scope
 
     agent = client.post("/agent", headers=auth_headers())
@@ -155,13 +262,104 @@ def test_widget_hides_when_actions_exhausted(client: TestClient):
     assert config.json()["isWidgetHidden"] is True
     assert config.json()["actionsRemaining"] == 0
 
-    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "hello"})
-    assert response.status_code == 200
-    assert response.json()["isWidgetHidden"] is True
-    assert response.json()["done"] is True
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(websocket, {"agentId": agent_id, "message": "hello"})
+
+    assert response["type"] == "chat.response"
+    assert response["response"]["isWidgetHidden"] is True
+    assert response["response"]["done"] is True
 
 
-def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_widget_session_hidden_request_replays_without_polluting_future_history(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from app.core.database import session_scope
+    from app.core.user_messages import ASSISTANT_UNAVAILABLE_MESSAGE
+
+    executor_calls: list[dict[str, object]] = []
+
+    class FakeExecutorHistory:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            executor_calls.append({"user_message": user_message, "history": conversation_history})
+            return StepResult(response="allowed response", done=True, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorHistory)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 0
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    with client.websocket_connect("/widget/session") as websocket:
+        blocked = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": "req_hidden", "message": "blocked prompt"},
+        )
+
+    conversation_id = blocked["response"]["conversationId"]
+    assert blocked["type"] == "chat.response"
+    assert blocked["response"]["done"] is True
+    assert blocked["response"]["isWidgetHidden"] is True
+    assert blocked["response"]["messages"] == [{"role": "assistant", "content": ASSISTANT_UNAVAILABLE_MESSAGE}]
+    assert executor_calls == []
+    assert _conversation_messages(UUID(conversation_id)) == [("assistant_hidden", ASSISTANT_UNAVAILABLE_MESSAGE)]
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        assert account is not None
+        account.lifetime_actions_remaining = 1
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    with client.websocket_connect("/widget/session") as websocket:
+        replay = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": conversation_id,
+                "requestId": "req_hidden",
+                "message": "blocked prompt",
+            },
+        )
+
+    assert replay["type"] == "chat.response"
+    assert replay["response"]["done"] is True
+    assert replay["response"]["isWidgetHidden"] is True
+    assert replay["response"]["messages"] == [{"role": "assistant", "content": ASSISTANT_UNAVAILABLE_MESSAGE}]
+    assert executor_calls == []
+
+    with client.websocket_connect("/widget/session") as websocket:
+        allowed = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": conversation_id,
+                "message": "allowed prompt",
+            },
+        )
+
+    assert allowed["type"] == "chat.response"
+    assert allowed["response"]["messages"] == [{"role": "assistant", "content": "allowed response"}]
+    assert executor_calls == [{"user_message": "allowed prompt", "history": []}]
+    assert _conversation_messages(UUID(conversation_id)) == [
+        ("assistant_hidden", ASSISTANT_UNAVAILABLE_MESSAGE),
+        ("user", "allowed prompt"),
+        ("assistant", "allowed response"),
+        ("tool_context", "[]"),
+    ]
+
+
+def test_widget_session_hides_after_consuming_last_action_on_tool_result(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
     from app.schemas.widget import ToolCallPayload
 
@@ -200,22 +398,27 @@ def test_widget_hides_after_consuming_last_action_on_tool_result(client: TestCli
         account.topup_actions_remaining = 0
         account.monthly_actions_remaining = 0
 
-    first = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
-    convo_id = first.json()["conversationId"]
-    assert first.json()["done"] is False
-    assert len(first.json()["toolCalls"]) == 1
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(websocket, {"agentId": agent_id, "message": "start"})
+        convo_id = first["response"]["conversationId"]
+        assert first["response"]["done"] is False
+        assert len(first["response"]["toolCalls"]) == 1
 
-    second = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "conversationId": convo_id,
-        "toolResults": [{"id": "tc_1", "statusCode": 200, "body": {"ok": True}}]
-    })
-    assert second.status_code == 200
-    assert second.json()["isWidgetHidden"] is True
-    assert second.json()["actionsRemaining"] == 0
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": convo_id,
+                "toolResults": [{"id": "tc_1", "statusCode": 200, "body": {"ok": True}}],
+            },
+        )
+
+    assert second["type"] == "chat.response"
+    assert second["response"]["isWidgetHidden"] is True
+    assert second["response"]["actionsRemaining"] == 0
 
 
-def test_widget_js_exec_consumes_billing_action(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_widget_session_js_exec_consumes_billing_action(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
     from app.schemas.widget import ToolCallPayload
 
@@ -248,22 +451,148 @@ def test_widget_js_exec_consumes_billing_action(client: TestClient, monkeypatch:
         account.topup_actions_remaining = 0
         account.monthly_actions_remaining = 0
 
-    first = client.post("/widget/chat", json={"agentId": agent_id, "message": "exec js"})
-    convo_id = first.json()["conversationId"]
-    assert first.json()["done"] is False
-    assert len(first.json()["toolCalls"]) == 1
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(websocket, {"agentId": agent_id, "message": "exec js"})
+        convo_id = first["response"]["conversationId"]
+        assert first["response"]["done"] is False
+        assert len(first["response"]["toolCalls"]) == 1
 
-    second = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "conversationId": convo_id,
-        "toolResults": [{"id": "tc_js", "statusCode": 200, "body": {"result": "My Page"}}]
-    })
-    assert second.status_code == 200
-    assert second.json()["isWidgetHidden"] is True
-    assert second.json()["actionsRemaining"] == 0
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": convo_id,
+                "toolResults": [{"id": "tc_js", "statusCode": 200, "body": {"result": "My Page"}}],
+            },
+        )
+
+    assert second["type"] == "chat.response"
+    assert second["response"]["isWidgetHidden"] is True
+    assert second["response"]["actionsRemaining"] == 0
 
 
-def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_widget_session_rechecks_user_rate_limit_on_follow_up_requests(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.schemas.widget import ToolCallPayload
+
+    tool_call = ToolCallPayload(
+        id="tc_1",
+        tool_id=uuid4(),
+        name="get_item",
+        tool_type="backend",
+        method="GET",
+        path="/items/{id}",
+        params={"id": "1"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeExecutorWithToolCall:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            if tool_results:
+                pytest.fail("tool_results should not be processed after rate limiting")
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
+
+    rate_limit_checks = {"count": 0}
+
+    def fake_is_rate_limited(*_args, **_kwargs):
+        rate_limit_checks["count"] += 1
+        return rate_limit_checks["count"] >= 2
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolCall)
+    monkeypatch.setattr("app.controllers.widget.get_redis_connection", lambda: object())
+    monkeypatch.setattr("app.controllers.widget.is_rate_limited", fake_is_rate_limited)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    update = client.put(
+        "/agent/user-rate-limits",
+        headers=auth_headers(),
+        json={"enabled": True, "dailyLimit": 1, "monthlyLimit": None},
+    )
+    assert update.status_code == 200
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(websocket, {"agentId": agent_id, "message": "start"})
+        convo_id = first["response"]["conversationId"]
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": convo_id,
+                "toolResults": [{"id": "tc_1", "statusCode": 200, "body": {"ok": True}}],
+            },
+        )
+
+    assert first["type"] == "chat.response"
+    assert first["response"]["done"] is False
+    assert second == {
+        "type": "chat.error",
+        "error": {
+            "code": "RATE_LIMITED",
+            "message": "You've reached your usage limit. Please try again later.",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_caps_follow_up_tool_iterations(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.schemas.widget import ToolCallPayload
+
+    tool_call = ToolCallPayload(
+        id="tc_1",
+        tool_id=uuid4(),
+        name="get_item",
+        tool_type="backend",
+        method="GET",
+        path="/items/{id}",
+        params={"id": "1"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeLoopingExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeLoopingExecutor)
+    monkeypatch.setattr("app.controllers.widget.MAX_WIDGET_TOOL_ITERATIONS", 1)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(websocket, {"agentId": agent_id, "message": "start"})
+        convo_id = first["response"]["conversationId"]
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": convo_id,
+                "toolResults": [{"id": "tc_1", "statusCode": 200, "body": {"ok": True}}],
+            },
+        )
+
+    assert first["type"] == "chat.response"
+    assert first["response"]["done"] is False
+    assert second == {
+        "type": "chat.error",
+        "error": {
+            "code": "MAX_TOOL_ITERATIONS_EXCEEDED",
+            "message": "Widget session exceeded the maximum number of tool iterations",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_tool_results_skip_consumption_when_flag_false(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     from app.core.database import session_scope
     from app.schemas.widget import ToolCallPayload
 
@@ -302,151 +631,896 @@ def test_widget_tool_results_skip_consumption_when_flag_false(client: TestClient
         account.topup_actions_remaining = 0
         account.monthly_actions_remaining = 0
 
-    first = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
-    convo_id = first.json()["conversationId"]
-    assert first.json()["done"] is False
-    assert len(first.json()["toolCalls"]) == 1
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(websocket, {"agentId": agent_id, "message": "start"})
+        convo_id = first["response"]["conversationId"]
+        assert first["response"]["done"] is False
+        assert len(first["response"]["toolCalls"]) == 1
 
-    second = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "conversationId": convo_id,
-        "toolResults": [{"id": "tc_1", "statusCode": 200, "consumeAction": False, "body": {"ok": True}}],
-    })
-    assert second.status_code == 200
-    assert second.json()["isWidgetHidden"] is False
-    assert second.json()["actionsRemaining"] == 1
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": convo_id,
+                "toolResults": [{"id": "tc_1", "statusCode": 200, "consumeAction": False, "body": {"ok": True}}],
+            },
+        )
 
-
-def test_widget_chat_agent_not_found(client: TestClient):
-    response = client.post("/widget/chat", json={
-        "agentId": str(uuid4()),
-        "message": "hello"
-    })
-    assert response.status_code == 404
+    assert second["type"] == "chat.response"
+    assert second["response"]["isWidgetHidden"] is False
+    assert second["response"]["actionsRemaining"] == 1
 
 
-def test_widget_chat_creates_conversation(client: TestClient):
+def test_widget_session_emits_agent_not_found(client: TestClient):
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": str(uuid4()),
+                "message": "hello",
+            },
+        )
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "AGENT_NOT_FOUND",
+            "message": "Agent not found",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_creates_conversation(client: TestClient):
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
 
-    response = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "message": "hello"
-    })
-    assert response.status_code == 200
-    body = response.json()
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "message": "hello",
+            },
+        )
+
+    assert response["type"] == "chat.response"
+    body = response["response"]
     assert "conversationId" in body
     UUID(body["conversationId"])
     assert body["done"] is True
 
 
-def test_widget_chat_uses_existing_conversation(client: TestClient):
+def test_widget_session_uses_short_lived_sessions_per_phase(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.controllers import widget as widget_mod
+    from app.core.database import session_scope as real_session_scope
+
+    class FakeExecutorDone:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
+
+    session_entries = {"count": 0}
+
+    @contextmanager
+    def tracked_session_scope():
+        session_entries["count"] += 1
+        with real_session_scope() as session:
+            yield session
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorDone)
+    monkeypatch.setattr(widget_mod, "session_scope", tracked_session_scope)
+
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
 
-    first = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "message": "first"
-    })
-    convo_id = first.json()["conversationId"]
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "message": "hello",
+            },
+        )
 
-    second = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "conversationId": convo_id,
-        "message": "second"
-    })
-    assert second.status_code == 200
-    assert second.json()["conversationId"] == convo_id
+    assert response["type"] == "chat.response"
+    assert session_entries["count"] == 2
 
 
-def test_widget_chat_conversation_not_found(client: TestClient):
+def test_widget_session_uses_existing_conversation(client: TestClient):
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
 
-    response = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "conversationId": str(uuid4()),
-        "message": "hello"
-    })
-    assert response.status_code == 404
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(websocket, {"agentId": agent_id, "message": "first"})
+    convo_id = first["response"]["conversationId"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": convo_id,
+                "message": "second",
+            },
+        )
+
+    assert second["type"] == "chat.response"
+    assert second["response"]["conversationId"] == convo_id
 
 
-def test_widget_chat_returns_tool_calls(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_widget_session_emits_conversation_not_found(client: TestClient):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": str(uuid4()),
+                "message": "hello",
+            },
+        )
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "CONVERSATION_NOT_FOUND",
+            "message": "Conversation not found",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_handles_tool_calls_and_final_response(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.core.database import session_scope
     from app.schemas.widget import ToolCallPayload
+    from app.services.widget_service import get_pending_state, get_tool_context
 
     tool_call = ToolCallPayload(
-        id="tc_1",
+        id="tc_ws_1",
         tool_id=uuid4(),
         name="get_user",
+        tool_type="backend",
         method="GET",
         path="/users/{id}",
         params={"id": "123"},
         query={},
         body={},
-        headers={}
+        headers={},
     )
 
-    class FakeExecutorWithTools:
+    class FakeSocketExecutor:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
             if tool_results:
-                return StepResult(response="done with tools", done=True, messages=[], active_tool_ids=[])
+                return StepResult(response="done via websocket", done=True, messages=[], active_tool_ids=[])
             return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
 
-    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithTools)
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeSocketExecutor)
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    request_id = "req_ws_first"
 
-    response = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "message": "get user 123"
-    })
-    assert response.status_code == 200
-    body = response.json()
-    assert body["done"] is False
-    assert len(body["toolCalls"]) == 1
-    assert body["toolCalls"][0]["name"] == "get_user"
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": request_id, "message": "start"},
+            }
+        )
+        first = websocket.receive_json()
+        assert first["type"] == "chat.response"
+        assert first["response"]["done"] is False
+        assert first["response"]["toolCalls"][0]["name"] == "get_user"
+
+        conversation_id = first["response"]["conversationId"]
+        with session_scope() as db_session:
+            assert get_pending_state(db_session, UUID(conversation_id)) is not None
+
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {
+                    "agentId": agent_id,
+                    "conversationId": conversation_id,
+                    "requestId": request_id,
+                    "toolResults": [{"id": "tc_ws_1", "statusCode": 200, "body": {"ok": True}}],
+                },
+            }
+        )
+        second = websocket.receive_json()
+    assert second["type"] == "chat.response"
+    assert second["response"]["done"] is True
+    assert second["response"]["messages"] == [{"role": "assistant", "content": "done via websocket"}]
+
+    with session_scope() as db_session:
+        assert get_pending_state(db_session, UUID(conversation_id)) is None
+        assert get_tool_context(db_session, UUID(conversation_id)) is not None
 
 
-def test_widget_chat_accepts_tool_results(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    call_count = {"count": 0}
+def test_widget_session_replays_completed_request_without_duplicate_persistence(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    call_count = {"value": 0}
 
-    class FakeExecutorWithToolResults:
+    class FakeExecutorDoneOnce:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
-            call_count["count"] += 1
-            if tool_results:
-                assert len(tool_results) == 1
-                assert tool_results[0].id == "tc_1"
-                assert tool_results[0].status_code == 200
-                return StepResult(response="result processed", done=True, messages=[], active_tool_ids=[])
-            return StepResult(response="no tools", done=True, messages=[], active_tool_ids=[])
+            call_count["value"] += 1
+            return StepResult(response="done once", done=True, messages=[], active_tool_ids=[])
 
-    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithToolResults)
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorDoneOnce)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_completed_once"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "hello"},
+        )
+
+    conversation_id = UUID(first["response"]["conversationId"])
+    with client.websocket_connect("/widget/session") as websocket:
+        second = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "requestId": request_id,
+                "message": "hello",
+            },
+        )
+
+    assert first["response"]["requestId"] == request_id
+    assert second["response"]["requestId"] == request_id
+    assert second["response"]["conversationId"] == str(conversation_id)
+    assert second["response"]["messages"] == [{"role": "assistant", "content": "done once"}]
+    assert call_count["value"] == 1
+
+    messages = _conversation_messages(conversation_id)
+    assert messages == [
+        ("user", "hello"),
+        ("assistant", "done once"),
+        ("tool_context", "[]"),
+    ]
+
+
+def test_widget_session_replays_completed_request_without_conversation_id_after_disconnect(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    call_count = {"value": 0}
+
+    class FakeExecutorDoneOnce:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            call_count["value"] += 1
+            return StepResult(response="done once", done=True, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorDoneOnce)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_completed_disconnect"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": request_id, "message": "hello"},
+            }
+        )
+
+    conversation_id = _conversation_id_for_agent(agent_id)
+    _wait_for(lambda: any(role == "assistant" for role, _ in _conversation_messages(conversation_id)))
+
+    with client.websocket_connect("/widget/session") as websocket:
+        second = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "hello"},
+        )
+
+    assert second["response"]["conversationId"] == str(conversation_id)
+    assert second["response"]["messages"] == [{"role": "assistant", "content": "done once"}]
+    assert call_count["value"] == 1
+
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        conversation_count = session.scalar(
+            select(func.count())
+            .select_from(Conversation)
+            .where(Conversation.agent_id == UUID(agent_id))
+        )
+
+    assert conversation_count == 1
+
+
+def test_widget_session_rejects_request_conversation_mismatch(client: TestClient):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": "req_mismatch", "message": "hello"},
+        )
+
+    with client.websocket_connect("/widget/session") as websocket:
+        second = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": "req_other", "message": "other"},
+        )
+
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": second["response"]["conversationId"],
+                "requestId": "req_mismatch",
+                "message": "hello",
+            },
+        )
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "REQUEST_CONVERSATION_MISMATCH",
+            "message": "Request id belongs to a different conversation",
+            "retriable": False,
+        },
+    }
+
+    assert second["response"]["conversationId"] != first["response"]["conversationId"]
+
+
+def test_widget_session_rejects_request_payload_mismatch(client: TestClient):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_payload_mismatch"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "hello"},
+        )
+
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "goodbye"},
+        )
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "REQUEST_PAYLOAD_MISMATCH",
+            "message": "Request id belongs to a different user message",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_requires_request_id(client: TestClient):
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "message": "hello"},
+            }
+        )
+        response = websocket.receive_json()
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "REQUEST_ID_REQUIRED",
+            "message": "Request id is required",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_same_request_replay_drops_stale_in_flight_result(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    started = Event()
+    release = Event()
+    first_returned = Event()
+    call_count = {"value": 0}
+
+    class FakeExecutorReplay:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                started.set()
+                assert await asyncio.to_thread(release.wait, 2)
+                first_returned.set()
+                return StepResult(response="stale response", done=True, messages=[], active_tool_ids=[])
+            return StepResult(response="fresh response", done=True, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorReplay)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_resume_once"
+
+    with client.websocket_connect("/widget/session") as first_socket:
+        first_socket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": request_id, "message": "hello"},
+            }
+        )
+        assert started.wait(2)
+
+        with client.websocket_connect("/widget/session") as second_socket:
+            second_socket.send_json(
+                {
+                    "type": "chat.request",
+                    "request": {
+                        "agentId": agent_id,
+                        "requestId": request_id,
+                        "message": "hello",
+                    },
+                }
+            )
+            second = second_socket.receive_json()
+
+        conversation_id = UUID(second["response"]["conversationId"])
+        assert second["response"]["requestId"] == request_id
+        assert second["response"]["messages"] == [{"role": "assistant", "content": "fresh response"}]
+
+        release.set()
+        assert first_returned.wait(2)
+        first = first_socket.receive_json()
+        _wait_for(lambda: len([message for message in _conversation_messages(conversation_id) if message[0] == "assistant"]) == 1)
+
+    assert first == {
+        "type": "chat.error",
+        "error": {
+            "code": "RUN_SUPERSEDED",
+            "message": "This request has been replaced by a newer one.",
+            "retriable": False,
+        },
+    }
+
+    messages = _conversation_messages(conversation_id)
+    assert messages == [
+        ("user", "hello"),
+        ("assistant", "fresh response"),
+        ("tool_context", "[]"),
+    ]
+
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        conversation_count = session.scalar(
+            select(func.count())
+            .select_from(Conversation)
+            .where(Conversation.agent_id == UUID(agent_id))
+        )
+
+    assert conversation_count == 1
+
+
+def test_widget_session_newer_request_supersedes_older_in_flight_result(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    started = Event()
+    release = Event()
+    first_returned = Event()
+
+    class FakeExecutorSupersede:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            if user_message == "old request":
+                started.set()
+                assert await asyncio.to_thread(release.wait, 2)
+                first_returned.set()
+                return StepResult(response="stale old response", done=True, messages=[], active_tool_ids=[])
+            return StepResult(response="fresh new response", done=True, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorSupersede)
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
 
-    first = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "message": "start"
-    })
-    convo_id = first.json()["conversationId"]
+    with client.websocket_connect("/widget/session") as first_socket:
+        first_socket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": "req_old", "message": "old request"},
+            }
+        )
+        assert started.wait(2)
+        conversation_id = _conversation_id_for_agent(agent_id)
 
-    response = client.post("/widget/chat", json={
-        "agentId": agent_id,
-        "conversationId": convo_id,
-        "toolResults": [
-            {"id": "tc_1", "statusCode": 200, "body": {"user": "test"}}
-        ]
-    })
-    assert response.status_code == 200
-    assert response.json()["done"] is True
+        with client.websocket_connect("/widget/session") as second_socket:
+            second_socket.send_json(
+                {
+                    "type": "chat.request",
+                    "request": {
+                        "agentId": agent_id,
+                        "conversationId": str(conversation_id),
+                        "requestId": "req_new",
+                        "message": "new request",
+                    },
+                }
+            )
+            second = second_socket.receive_json()
+
+        assert second["response"]["requestId"] == "req_new"
+        assert second["response"]["messages"] == [{"role": "assistant", "content": "fresh new response"}]
+
+        release.set()
+        assert first_returned.wait(2)
+        _wait_for(lambda: len([message for message in _conversation_messages(conversation_id) if message[0] == "assistant"]) == 1)
+
+    messages = _conversation_messages(conversation_id)
+    assert messages == [
+        ("user", "old request"),
+        ("user", "new request"),
+        ("assistant", "fresh new response"),
+        ("tool_context", "[]"),
+    ]
+
+
+def test_widget_session_replayed_tool_results_are_idempotent_for_same_request(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.core.database import session_scope
+    from app.schemas.widget import ToolCallPayload
+    from app.models import Feature, HttpMethod, Tool
+
+    with session_scope() as session:
+        feature = Feature(user_id="user_1", name="Catalog")
+        session.add(feature)
+        session.flush()
+        tool_record = Tool(
+            user_id="user_1",
+            path="/items/{id}",
+            method=HttpMethod.get,
+            tool={
+                "type": "function",
+                "function": {
+                    "name": "get_item",
+                    "description": "Fetch an item",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            feature_id=feature.id,
+            agent_enabled=True,
+        )
+        session.add(tool_record)
+        session.flush()
+        tool_id = tool_record.id
+
+    tool_call = ToolCallPayload(
+        id="tc_once",
+        tool_id=tool_id,
+        name="get_item",
+        tool_type="backend",
+        method="GET",
+        path="/items/{id}",
+        params={"id": "1"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeExecutorWithReplayableTool:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            if tool_results:
+                return StepResult(response="tool done once", done=True, messages=[], active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithReplayableTool)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_tool_once"
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 2
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": request_id, "message": "start"},
+        )
+
+    conversation_id = UUID(first["response"]["conversationId"])
+    assert first["response"]["requestId"] == request_id
+    assert first["response"]["done"] is False
+
+    with client.websocket_connect("/widget/session") as websocket:
+        replay = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "requestId": request_id,
+                "message": "start",
+            },
+        )
+        done = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": str(conversation_id),
+                "requestId": request_id,
+                "toolResults": [{"id": "tc_once", "statusCode": 200, "body": {"ok": True}}],
+            },
+        )
+
+    with client.websocket_connect("/widget/session") as websocket:
+        repeated = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "conversationId": str(conversation_id),
+                "requestId": request_id,
+                "toolResults": [{"id": "tc_once", "statusCode": 200, "body": {"ok": True}}],
+            },
+        )
+
+    assert replay["response"]["requestId"] == request_id
+    assert replay["response"]["done"] is False
+    assert replay["response"]["toolCalls"] == first["response"]["toolCalls"]
+    assert done["response"]["messages"] == [{"role": "assistant", "content": "tool done once"}]
+    assert repeated["response"]["messages"] == [{"role": "assistant", "content": "tool done once"}]
+
+    with session_scope() as session:
+        billing_count = session.scalar(
+            select(func.count())
+            .select_from(BillingActionConsumption)
+            .where(
+                BillingActionConsumption.user_id == "user_1",
+                BillingActionConsumption.conversation_id == conversation_id,
+                BillingActionConsumption.tool_call_id == "tc_once",
+            )
+        )
+        action_count = session.scalar(
+            select(func.count())
+            .select_from(ConversationAction)
+            .where(
+                ConversationAction.user_id == "user_1",
+                ConversationAction.conversation_id == conversation_id,
+                ConversationAction.tool_call_id == "tc_once",
+            )
+        )
+        account = session.get(BillingAccount, "user_1")
+        remaining = account.lifetime_actions_remaining if account is not None else None
+
+    assert billing_count == 1
+    assert action_count == 1
+    assert remaining == 1
+
+
+def test_widget_session_restores_pending_state_on_new_socket(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.schemas.widget import ToolCallPayload
+
+    pending_tool_id = uuid4()
+    tool_call = ToolCallPayload(
+        id="tc_ws_resume",
+        tool_id=pending_tool_id,
+        name="get_user",
+        tool_type="backend",
+        method="GET",
+        path="/users/{id}",
+        params={"id": "123"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeResumableSocketExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            if tool_results:
+                assert [message.content for message in pending_messages] == ["pending websocket state"]
+                assert active_tool_ids == [pending_tool_id]
+                return StepResult(response="resumed via websocket", done=True, messages=[], active_tool_ids=[])
+            return StepResult(
+                tool_calls=[tool_call],
+                done=False,
+                messages=[HumanMessage(content="pending websocket state")],
+                active_tool_ids=[pending_tool_id],
+            )
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeResumableSocketExecutor)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_ws_resume"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": request_id, "message": "start"},
+            }
+        )
+        first = websocket.receive_json()
+        assert first["type"] == "chat.response"
+        assert first["response"]["done"] is False
+
+    conversation_id = first["response"]["conversationId"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {
+                    "agentId": agent_id,
+                    "conversationId": conversation_id,
+                    "requestId": request_id,
+                    "toolResults": [{"id": "tc_ws_resume", "statusCode": 200, "consumeAction": False, "body": {"ok": True}}],
+                },
+            }
+        )
+        second = websocket.receive_json()
+
+    assert second["type"] == "chat.response"
+    assert second["response"]["done"] is True
+    assert second["response"]["messages"] == [{"role": "assistant", "content": "resumed via websocket"}]
+
+
+def test_widget_session_emits_auth_error(client: TestClient):
+    from app.core.database import session_scope
+    from app.models import Agent
+
+    agent_response = client.post("/agent", headers=auth_headers())
+    agent_id = agent_response.json()["id"]
+
+    with session_scope() as db_session:
+        agent = db_session.get(Agent, UUID(agent_id))
+        assert agent is not None
+        agent.widget_auth_enabled = True
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": "req_auth", "message": "start"},
+            }
+        )
+        response = websocket.receive_json()
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "WIDGET_AUTH_REQUIRED",
+            "message": "Signed widget token required",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_emits_transport_error(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.services.openai_responses_ws import OpenAIResponsesTransportError
+
+    class FakeTransportErrorExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            raise OpenAIResponsesTransportError(
+                code="openai_api_key_missing",
+                message="OpenAI API key missing",
+                status=500,
+                retriable=False,
+            )
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeTransportErrorExecutor)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": "req_transport", "message": "start"},
+            }
+        )
+        response = websocket.receive_json()
+
+    assert response == {
+        "type": "chat.error",
+        "error": {
+            "code": "openai_api_key_missing",
+            "message": "OpenAI API key missing",
+            "retriable": False,
+        },
+    }
+
+
+def test_widget_session_times_out_before_first_request(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("app.controllers.widget.INITIAL_SOCKET_REQUEST_TIMEOUT_SECONDS", 0.05)
+
+    with client.websocket_connect("/widget/session") as websocket:
+        with pytest.raises(WebSocketDisconnect) as error:
+            websocket.receive_json()
+
+    assert error.value.code == 1008
+
+
+def test_widget_session_emits_timeout_waiting_for_next_request(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.schemas.widget import ToolCallPayload
+
+    monkeypatch.setattr("app.controllers.widget.SOCKET_REQUEST_TIMEOUT_SECONDS", 0.05)
+
+    tool_call = ToolCallPayload(
+        id="tc_ws_timeout",
+        tool_id=uuid4(),
+        name="get_user",
+        tool_type="backend",
+        method="GET",
+        path="/users/{id}",
+        params={"id": "123"},
+        query={},
+        body={},
+        headers={},
+    )
+
+    class FakeTimeoutSocketExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeTimeoutSocketExecutor)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+    request_id = "req_timeout"
+
+    with client.websocket_connect("/widget/session") as websocket:
+        websocket.send_json(
+            {
+                "type": "chat.request",
+                "request": {"agentId": agent_id, "requestId": request_id, "message": "start"},
+            }
+        )
+        first = websocket.receive_json()
+        assert first["type"] == "chat.response"
+        assert first["response"]["done"] is False
+
+        second = websocket.receive_json()
+
+    assert second == {
+        "type": "chat.error",
+        "error": {
+            "code": "SESSION_TIMEOUT",
+            "message": "Widget session timed out",
+            "retriable": True,
+        },
+    }
 
 
 def test_widget_transcribe_success(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -563,26 +1637,34 @@ def test_widget_transcribe_stream_limit(client: TestClient, monkeypatch: pytest.
     assert called["count"] == 0
 
 
-def test_widget_chat_caps_tool_context_on_done(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+def test_widget_session_uses_pruned_tool_context_on_done(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, messages_from_dict, messages_to_dict
 
-    large_messages = [
+    raw_messages = [
         SystemMessage(content="sys"),
         HumanMessage(content="q"),
-        ToolMessage(content="x" * 500_000, tool_call_id="c1"),
+        ToolMessage(content="x" * 50_000, tool_call_id="c1"),
     ]
+    pruned_messages = raw_messages[:2]
 
     class FakeExecutorWithLargeMessages:
         def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
-            return StepResult(response="done", done=True, messages=large_messages, active_tool_ids=[])
+            return StepResult(response="done", done=True, messages=raw_messages, active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeMessages)
+    prune_calls: list[tuple[list, str]] = []
+
+    def fake_prune_messages(messages, model="gpt-4o", budget=None):
+        prune_calls.append((messages, model))
+        assert messages == raw_messages
+        return pruned_messages
+
+    monkeypatch.setattr("app.controllers.widget.prune_messages", fake_prune_messages)
 
     saved_content: list[str] = []
-    original_save = None
 
     import app.controllers.widget as widget_mod
     original_save = widget_mod.save_tool_context
@@ -596,27 +1678,34 @@ def test_widget_chat_caps_tool_context_on_done(client: TestClient, monkeypatch: 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
 
-    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "hello"})
-    assert response.status_code == 200
-    assert response.json()["done"] is True
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "message": "hello",
+            },
+        )
+
+    assert response["type"] == "chat.response"
+    assert response["response"]["done"] is True
+    assert len(prune_calls) == 1
     assert len(saved_content) == 1
-    from app.services.context_budget import count_tokens, get_token_budget
-    from langchain_core.messages import messages_from_dict
     import json
-    msgs = messages_from_dict(json.loads(saved_content[0]))
-    total_tokens = sum(count_tokens(str(m.content or ""), "gpt-4o") for m in msgs)
-    assert total_tokens < 500_000
+    saved_messages = messages_from_dict(json.loads(saved_content[0]))
+    assert messages_to_dict(saved_messages) == messages_to_dict(pruned_messages)
 
 
-def test_widget_chat_caps_pending_state_on_tool_calls(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+def test_widget_session_uses_pruned_pending_state_on_tool_calls(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, messages_from_dict, messages_to_dict
     from app.schemas.widget import ToolCallPayload
 
-    large_messages = [
+    raw_messages = [
         SystemMessage(content="sys"),
         HumanMessage(content="q"),
-        ToolMessage(content="y" * 500_000, tool_call_id="c1"),
+        ToolMessage(content="y" * 50_000, tool_call_id="c1"),
     ]
+    pruned_messages = raw_messages[:2]
     tool_call = ToolCallPayload(
         id="tc_1",
         tool_id=uuid4(),
@@ -635,34 +1724,46 @@ def test_widget_chat_caps_pending_state_on_tool_calls(client: TestClient, monkey
             pass
 
         async def run_step(self, user_message, conversation_history, tool_results=None, pending_messages=None, active_tool_ids=None):
-            return StepResult(tool_calls=[tool_call], done=False, messages=large_messages, active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=raw_messages, active_tool_ids=[])
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeExecutorWithLargeState)
+    prune_calls: list[tuple[list, str]] = []
+
+    def fake_prune_messages(messages, model="gpt-4o", budget=None):
+        prune_calls.append((messages, model))
+        assert messages == raw_messages
+        return pruned_messages
+
+    monkeypatch.setattr("app.controllers.widget.prune_messages", fake_prune_messages)
 
     saved_messages: list[str] = []
-    original_save_msg = None
 
     import app.controllers.widget as widget_mod
-    original_save_msg = widget_mod.save_widget_message
+    original_save_pending_state = widget_mod.save_pending_state
 
-    def capture_save_msg(session, conversation_id, role, content):
-        if role == "pending_state":
-            saved_messages.append(content)
-        return original_save_msg(session, conversation_id, role, content)
+    def capture_save_pending_state(session, conversation_id, content):
+        saved_messages.append(content)
+        return original_save_pending_state(session, conversation_id, content)
 
-    monkeypatch.setattr("app.controllers.widget.save_widget_message", capture_save_msg)
+    monkeypatch.setattr("app.controllers.widget.save_pending_state", capture_save_pending_state)
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
 
-    response = client.post("/widget/chat", json={"agentId": agent_id, "message": "start"})
-    assert response.status_code == 200
-    assert response.json()["done"] is False
+    with client.websocket_connect("/widget/session") as websocket:
+        response = send_widget_request(
+            websocket,
+            {
+                "agentId": agent_id,
+                "message": "start",
+            },
+        )
+
+    assert response["type"] == "chat.response"
+    assert response["response"]["done"] is False
+    assert len(prune_calls) == 1
     assert len(saved_messages) == 1
     import json
     state_data = json.loads(saved_messages[0])
-    from langchain_core.messages import messages_from_dict
-    msgs = messages_from_dict(state_data["messages"])
-    from app.services.context_budget import count_tokens
-    total_tokens = sum(count_tokens(str(m.content or ""), "gpt-4o") for m in msgs)
-    assert total_tokens < 500_000
+    persisted_messages = messages_from_dict(state_data["messages"])
+    assert messages_to_dict(persisted_messages) == messages_to_dict(pruned_messages)

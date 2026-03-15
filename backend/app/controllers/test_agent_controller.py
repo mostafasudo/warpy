@@ -1,6 +1,4 @@
 import importlib
-from uuid import UUID
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -40,22 +38,8 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
     return session
 
 
-class FakeExecutor:
-    instances: list["FakeExecutor"] = []
-
-    def __init__(self, session, user_id, conversation_id=None, **kwargs):
-        self.calls = []
-        self.kwargs = kwargs
-        FakeExecutor.instances.append(self)
-
-    async def run(self, message, history):
-        self.calls.append({"message": message, "history": history})
-        return "assistant reply"
-
-
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("app.controllers.agent.AgentExecutor", FakeExecutor)
+def client():
     app = create_app()
     with TestClient(app) as client:
         yield client
@@ -65,36 +49,14 @@ def auth_headers():
     return {"Authorization": "Bearer token"}
 
 
-def test_agent_conversation_and_chat_flow(client: TestClient):
-    FakeExecutor.instances.clear()
+def test_agent_create_and_get_flow(client: TestClient):
     create = client.post("/agent", headers=auth_headers())
     assert create.status_code == 201
     agent = create.json()
-    UUID(agent["id"])
 
     fetched = client.get("/agent", headers=auth_headers())
     assert fetched.status_code == 200
     assert fetched.json()["id"] == agent["id"]
-
-    convo = client.post("/agent/conversations", json={"participant": "user"}, headers=auth_headers())
-    assert convo.status_code == 201
-    convo_id = convo.json()["id"]
-
-    convo_get = client.get(f"/agent/conversations/{convo_id}", headers=auth_headers())
-    assert convo_get.status_code == 200
-    assert convo_get.json()["messages"] == []
-
-    chat = client.post(f"/agent/conversations/{convo_id}", json={"message": "hi"}, headers=auth_headers())
-    assert chat.status_code == 200
-    body = chat.json()
-    assert body["message"]["role"] == "user"
-    assert body["response"]["role"] == "assistant"
-
-    conversations = client.get("/agent/conversations", headers=auth_headers())
-    assert conversations.status_code == 200
-    assert len(conversations.json()) == 1
-    assert FakeExecutor.instances[-1].kwargs["custom_user_system_prompt"] == DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
-    assert FakeExecutor.instances[-1].kwargs["widget_suggestions_enabled"] is False
 
 
 def test_agent_custom_system_prompt_get_and_update(client: TestClient):
@@ -141,30 +103,6 @@ def test_agent_custom_system_prompt_rejects_over_limit(client: TestClient):
         json={"customUserSystemPrompt": "x" * (CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH + 1)},
     )
     assert invalid.status_code == 422
-
-
-def test_agent_chat_passes_custom_system_prompt_to_executor(client: TestClient):
-    FakeExecutor.instances.clear()
-    create = client.post("/agent", headers=auth_headers())
-    assert create.status_code == 201
-
-    update = client.put(
-        "/agent/custom-system-prompt",
-        headers=auth_headers(),
-        json={"customUserSystemPrompt": "Guide users step by step."},
-    )
-    assert update.status_code == 200
-
-    convo = client.post("/agent/conversations", json={"participant": "user"}, headers=auth_headers())
-    assert convo.status_code == 201
-
-    chat = client.post(
-        f"/agent/conversations/{convo.json()['id']}",
-        json={"message": "hi"},
-        headers=auth_headers(),
-    )
-    assert chat.status_code == 200
-    assert FakeExecutor.instances[-1].kwargs["custom_user_system_prompt"] == "Guide users step by step."
 
 
 def test_agent_widget_config_get_and_update(client: TestClient):
