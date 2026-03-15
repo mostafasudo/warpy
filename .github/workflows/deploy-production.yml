@@ -30,6 +30,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout docs-site submodule
+        run: |
+          git config submodule.docs-site.url https://github.com/LevwTech/docs.git
+          git submodule update --init --depth 1 -- docs-site
+
       - name: Validate required config
         run: |
           set -euo pipefail
