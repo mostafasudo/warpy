@@ -25,3 +25,4 @@ backend/coverage/
 .vscode/
 bin/
 coverage/
+.gstack/

@@ -15,13 +15,13 @@
 ## Default Flow (Non-Trivial Tasks)
 **It is incredibly important that the agent follow this flow for any non-trivial task.** Do not skip steps.
 
-1. Brainstorm toward the best product outcome
-2. Create the plan using plan mode
-3. Apply `docs/mega-plan-review.md` to that plan
-4. Implement the plan and finish all TODOs
-5. Run the full frontend and backend testing sweep
-6. Run the code review tool/skill for a careful review
-7. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
+1. Brainstorm toward the best product outcome with `/plan-ceo-review`
+2. Create the plan using plan mode, `docs/mega-plan-review.md`, and `/plan-eng-review`
+3. Implement the plan and finish all TODOs
+4. Run the full frontend and backend testing sweep
+5. Run the code review tool/skill for a careful review with `/review`
+6. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
+7. Call other relevant `gstack` skills such as `/browse`, `/qa`, and `/retro` when they materially improve the outcome
 
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
@@ -43,7 +43,10 @@ Submodules have their own git history. Commit inside the submodule first, then u
 - **Ask mode:** answers are short, clear, and strictly concise.
 
 ## Skills
-LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+- Vendored `gstack` workflow skills live in `.codex/skills/gstack/` and are surfaced via the top-level skill links `browse`, `qa`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade`.
+- If the vendored `gstack` install needs to rebuild its browser binary or re-sync skill symlinks, run `cd .codex/skills/gstack && ./setup`.
+- The default browser-validation rule in this repo still comes from `docs/chrome-cdp.md`; use `gstack` when a task explicitly calls for those workflow skills.
 
 ## Do
 - Keep code **DRY, clean, elegant, small**. No comments unless unavoidable and can't be expressed by code.

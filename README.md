@@ -5,6 +5,7 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 ## Prerequisites
 - Node.js 20+
 - `pnpm` 10+
+- Bun 1+ (only for the vendored `gstack` workflow skills)
 - Python 3.11+
 - Docker (optional but required for the compose workflow)
 
@@ -18,6 +19,15 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 
 ## Skills
 LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+
+Vendored `gstack` workflow skills live in `.codex/skills/gstack/` and are exposed through top-level skill links such as `browse`, `qa`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade`.
+
+If the vendored `gstack` install needs to rebuild its browser binary or re-sync skill symlinks, run:
+
+```sh
+cd .codex/skills/gstack
+./setup
+```
 
 ## Deployment
 

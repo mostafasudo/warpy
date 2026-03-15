@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# gstack setup — build browser binary + register vendored skills
+set -e
+
+GSTACK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+SKILLS_DIR="$(dirname "$GSTACK_DIR")"
+BROWSE_BIN="$GSTACK_DIR/browse/dist/browse"
+
+ensure_playwright_browser() {
+  (
+    cd "$GSTACK_DIR"
+    bun --eval 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
+  ) >/dev/null 2>&1
+}
+
+ensure_symlink() {
+  local source="$1"
+  local target="$2"
+
+  if [ -L "$target" ] || [ ! -e "$target" ]; then
+    ln -snf "$source" "$target"
+    return 0
+  fi
+
+  return 1
+}
+
+link_gstack_skills() {
+  local target_skills_dir="$1"
+  local target_prefix="$2"
+  local linked=()
+
+  for skill_dir in "$GSTACK_DIR"/*/; do
+    if [ -f "$skill_dir/SKILL.md" ]; then
+      local skill_name
+      skill_name="$(basename "$skill_dir")"
+      [ "$skill_name" = "node_modules" ] && continue
+      if ensure_symlink "$target_prefix/$skill_name" "$target_skills_dir/$skill_name"; then
+        linked+=("$skill_name")
+      fi
+    fi
+  done
+
+  printf '%s\n' "${linked[@]}"
+}
+
+mirror_codex_skills() {
+  local project_root="$1"
+  local canonical_skills_dir="$2"
+  local rel_canonical="../../.codex/skills"
+  local mirror_dirs=(
+    "$project_root/.claude/skills"
+    "$project_root/.agent/skills"
+    "$project_root/.agents/skills"
+    "$project_root/.cursor/skills"
+    "$project_root/.gemini/skills"
+    "$project_root/.github/skills"
+  )
+  local mirrored=()
+
+  for mirror_dir in "${mirror_dirs[@]}"; do
+    mkdir -p "$mirror_dir"
+    for skill_path in "$canonical_skills_dir"/*; do
+      [ -e "$skill_path" ] || continue
+      local skill_name
+      skill_name="$(basename "$skill_path")"
+      if ensure_symlink "$rel_canonical/$skill_name" "$mirror_dir/$skill_name"; then
+        mirrored+=("$(basename "$(dirname "$mirror_dir")")/$skill_name")
+      fi
+    done
+  done
+
+  printf '%s\n' "${mirrored[@]}"
+}
+
+# 1. Build browse binary if needed (smart rebuild: stale sources, package.json, lock)
+NEEDS_BUILD=0
+if [ ! -x "$BROWSE_BIN" ]; then
+  NEEDS_BUILD=1
+elif [ -n "$(find "$GSTACK_DIR/browse/src" -type f -newer "$BROWSE_BIN" -print -quit 2>/dev/null)" ]; then
+  NEEDS_BUILD=1
+elif [ "$GSTACK_DIR/package.json" -nt "$BROWSE_BIN" ]; then
+  NEEDS_BUILD=1
+elif [ -f "$GSTACK_DIR/bun.lock" ] && [ "$GSTACK_DIR/bun.lock" -nt "$BROWSE_BIN" ]; then
+  NEEDS_BUILD=1
+fi
+
+if [ "$NEEDS_BUILD" -eq 1 ]; then
+  echo "Building browse binary..."
+  (
+    cd "$GSTACK_DIR"
+    bun install
+    bun run build
+  )
+  # Safety net: write .version if build script didn't (e.g., git not available during build)
+  if [ ! -f "$GSTACK_DIR/browse/dist/.version" ]; then
+    git -C "$GSTACK_DIR" rev-parse HEAD > "$GSTACK_DIR/browse/dist/.version" 2>/dev/null || true
+  fi
+fi
+
+if [ ! -x "$BROWSE_BIN" ]; then
+  echo "gstack setup failed: browse binary missing at $BROWSE_BIN" >&2
+  exit 1
+fi
+
+# 2. Ensure Playwright's Chromium is available
+if ! ensure_playwright_browser; then
+  echo "Installing Playwright Chromium..."
+  (
+    cd "$GSTACK_DIR"
+    bunx playwright install chromium
+  )
+fi
+
+if ! ensure_playwright_browser; then
+  echo "gstack setup failed: Playwright Chromium could not be launched" >&2
+  exit 1
+fi
+
+# 3. Ensure ~/.gstack global state directory exists
+mkdir -p "$HOME/.gstack/projects"
+
+# 4. Register skills
+SKILLS_BASENAME="$(basename "$SKILLS_DIR")"
+SKILLS_PARENT_BASENAME="$(basename "$(dirname "$SKILLS_DIR")")"
+if [ "$SKILLS_BASENAME" = "skills" ] && [ "$SKILLS_PARENT_BASENAME" = ".codex" ]; then
+  PROJECT_ROOT="$(dirname "$(dirname "$SKILLS_DIR")")"
+  linked="$(link_gstack_skills "$SKILLS_DIR" "gstack" | paste -sd ' ' -)"
+  mirrored="$(mirror_codex_skills "$PROJECT_ROOT" "$SKILLS_DIR" | paste -sd ' ' -)"
+
+  echo "gstack ready."
+  echo "  browse: $BROWSE_BIN"
+  if [ -n "$linked" ]; then
+    echo "  linked gstack skills in .codex: $linked"
+  fi
+  if [ -n "$mirrored" ]; then
+    echo "  mirrored skills: $mirrored"
+  fi
+elif [ "$SKILLS_BASENAME" = "skills" ]; then
+  linked="$(link_gstack_skills "$SKILLS_DIR" "gstack" | paste -sd ' ' -)"
+
+  echo "gstack ready."
+  echo "  browse: $BROWSE_BIN"
+  if [ -n "$linked" ]; then
+    echo "  linked skills: $linked"
+  fi
+else
+  echo "gstack ready."
+  echo "  browse: $BROWSE_BIN"
+  echo "  (skipped skill symlinks — parent directory is not a skills directory)"
+fi
+
+# 4. First-time welcome + legacy cleanup
+if [ ! -d "$HOME/.gstack" ]; then
+  mkdir -p "$HOME/.gstack"
+  echo "  Welcome! Run /gstack-upgrade anytime to stay current."
+fi
+rm -f /tmp/gstack-latest-version
