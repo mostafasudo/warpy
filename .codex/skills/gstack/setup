@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# gstack setup — build browser binary + register vendored skills
+# gstack setup — build browser binary + register all skills with Claude Code
 set -e
 
-GSTACK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+GSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_DIR="$(dirname "$GSTACK_DIR")"
 BROWSE_BIN="$GSTACK_DIR/browse/dist/browse"
 
@@ -11,66 +11,6 @@ ensure_playwright_browser() {
     cd "$GSTACK_DIR"
     bun --eval 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
   ) >/dev/null 2>&1
-}
-
-ensure_symlink() {
-  local source="$1"
-  local target="$2"
-
-  if [ -L "$target" ] || [ ! -e "$target" ]; then
-    ln -snf "$source" "$target"
-    return 0
-  fi
-
-  return 1
-}
-
-link_gstack_skills() {
-  local target_skills_dir="$1"
-  local target_prefix="$2"
-  local linked=()
-
-  for skill_dir in "$GSTACK_DIR"/*/; do
-    if [ -f "$skill_dir/SKILL.md" ]; then
-      local skill_name
-      skill_name="$(basename "$skill_dir")"
-      [ "$skill_name" = "node_modules" ] && continue
-      if ensure_symlink "$target_prefix/$skill_name" "$target_skills_dir/$skill_name"; then
-        linked+=("$skill_name")
-      fi
-    fi
-  done
-
-  printf '%s\n' "${linked[@]}"
-}
-
-mirror_codex_skills() {
-  local project_root="$1"
-  local canonical_skills_dir="$2"
-  local rel_canonical="../../.codex/skills"
-  local mirror_dirs=(
-    "$project_root/.claude/skills"
-    "$project_root/.agent/skills"
-    "$project_root/.agents/skills"
-    "$project_root/.cursor/skills"
-    "$project_root/.gemini/skills"
-    "$project_root/.github/skills"
-  )
-  local mirrored=()
-
-  for mirror_dir in "${mirror_dirs[@]}"; do
-    mkdir -p "$mirror_dir"
-    for skill_path in "$canonical_skills_dir"/*; do
-      [ -e "$skill_path" ] || continue
-      local skill_name
-      skill_name="$(basename "$skill_path")"
-      if ensure_symlink "$rel_canonical/$skill_name" "$mirror_dir/$skill_name"; then
-        mirrored+=("$(basename "$(dirname "$mirror_dir")")/$skill_name")
-      fi
-    done
-  done
-
-  printf '%s\n' "${mirrored[@]}"
 }
 
 # 1. Build browse binary if needed (smart rebuild: stale sources, package.json, lock)
@@ -120,34 +60,33 @@ fi
 # 3. Ensure ~/.gstack global state directory exists
 mkdir -p "$HOME/.gstack/projects"
 
-# 4. Register skills
+# 4. Only create skill symlinks if we're inside a .claude/skills directory
 SKILLS_BASENAME="$(basename "$SKILLS_DIR")"
-SKILLS_PARENT_BASENAME="$(basename "$(dirname "$SKILLS_DIR")")"
-if [ "$SKILLS_BASENAME" = "skills" ] && [ "$SKILLS_PARENT_BASENAME" = ".codex" ]; then
-  PROJECT_ROOT="$(dirname "$(dirname "$SKILLS_DIR")")"
-  linked="$(link_gstack_skills "$SKILLS_DIR" "gstack" | paste -sd ' ' -)"
-  mirrored="$(mirror_codex_skills "$PROJECT_ROOT" "$SKILLS_DIR" | paste -sd ' ' -)"
+if [ "$SKILLS_BASENAME" = "skills" ]; then
+  linked=()
+  for skill_dir in "$GSTACK_DIR"/*/; do
+    if [ -f "$skill_dir/SKILL.md" ]; then
+      skill_name="$(basename "$skill_dir")"
+      # Skip node_modules
+      [ "$skill_name" = "node_modules" ] && continue
+      target="$SKILLS_DIR/$skill_name"
+      # Create or update symlink; skip if a real file/directory exists
+      if [ -L "$target" ] || [ ! -e "$target" ]; then
+        ln -snf "gstack/$skill_name" "$target"
+        linked+=("$skill_name")
+      fi
+    fi
+  done
 
   echo "gstack ready."
   echo "  browse: $BROWSE_BIN"
-  if [ -n "$linked" ]; then
-    echo "  linked gstack skills in .codex: $linked"
-  fi
-  if [ -n "$mirrored" ]; then
-    echo "  mirrored skills: $mirrored"
-  fi
-elif [ "$SKILLS_BASENAME" = "skills" ]; then
-  linked="$(link_gstack_skills "$SKILLS_DIR" "gstack" | paste -sd ' ' -)"
-
-  echo "gstack ready."
-  echo "  browse: $BROWSE_BIN"
-  if [ -n "$linked" ]; then
-    echo "  linked skills: $linked"
+  if [ ${#linked[@]} -gt 0 ]; then
+    echo "  linked skills: ${linked[*]}"
   fi
 else
   echo "gstack ready."
   echo "  browse: $BROWSE_BIN"
-  echo "  (skipped skill symlinks — parent directory is not a skills directory)"
+  echo "  (skipped skill symlinks — not inside .claude/skills/)"
 fi
 
 # 4. First-time welcome + legacy cleanup

@@ -11,12 +11,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { homedir } from 'os';
 import { resolveConfig, ensureStateDir, readVersionHash } from './config';
 
 const config = resolveConfig();
 const MAX_START_WAIT = 8000; // 8 seconds to start
-const START_LOCK_STALE_MS = MAX_START_WAIT * 2;
 
 export function resolveServerScript(
   env: Record<string, string | undefined> = process.env,
@@ -49,28 +47,6 @@ export function resolveServerScript(
 }
 
 const SERVER_SCRIPT = resolveServerScript();
-
-export function resolveBunExecutable(
-  env: Record<string, string | undefined> = process.env,
-  homeDir: string = homedir(),
-  which: (bin: string) => string | null = Bun.which,
-): string {
-  const candidates = [
-    env.BUN_EXECUTABLE,
-    which('bun'),
-    path.join(homeDir, '.bun', 'bin', process.platform === 'win32' ? 'bun.exe' : 'bun'),
-  ].filter(Boolean) as string[];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new Error('[browse] Executable not found in $PATH: "bun"');
-}
-
-const BUN_EXECUTABLE = resolveBunExecutable();
 
 interface ServerState {
   pid: number;
@@ -118,40 +94,6 @@ async function killServer(pid: number): Promise<void> {
   }
 }
 
-function getStartLockFile(): string {
-  return `${config.stateFile}.lock`;
-}
-
-async function waitForStateFile(timeoutMs: number): Promise<ServerState | null> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const state = readState();
-    if (state && isProcessAlive(state.pid)) {
-      return state;
-    }
-    await Bun.sleep(100);
-  }
-  return null;
-}
-
-async function waitForConcurrentStart(lockFile: string): Promise<ServerState | null> {
-  const state = await waitForStateFile(MAX_START_WAIT);
-  if (state) {
-    return state;
-  }
-
-  try {
-    const stats = fs.statSync(lockFile);
-    if (Date.now() - stats.mtimeMs > START_LOCK_STALE_MS) {
-      fs.unlinkSync(lockFile);
-    }
-  } catch {
-    // Lock disappeared or could not be inspected — treat as best effort.
-  }
-
-  return null;
-}
-
 /**
  * Clean up legacy /tmp/browse-server*.json files from before project-local state.
  * Verifies PID ownership before sending signals.
@@ -193,67 +135,41 @@ function cleanupLegacyState(): void {
 // ─── Server Lifecycle ──────────────────────────────────────────
 async function startServer(): Promise<ServerState> {
   ensureStateDir(config);
-  const lockFile = getStartLockFile();
-  let lockFd: number | null = null;
 
-  try {
-    try {
-      lockFd = fs.openSync(lockFile, 'wx');
-    } catch (err: any) {
-      if (err.code === 'EEXIST') {
-        const state = await waitForConcurrentStart(lockFile);
-        if (state) {
-          return state;
-        }
-        return startServer();
-      }
-      throw err;
-    }
+  // Clean up stale state file
+  try { fs.unlinkSync(config.stateFile); } catch {}
 
-    // Clean up stale state file
-    try { fs.unlinkSync(config.stateFile); } catch {}
+  // Start server as detached background process
+  const proc = Bun.spawn(['bun', 'run', SERVER_SCRIPT], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, BROWSE_STATE_FILE: config.stateFile },
+  });
 
-    const envPath = process.env.PATH
-      ? `${path.dirname(BUN_EXECUTABLE)}${path.delimiter}${process.env.PATH}`
-      : path.dirname(BUN_EXECUTABLE);
+  // Don't hold the CLI open
+  proc.unref();
 
-    // Start server as detached background process
-    const proc = Bun.spawn([BUN_EXECUTABLE, 'run', SERVER_SCRIPT], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        PATH: envPath,
-        BROWSE_STATE_FILE: config.stateFile,
-      },
-    });
-
-    // Don't hold the CLI open
-    proc.unref();
-
-    const state = await waitForStateFile(MAX_START_WAIT);
-    if (state) {
+  // Wait for state file to appear
+  const start = Date.now();
+  while (Date.now() - start < MAX_START_WAIT) {
+    const state = readState();
+    if (state && isProcessAlive(state.pid)) {
       return state;
     }
+    await Bun.sleep(100);
+  }
 
-    // If we get here, server didn't start in time
-    // Try to read stderr for error message
-    const stderr = proc.stderr;
-    if (stderr) {
-      const reader = stderr.getReader();
-      const { value } = await reader.read();
-      if (value) {
-        const errText = new TextDecoder().decode(value);
-        throw new Error(`Server failed to start:\n${errText}`);
-      }
-    }
-
-    throw new Error(`Server failed to start within ${MAX_START_WAIT / 1000}s`);
-  } finally {
-    if (lockFd !== null) {
-      try { fs.closeSync(lockFd); } catch {}
-      try { fs.unlinkSync(lockFile); } catch {}
+  // If we get here, server didn't start in time
+  // Try to read stderr for error message
+  const stderr = proc.stderr;
+  if (stderr) {
+    const reader = stderr.getReader();
+    const { value } = await reader.read();
+    if (value) {
+      const errText = new TextDecoder().decode(value);
+      throw new Error(`Server failed to start:\n${errText}`);
     }
   }
+  throw new Error(`Server failed to start within ${MAX_START_WAIT / 1000}s`);
 }
 
 async function ensureServer(): Promise<ServerState> {

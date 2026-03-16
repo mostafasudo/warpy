@@ -43,9 +43,10 @@ Submodules have their own git history. Commit inside the submodule first, then u
 - **Ask mode:** answers are short, clear, and strictly concise.
 
 ## Skills
-LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
-- Vendored `gstack` workflow skills live in `.codex/skills/gstack/` and are surfaced via the top-level skill links `browse`, `qa`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade`.
-- If the vendored `gstack` install needs to rebuild its browser binary or re-sync skill symlinks, run `cd .codex/skills/gstack && ./setup`.
+LLM agent skills are stored in `.codex/skills/` (the canonical location). The active tool mirrors in this repo are `.claude`, `.agent`, and `.cursor`, and each exposes symlinks pointing back to `.codex/skills/`.
+- `gstack` is vendored upstream and kept unmodified at `.codex/skills/gstack/`.
+- Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names `browse`, `qa`, `qa-only`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade` are mirrored there as symlinks for skill discovery.
+- After any gstack reinstall or update, including `/gstack-upgrade`, run `./scripts/sync-gstack-mirrors.sh` from the repo root. It reruns upstream `.codex/skills/gstack/setup` and refreshes the `.claude`, `.agent`, and `.cursor` mirrors while keeping `.codex/skills/gstack/` as the only real repo copy.
 - The default browser-validation rule in this repo still comes from `docs/chrome-cdp.md`; use `gstack` when a task explicitly calls for those workflow skills.
 
 ## Do

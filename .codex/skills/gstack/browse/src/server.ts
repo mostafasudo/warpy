@@ -160,7 +160,6 @@ export { READ_COMMANDS, WRITE_COMMANDS, META_COMMANDS };
 // ─── Server ────────────────────────────────────────────────────
 const browserManager = new BrowserManager();
 let isShuttingDown = false;
-let server: ReturnType<typeof Bun.serve> | null = null;
 
 // Find port: explicit BROWSE_PORT, or random in 10000-60000
 async function findPort(): Promise<number> {
@@ -269,20 +268,12 @@ async function shutdown() {
   console.log('[browse] Shutting down...');
   clearInterval(flushInterval);
   clearInterval(idleCheckInterval);
-  try { server?.stop(); } catch {}
   await flushBuffers(); // Final flush (async now)
+
+  await browserManager.close();
 
   // Clean up state file
   try { fs.unlinkSync(config.stateFile); } catch {}
-
-  try {
-    await Promise.race([
-      browserManager.close(),
-      Bun.sleep(1_000),
-    ]);
-  } catch {
-    // Best effort — process exit will clean up lingering browser state.
-  }
 
   process.exit(0);
 }
@@ -304,7 +295,7 @@ async function start() {
   await browserManager.launch();
 
   const startTime = Date.now();
-  server = Bun.serve({
+  const server = Bun.serve({
     port,
     hostname: '127.0.0.1',
     fetch: async (req) => {
@@ -357,7 +348,7 @@ async function start() {
     serverPath: path.resolve(import.meta.dir, 'server.ts'),
     binaryVersion: readVersionHash() || undefined,
   };
-  const tmpFile = `${config.stateFile}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const tmpFile = config.stateFile + '.tmp';
   fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), { mode: 0o600 });
   fs.renameSync(tmpFile, config.stateFile);
 

@@ -18,16 +18,13 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
 ## Skills
-LLM agent skills are stored in `.codex/skills/` (the canonical location). All other LLM dot directories (`.claude`, `.agents`, `.agent`, `.cursor`, `.gemini`, `.github`) contain symlinks pointing to `.codex/skills/` to maintain consistency across different AI tools.
+LLM agent skills are stored in `.codex/skills/` (the canonical location). The active tool mirrors in this repo are `.claude`, `.agent`, and `.cursor`, and each exposes symlinks pointing back to `.codex/skills/`.
 
-Vendored `gstack` workflow skills live in `.codex/skills/gstack/` and are exposed through top-level skill links such as `browse`, `qa`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade`.
+`gstack` is vendored upstream and kept unmodified at `.codex/skills/gstack/`.
 
-If the vendored `gstack` install needs to rebuild its browser binary or re-sync skill symlinks, run:
+Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names such as `browse`, `qa`, `qa-only`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade` are mirrored there as discovery symlinks.
 
-```sh
-cd .codex/skills/gstack
-./setup
-```
+After any gstack reinstall or update, including `/gstack-upgrade`, run `./scripts/sync-gstack-mirrors.sh` from the repo root. It reruns upstream `.codex/skills/gstack/setup` and refreshes the `.claude`, `.agent`, and `.cursor` mirrors while keeping `.codex/skills/gstack/` as the only real repo copy.
 
 ## Deployment
 

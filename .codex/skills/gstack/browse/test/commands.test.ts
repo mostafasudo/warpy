@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { startTestServer } from './test-server';
 import { BrowserManager } from '../src/browser-manager';
-import { resolveBunExecutable, resolveServerScript } from '../src/cli';
+import { resolveServerScript } from '../src/cli';
 import { handleReadCommand } from '../src/read-commands';
 import { handleWriteCommand } from '../src/write-commands';
 import { handleMetaCommand } from '../src/meta-commands';
@@ -544,20 +544,6 @@ describe('CLI server script resolution', () => {
 
     fs.rmSync(root, { recursive: true, force: true });
   });
-
-  test('falls back to ~/.bun/bin/bun when bun is not on PATH', () => {
-    const root = fs.mkdtempSync('/tmp/gstack-bun-');
-    const home = path.join(root, 'home');
-    const bunPath = path.join(home, '.bun', 'bin', process.platform === 'win32' ? 'bun.exe' : 'bun');
-
-    fs.mkdirSync(path.dirname(bunPath), { recursive: true });
-    fs.writeFileSync(bunPath, '');
-
-    const resolved = resolveBunExecutable({ PATH: '' }, home, () => null);
-    expect(resolved).toBe(bunPath);
-
-    fs.rmSync(root, { recursive: true, force: true });
-  });
 });
 
 // ─── CLI lifecycle ──────────────────────────────────────────────
@@ -601,79 +587,6 @@ describe('CLI lifecycle', () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Status: healthy');
     expect(result.stderr).toContain('Starting server');
-  }, 20000);
-
-  test('concurrent starts share the same startup path without failing', async () => {
-    const stateFile = `/tmp/browse-test-state-${Date.now()}-parallel.json`;
-    const cliPath = path.resolve(__dirname, '../src/cli.ts');
-    const cliEnv: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined) cliEnv[k] = v;
-    }
-    cliEnv.BROWSE_STATE_FILE = stateFile;
-
-    const runStatus = () => new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-      const proc = spawn('bun', ['run', cliPath, 'status'], {
-        timeout: 15000,
-        env: cliEnv,
-      });
-      let stdout = '';
-      let stderr = '';
-      proc.stdout.on('data', (d) => stdout += d.toString());
-      proc.stderr.on('data', (d) => stderr += d.toString());
-      proc.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
-    });
-
-    const [first, second] = await Promise.all([runStatus(), runStatus()]);
-
-    let restartedPid: number | null = null;
-    if (fs.existsSync(stateFile)) {
-      restartedPid = JSON.parse(fs.readFileSync(stateFile, 'utf-8')).pid;
-      fs.unlinkSync(stateFile);
-    }
-    if (restartedPid) {
-      try { process.kill(restartedPid, 'SIGTERM'); } catch {}
-    }
-
-    expect(first.code).toBe(0);
-    expect(second.code).toBe(0);
-    expect(first.stdout).toContain('Status: healthy');
-    expect(second.stdout).toContain('Status: healthy');
-    expect(first.stderr + second.stderr).not.toContain('browse.json.tmp');
-  }, 20000);
-
-  test('stop exits cleanly and removes the state file', async () => {
-    const stateFile = `/tmp/browse-test-state-${Date.now()}-stop.json`;
-    const cliPath = path.resolve(__dirname, '../src/cli.ts');
-    const cliEnv: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined) cliEnv[k] = v;
-    }
-    cliEnv.BROWSE_STATE_FILE = stateFile;
-
-    const runCli = (command: string) => new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-      const proc = spawn('bun', ['run', cliPath, command], {
-        timeout: 15000,
-        env: cliEnv,
-      });
-      let stdout = '';
-      let stderr = '';
-      proc.stdout.on('data', (d) => stdout += d.toString());
-      proc.stderr.on('data', (d) => stderr += d.toString());
-      proc.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
-    });
-
-    const started = await runCli('status');
-    const stopped = await runCli('stop');
-    const deadline = Date.now() + 2_000;
-    while (fs.existsSync(stateFile) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    expect(started.code).toBe(0);
-    expect(stopped.code).toBe(0);
-    expect(stopped.stdout).toContain('Server stopped');
-    expect(fs.existsSync(stateFile)).toBe(false);
   }, 20000);
 });
 

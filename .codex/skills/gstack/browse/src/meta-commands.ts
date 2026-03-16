@@ -93,14 +93,14 @@ export async function handleMetaCommand(
     }
 
     case 'stop': {
-      setTimeout(() => { void shutdown(); }, 0);
+      await shutdown();
       return 'Server stopped';
     }
 
     case 'restart': {
       // Signal that we want a restart — the CLI will detect exit and restart
       console.log('[browse] Restart requested. Exiting for CLI to restart.');
-      setTimeout(() => { void shutdown(); }, 0);
+      await shutdown();
       return 'Restarting...';
     }
 
@@ -150,7 +150,7 @@ export async function handleMetaCommand(
       }
 
       if (targetSelector) {
-        const resolved = bm.resolveRef(targetSelector);
+        const resolved = await bm.resolveRef(targetSelector);
         const locator = 'locator' in resolved ? resolved.locator : page.locator(resolved.selector);
         await locator.screenshot({ path: outputPath, timeout: 5000 });
         return `Screenshot saved (element): ${outputPath}`;
