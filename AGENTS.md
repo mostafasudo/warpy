@@ -22,7 +22,7 @@
 4. Run the full frontend and backend testing sweep
 5. Run the code review tool/skill for a careful review with `/review`
 6. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
-7. Call other relevant `gstack` skills such as `/browse`, `/qa`, and `/retro` when they materially improve the outcome
+7. Call other relevant skills such as `/browse`, `/qa`, `/qa-design-review`, `/retro`, and `/document-release` when they materially improve the outcome and keep documentation up to date
 
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
@@ -137,7 +137,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). The ac
 - **React Query:** stable array keys; cache boundaries per feature; granular invalidation; retries/timeouts set; one mutation per file.
 - **Zustand:** tiny stores; selectors to avoid re-renders; no business logic in components.
 - **shadcdn:** use official components and patterns (built on Radix and Lucide); don't re-implement primitives.
-- **Design System:** For a comprehensive guide about our design system, check [WARPY_DESIGN_SYSTEM.md](./WARPY_DESIGN_SYSTEM.md).
+- **Design System:** For a comprehensive guide about our design system, check [DESIGN.md](./DESIGN.md).
 
 ## Backend specifics
 - **FastAPI:** pydantic models; strict types; timeouts/retries on outbound calls; input validation at edges.

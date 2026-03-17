@@ -25,6 +25,8 @@ touch ~/.gstack/sessions/"$PPID"
 _SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
+_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+echo "BRANCH: $_BRANCH"
 ```
 
 If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
@@ -32,23 +34,26 @@ If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/g
 ## AskUserQuestion Format
 
 **ALWAYS follow this structure for every AskUserQuestion call:**
-1. Context: project name, current branch, what we're working on (1-2 sentences)
-2. The specific question or decision point
-3. `RECOMMENDATION: Choose [X] because [one-line reason]`
-4. Lettered options: `A) ... B) ... C) ...`
+1. **Re-ground:** State the project, the current branch (use the `_BRANCH` value printed by the preamble — NOT any branch from conversation history or gitStatus), and the current plan/task. (1-2 sentences)
+2. **Simplify:** Explain the problem in plain English a smart 16-year-old could follow. No raw function names, no internal jargon, no implementation details. Use concrete examples and analogies. Say what it DOES, not what it's called.
+3. **Recommend:** `RECOMMENDATION: Choose [X] because [one-line reason]`
+4. **Options:** Lettered options: `A) ... B) ... C) ...`
 
-If `_SESSIONS` is 3 or more: the user is juggling multiple gstack sessions and context-switching heavily. **ELI16 mode** — they may not remember what this conversation is about. Every AskUserQuestion MUST re-ground them: state the project, the branch, the current plan/task, then the specific problem, THEN the recommendation and options. Be extra clear and self-contained — assume they haven't looked at this window in 20 minutes.
+Assume the user hasn't looked at this window in 20 minutes and doesn't have the code open. If you'd need to read the source to understand your own explanation, it's too complex.
 
 Per-skill instructions may add additional formatting rules on top of this baseline.
 
 ## Contributor Mode
 
-If `_CONTRIB` is `true`: you are in **contributor mode**. When you hit friction with **gstack itself** (not the user's app), file a field report. Think: "hey, I was trying to do X with gstack and it didn't work / was confusing / was annoying. Here's what happened."
+If `_CONTRIB` is `true`: you are in **contributor mode**. You're a gstack user who also helps make it better.
 
-**gstack issues:** browse command fails/wrong output, snapshot missing elements, skill instructions unclear or misleading, binary crash/hang, unhelpful error message, any rough edge or annoyance — even minor stuff.
-**NOT gstack issues:** user's app bugs, network errors to user's URL, auth failures on user's site.
+**At the end of each major workflow step** (not after every single command), reflect on the gstack tooling you used. Rate your experience 0 to 10. If it wasn't a 10, think about why. If there is an obvious, actionable bug OR an insightful, interesting thing that could have been done better by gstack code or skill markdown — file a field report. Maybe our contributor will help make us better!
 
-**To file:** write `~/.gstack/contributor-logs/{slug}.md` with this structure:
+**Calibration — this is the bar:** For example, `$B js "await fetch(...)"` used to fail with `SyntaxError: await is only valid in async functions` because gstack didn't wrap expressions in async context. Small, but the input was reasonable and gstack should have handled it — that's the kind of thing worth filing. Things less consequential than this, ignore.
+
+**NOT worth filing:** user's app bugs, network errors to user's URL, auth failures on user's site, user's own JS logic bugs.
+
+**To file:** write `~/.gstack/contributor-logs/{slug}.md` with **all sections below** (do not truncate — include every section through the Date/Version footer):
 
 ```
 # {Title}
@@ -57,20 +62,33 @@ Hey gstack team — ran into this while using /{skill-name}:
 
 **What I was trying to do:** {what the user/agent was attempting}
 **What happened instead:** {what actually happened}
-**How annoying (1-5):** {1=meh, 3=friction, 5=blocker}
+**My rating:** {0-10} — {one sentence on why it wasn't a 10}
 
 ## Steps to reproduce
 1. {step}
 
 ## Raw output
-(wrap any error messages or unexpected output in a markdown code block)
+```
+{paste the actual error or unexpected output here}
+```
+
+## What would make this a 10
+{one sentence: what gstack should have done differently}
 
 **Date:** {YYYY-MM-DD} | **Version:** {gstack version} | **Skill:** /{skill}
 ```
 
-Then run: `mkdir -p ~/.gstack/contributor-logs && open ~/.gstack/contributor-logs/{slug}.md`
+Slug: lowercase, hyphens, max 60 chars (e.g. `browse-js-no-await`). Skip if file already exists. Max 3 reports per session. File inline and continue — don't stop the workflow. Tell user: "Filed gstack field report: {title}"
 
-Slug: lowercase, hyphens, max 60 chars (e.g. `browse-snapshot-ref-gap`). Skip if file already exists. Max 3 reports per session. File inline and continue — don't stop the workflow. Tell user: "Filed gstack field report: {title}"
+## Detect default branch
+
+Before gathering data, detect the repo's default branch name:
+`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`
+
+If this fails, fall back to `main`. Use the detected name wherever the instructions
+say `origin/<default>` below.
+
+---
 
 # /retro — Weekly Engineering Retrospective
 
@@ -106,7 +124,7 @@ Usage: /retro [window]
 
 First, fetch origin and identify the current user:
 ```bash
-git fetch origin main --quiet
+git fetch origin <default> --quiet
 # Identify who is running the retro
 git config user.name
 git config user.email
@@ -118,28 +136,28 @@ Run ALL of these git commands in parallel (they are independent):
 
 ```bash
 # 1. All commits in window with timestamps, subject, hash, AUTHOR, files changed, insertions, deletions
-git log origin/main --since="<window>" --format="%H|%aN|%ae|%ai|%s" --shortstat
+git log origin/<default> --since="<window>" --format="%H|%aN|%ae|%ai|%s" --shortstat
 
 # 2. Per-commit test vs total LOC breakdown with author
 #    Each commit block starts with COMMIT:<hash>|<author>, followed by numstat lines.
 #    Separate test files (matching test/|spec/|__tests__/) from production files.
-git log origin/main --since="<window>" --format="COMMIT:%H|%aN" --numstat
+git log origin/<default> --since="<window>" --format="COMMIT:%H|%aN" --numstat
 
 # 3. Commit timestamps for session detection and hourly distribution (with author)
 #    Use TZ=America/Los_Angeles for Pacific time conversion
-TZ=America/Los_Angeles git log origin/main --since="<window>" --format="%at|%aN|%ai|%s" | sort -n
+TZ=America/Los_Angeles git log origin/<default> --since="<window>" --format="%at|%aN|%ai|%s" | sort -n
 
 # 4. Files most frequently changed (hotspot analysis)
-git log origin/main --since="<window>" --format="" --name-only | grep -v '^$' | sort | uniq -c | sort -rn
+git log origin/<default> --since="<window>" --format="" --name-only | grep -v '^$' | sort | uniq -c | sort -rn
 
 # 5. PR numbers from commit messages (extract #NNN patterns)
-git log origin/main --since="<window>" --format="%s" | grep -oE '#[0-9]+' | sed 's/^#//' | sort -n | uniq | sed 's/^/#/'
+git log origin/<default> --since="<window>" --format="%s" | grep -oE '#[0-9]+' | sed 's/^#//' | sort -n | uniq | sed 's/^/#/'
 
 # 6. Per-author file hotspots (who touches what)
-git log origin/main --since="<window>" --format="AUTHOR:%aN" --name-only
+git log origin/<default> --since="<window>" --format="AUTHOR:%aN" --name-only
 
 # 7. Per-author commit counts (quick summary)
-git shortlog origin/main --since="<window>" -sn --no-merges
+git shortlog origin/<default> --since="<window>" -sn --no-merges
 
 # 8. Greptile triage history (if available)
 cat ~/.gstack/greptile-history.md 2>/dev/null || true
@@ -298,14 +316,14 @@ If the time window is 14 days or more, split into weekly buckets and show trends
 
 ### Step 11: Streak Tracking
 
-Count consecutive days with at least 1 commit to origin/main, going back from today. Track both team streak and personal streak:
+Count consecutive days with at least 1 commit to origin/<default>, going back from today. Track both team streak and personal streak:
 
 ```bash
 # Team streak: all unique commit dates (Pacific time) — no hard cutoff
-TZ=America/Los_Angeles git log origin/main --format="%ad" --date=format:"%Y-%m-%d" | sort -u
+TZ=America/Los_Angeles git log origin/<default> --format="%ad" --date=format:"%Y-%m-%d" | sort -u
 
 # Personal streak: only the current user's commits
-TZ=America/Los_Angeles git log origin/main --author="<user_name>" --format="%ad" --date=format:"%Y-%m-%d" | sort -u
+TZ=America/Los_Angeles git log origin/<default> --author="<user_name>" --format="%ad" --date=format:"%Y-%m-%d" | sort -u
 ```
 
 Count backward from today — how many consecutive days have at least one commit? This queries the full history so streaks of any length are reported accurately. Display both:
@@ -523,7 +541,7 @@ When the user runs `/retro compare` (or `/retro compare 14d`):
 ## Important Rules
 
 - ALL narrative output goes directly to the user in the conversation. The ONLY file written is the `.context/retros/` JSON snapshot.
-- Use `origin/main` for all git queries (not local main which may be stale)
+- Use `origin/<default>` for all git queries (not local main which may be stale)
 - Convert all timestamps to Pacific time for display (use `TZ=America/Los_Angeles`)
 - If the window has zero commits, say so and suggest a different window
 - Round LOC/hour to nearest 50
