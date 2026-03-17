@@ -24,5 +24,7 @@ backend/coverage/
 .DS_Store
 .vscode/
 bin/
+!.codex/skills/gstack/bin/
+!.codex/skills/gstack/bin/**
 coverage/
 .gstack/
