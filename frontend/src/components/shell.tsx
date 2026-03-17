@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/clerk-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { BookOpen, Braces, CreditCard, LayoutDashboard, Mail, MousePointerClick, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
+import { BookOpen, Braces, CreditCard, ExternalLink, LayoutDashboard, Mail, MousePointerClick, Network, PanelLeftClose, PanelLeftOpen, Smartphone, Sparkles } from "lucide-react"
 
 import { ActionTooltip } from "@/components/action-tooltip"
 import { AgentPanel } from "@/features/agent/agent-panel"
@@ -252,7 +252,14 @@ export const Shell = () => {
               onClick={() => setSection("contact")}
             />
           </nav>
-          <div className="mt-auto pt-8">
+          <div className="mt-auto flex flex-col gap-2 pt-8">
+            <NavButton
+              active={false}
+              label="Docs"
+              icon={<ExternalLink className="h-4 w-4" />}
+              collapsed={sidebarCollapsed}
+              onClick={() => window.open("https://docs.warpy.ai", "_blank", "noopener,noreferrer")}
+            />
             <NavButton
               active={false}
               label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
