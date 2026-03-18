@@ -22,7 +22,7 @@
 4. Run the full frontend and backend testing sweep
 5. Run the code review tool/skill for a careful review with `/review`
 6. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
-7. Call other relevant skills such as `/browse`, `/qa`, `/qa-design-review`, `/retro`, and `/document-release` when they materially improve the outcome and keep documentation up to date
+7. Call other relevant skills such as `/browse`, `/qa`, `/design-review`, `/retro`, and `/document-release` when they materially improve the outcome and keep documentation up to date
 
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
@@ -46,7 +46,7 @@ Submodules have their own git history. Commit inside the submodule first, then u
 ## Skills
 LLM agent skills are stored in `.codex/skills/` (the canonical location). The active tool mirrors in this repo are `.claude`, `.agent`, and `.cursor`, and each exposes symlinks pointing back to `.codex/skills/`.
 - `gstack` is vendored upstream and kept unmodified at `.codex/skills/gstack/`.
-- Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names `browse`, `qa`, `qa-only`, `review`, `ship`, `plan-ceo-review`, `plan-eng-review`, `setup-browser-cookies`, `retro`, and `gstack-upgrade` are mirrored there as symlinks for skill discovery.
+- Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names `browse`, `debug`, `design-consultation`, `design-review`, `document-release`, `gstack-upgrade`, `office-hours`, `plan-ceo-review`, `plan-design-review`, `plan-eng-review`, `qa`, `qa-only`, `retro`, `review`, `setup-browser-cookies`, and `ship` are mirrored there as symlinks for skill discovery.
 - After any gstack reinstall or update, including `/gstack-upgrade`, run `./scripts/sync-gstack-mirrors.sh` from the repo root. It reruns upstream `.codex/skills/gstack/setup` and refreshes the `.claude`, `.agent`, and `.cursor` mirrors while keeping `.codex/skills/gstack/` as the only real repo copy.
 - The default browser-validation rule in this repo still comes from `docs/chrome-cdp.md`; use `gstack` when a task explicitly calls for those workflow skills.
 

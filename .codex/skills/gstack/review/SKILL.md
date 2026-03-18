@@ -3,7 +3,8 @@ name: review
 version: 1.0.0
 description: |
   Pre-landing PR review. Analyzes diff against the base branch for SQL safety, LLM trust
-  boundary violations, conditional side effects, and other structural issues.
+  boundary violations, conditional side effects, and other structural issues. Use when
+  asked to "review this PR", "code review", "pre-landing review", or "check my diff".
 allowed-tools:
   - Bash
   - Read
@@ -28,21 +29,60 @@ find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
+_LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
+echo "LAKE_INTRO: $_LAKE_SEEN"
 ```
 
 If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
+
+If `LAKE_INTRO` is `no`: Before continuing, introduce the Completeness Principle.
+Tell the user: "gstack follows the **Boil the Lake** principle — always do the complete
+thing when AI makes the marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean"
+Then offer to open the essay in their default browser:
+
+```bash
+open https://garryslist.org/posts/boil-the-ocean
+touch ~/.gstack/.completeness-intro-seen
+```
+
+Only run `open` if the user says yes. Always run `touch` to mark as seen. This only happens once.
 
 ## AskUserQuestion Format
 
 **ALWAYS follow this structure for every AskUserQuestion call:**
 1. **Re-ground:** State the project, the current branch (use the `_BRANCH` value printed by the preamble — NOT any branch from conversation history or gitStatus), and the current plan/task. (1-2 sentences)
 2. **Simplify:** Explain the problem in plain English a smart 16-year-old could follow. No raw function names, no internal jargon, no implementation details. Use concrete examples and analogies. Say what it DOES, not what it's called.
-3. **Recommend:** `RECOMMENDATION: Choose [X] because [one-line reason]`
-4. **Options:** Lettered options: `A) ... B) ... C) ...`
+3. **Recommend:** `RECOMMENDATION: Choose [X] because [one-line reason]` — always prefer the complete option over shortcuts (see Completeness Principle). Include `Completeness: X/10` for each option. Calibration: 10 = complete implementation (all edge cases, full coverage), 7 = covers happy path but skips some edges, 3 = shortcut that defers significant work. If both options are 8+, pick the higher; if one is ≤5, flag it.
+4. **Options:** Lettered options: `A) ... B) ... C) ...` — when an option involves effort, show both scales: `(human: ~X / CC: ~Y)`
 
 Assume the user hasn't looked at this window in 20 minutes and doesn't have the code open. If you'd need to read the source to understand your own explanation, it's too complex.
 
 Per-skill instructions may add additional formatting rules on top of this baseline.
+
+## Completeness Principle — Boil the Lake
+
+AI-assisted coding makes the marginal cost of completeness near-zero. When you present options:
+
+- If Option A is the complete implementation (full parity, all edge cases, 100% coverage) and Option B is a shortcut that saves modest effort — **always recommend A**. The delta between 80 lines and 150 lines is meaningless with CC+gstack. "Good enough" is the wrong instinct when "complete" costs minutes more.
+- **Lake vs. ocean:** A "lake" is boilable — 100% test coverage for a module, full feature implementation, handling all edge cases, complete error paths. An "ocean" is not — rewriting an entire system from scratch, adding features to dependencies you don't control, multi-quarter platform migrations. Recommend boiling lakes. Flag oceans as out of scope.
+- **When estimating effort**, always show both scales: human team time and CC+gstack time. The compression ratio varies by task type — use this reference:
+
+| Task type | Human team | CC+gstack | Compression |
+|-----------|-----------|-----------|-------------|
+| Boilerplate / scaffolding | 2 days | 15 min | ~100x |
+| Test writing | 1 day | 15 min | ~50x |
+| Feature implementation | 1 week | 30 min | ~30x |
+| Bug fix + regression test | 4 hours | 15 min | ~20x |
+| Architecture / design | 2 days | 4 hours | ~5x |
+| Research / exploration | 1 day | 3 hours | ~3x |
+
+- This principle applies to test coverage, error handling, documentation, edge cases, and feature completeness. Don't skip the last 10% to "save time" — with AI, that 10% costs seconds.
+
+**Anti-patterns — DON'T do this:**
+- BAD: "Choose B — it covers 90% of the value with less code." (If A is only 70 lines more, choose A.)
+- BAD: "We can skip edge case handling to save time." (Edge case handling costs minutes with CC.)
+- BAD: "Let's defer test coverage to a follow-up PR." (Tests are the cheapest lake to boil.)
+- BAD: Quoting only human-team effort: "This would take 2 weeks." (Say: "2 weeks human / ~1 hour CC.")
 
 ## Contributor Mode
 
@@ -81,6 +121,31 @@ Hey gstack team — ran into this while using /{skill-name}:
 
 Slug: lowercase, hyphens, max 60 chars (e.g. `browse-js-no-await`). Skip if file already exists. Max 3 reports per session. File inline and continue — don't stop the workflow. Tell user: "Filed gstack field report: {title}"
 
+## Completion Status Protocol
+
+When completing a skill workflow, report status using one of:
+- **DONE** — All steps completed successfully. Evidence provided for each claim.
+- **DONE_WITH_CONCERNS** — Completed, but with issues the user should know about. List each concern.
+- **BLOCKED** — Cannot proceed. State what is blocking and what was tried.
+- **NEEDS_CONTEXT** — Missing information required to continue. State exactly what you need.
+
+### Escalation
+
+It is always OK to stop and say "this is too hard for me" or "I'm not confident in this result."
+
+Bad work is worse than no work. You will not be penalized for escalating.
+- If you have attempted a task 3 times without success, STOP and escalate.
+- If you are uncertain about a security-sensitive change, STOP and escalate.
+- If the scope of work exceeds what you can verify, STOP and escalate.
+
+Escalation format:
+```
+STATUS: BLOCKED | NEEDS_CONTEXT
+REASON: [1-2 sentences]
+ATTEMPTED: [what you tried]
+RECOMMENDATION: [what the user should do next]
+```
+
 ## Step 0: Detect base branch
 
 Determine which branch this PR targets. Use the result as "the base branch" in all subsequent steps.
@@ -111,6 +176,40 @@ You are running the `/review` workflow. Analyze the current branch's diff agains
 1. Run `git branch --show-current` to get the current branch.
 2. If on the base branch, output: **"Nothing to review — you're on the base branch or have no changes against it."** and stop.
 3. Run `git fetch origin <base> --quiet && git diff origin/<base> --stat` to check if there's a diff. If no diff, output the same message and stop.
+
+---
+
+## Step 1.5: Scope Drift Detection
+
+Before reviewing code quality, check: **did they build what was requested — nothing more, nothing less?**
+
+1. Read `TODOS.md` (if it exists). Read PR description (`gh pr view --json body --jq .body 2>/dev/null || true`).
+   Read commit messages (`git log origin/<base>..HEAD --oneline`).
+   **If no PR exists:** rely on commit messages and TODOS.md for stated intent — this is the common case since /review runs before /ship creates the PR.
+2. Identify the **stated intent** — what was this branch supposed to accomplish?
+3. Run `git diff origin/<base> --stat` and compare the files changed against the stated intent.
+4. Evaluate with skepticism:
+
+   **SCOPE CREEP detection:**
+   - Files changed that are unrelated to the stated intent
+   - New features or refactors not mentioned in the plan
+   - "While I was in there..." changes that expand blast radius
+
+   **MISSING REQUIREMENTS detection:**
+   - Requirements from TODOS.md/PR description not addressed in the diff
+   - Test coverage gaps for stated requirements
+   - Partial implementations (started but not finished)
+
+5. Output (before the main review begins):
+   ```
+   Scope Check: [CLEAN / DRIFT DETECTED / REQUIREMENTS MISSING]
+   Intent: <1-line summary of what was requested>
+   Delivered: <1-line summary of what the diff actually does>
+   [If drift: list each out-of-scope change]
+   [If missing: list each unaddressed requirement]
+   ```
+
+6. This is **INFORMATIONAL** — does not block the review. Proceed to Step 2.
 
 ---
 
@@ -154,6 +253,47 @@ Apply the checklist against the diff in two passes:
 **Enum & Value Completeness requires reading code OUTSIDE the diff.** When the diff introduces a new enum value, status, tier, or type constant, use Grep to find all files that reference sibling values, then Read those files to check if the new value is handled. This is the one category where within-diff review is insufficient.
 
 Follow the output format specified in the checklist. Respect the suppressions — do NOT flag items listed in the "DO NOT flag" section.
+
+---
+
+## Step 4.5: Design Review (conditional)
+
+## Design Review (conditional, diff-scoped)
+
+Check if the diff touches frontend files using `gstack-diff-scope`:
+
+```bash
+eval $(~/.claude/skills/gstack/bin/gstack-diff-scope <base> 2>/dev/null)
+```
+
+**If `SCOPE_FRONTEND=false`:** Skip design review silently. No output.
+
+**If `SCOPE_FRONTEND=true`:**
+
+1. **Check for DESIGN.md.** If `DESIGN.md` or `design-system.md` exists in the repo root, read it. All design findings are calibrated against it — patterns blessed in DESIGN.md are not flagged. If not found, use universal design principles.
+
+2. **Read `.claude/skills/review/design-checklist.md`.** If the file cannot be read, skip design review with a note: "Design checklist not found — skipping design review."
+
+3. **Read each changed frontend file** (full file, not just diff hunks). Frontend files are identified by the patterns listed in the checklist.
+
+4. **Apply the design checklist** against the changed files. For each item:
+   - **[HIGH] mechanical CSS fix** (`outline: none`, `!important`, `font-size < 16px`): classify as AUTO-FIX
+   - **[HIGH/MEDIUM] design judgment needed**: classify as ASK
+   - **[LOW] intent-based detection**: present as "Possible — verify visually or run /design-review"
+
+5. **Include findings** in the review output under a "Design Review" header, following the output format in the checklist. Design findings merge with code review findings into the same Fix-First flow.
+
+6. **Log the result** for the Review Readiness Dashboard:
+
+```bash
+eval $(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
+mkdir -p ~/.gstack/projects/$SLUG
+echo '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":M}' >> ~/.gstack/projects/$SLUG/$BRANCH-reviews.jsonl
+```
+
+Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "issues_found", N = total findings, M = auto-fixed count.
+
+Include any design findings alongside the findings from Step 4. They follow the same Fix-First flow in Step 5 — AUTO-FIX for mechanical CSS fixes, ASK for everything else.
 
 ---
 
@@ -204,6 +344,16 @@ If 3 or fewer ASK items, you may use individual AskUserQuestion calls instead of
 Apply fixes for items where the user chose "Fix." Output what was fixed.
 
 If no ASK items exist (everything was AUTO-FIX), skip the question entirely.
+
+### Verification of claims
+
+Before producing the final review output:
+- If you claim "this pattern is safe" → cite the specific line proving safety
+- If you claim "this is handled elsewhere" → read and cite the handling code
+- If you claim "tests cover this" → name the test file and method
+- Never say "likely handled" or "probably tested" — verify or flag as unknown
+
+**Rationalization prevention:** "This looks fine" is not a finding. Either cite evidence it IS fine, or flag it as unverified.
 
 ### Greptile comment resolution
 
