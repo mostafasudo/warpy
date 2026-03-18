@@ -24,6 +24,8 @@
 6. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
 7. Call other relevant skills such as `/browse`, `/qa`, `/design-review`, `/retro`, and `/document-release` when they materially improve the outcome and keep documentation up to date
 
+When invoking these skills, act with agency: make decisions yourself, pick what you recommend, and minimize questions to the user—reserve questions only for truly important choices.
+
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
 
