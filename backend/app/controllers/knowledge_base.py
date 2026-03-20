@@ -15,7 +15,12 @@ from ..schemas.knowledge_base import (
     KnowledgeDocumentContentResponse,
     KnowledgeDocumentListResponse,
     KnowledgeDocumentResponse,
+    KnowledgeWebsiteCreate,
+    KnowledgeWebsiteDetailResponse,
+    KnowledgeWebsiteListResponse,
+    KnowledgeWebsiteResponse,
 )
+from ..services.billing_service import get_billing_actions_summary
 from ..services.knowledge_base_service import (
     create_document_record,
     delete_document,
@@ -24,8 +29,17 @@ from ..services.knowledge_base_service import (
     list_documents,
     toggle_knowledge_base,
 )
-from ..services.billing_service import get_billing_actions_summary
-from ..workers.knowledge_base_jobs import enqueue_document_processing
+from ..services.knowledge_website_service import (
+    build_website_response,
+    create_website_record,
+    delete_website,
+    get_website_detail,
+    list_websites,
+    mark_website_processing,
+    resolve_website_scope,
+)
+from ..workers.knowledge_base_jobs import enqueue_document_processing, enqueue_website_processing
+
 
 router = APIRouter()
 
@@ -46,6 +60,12 @@ def _validate_file(filename: str, size: int) -> str:
     if size > MAX_FILE_SIZE:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 50 MB limit")
     return ext
+
+
+def _ensure_can_add_source(session: Session, user_id: str) -> None:
+    summary = get_billing_actions_summary(session, user_id)
+    if summary.plan == BillingPlan.free and summary.total_remaining <= 0:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Upgrade your plan to add knowledge sources")
 
 
 @router.get("/knowledge-base/status", response_model=KnowledgeBaseStatusResponse)
@@ -103,9 +123,7 @@ async def upload_document(
     clerk_session: ClerkSession = Depends(require_clerk_session),
 ) -> KnowledgeDocumentResponse:
     try:
-        summary = get_billing_actions_summary(session, clerk_session.user_id)
-        if summary.plan == BillingPlan.free and summary.total_remaining <= 0:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Upgrade your plan to upload documents")
+        _ensure_can_add_source(session, clerk_session.user_id)
         file_bytes = await file.read()
         file_name = file.filename or "unknown"
         ext = _validate_file(file_name, len(file_bytes))
@@ -158,3 +176,94 @@ def delete_doc(
     except Exception as error:
         log_error("KBController", "delete_doc", "Failed", exc=error, user_id=clerk_session.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete document")
+
+
+@router.get("/knowledge-base/websites", response_model=KnowledgeWebsiteListResponse)
+def list_kb_websites(
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session),
+) -> KnowledgeWebsiteListResponse:
+    try:
+        items, total = list_websites(session, clerk_session.user_id)
+        log_info("KBController", "list_kb_websites", "Listed", user_id=clerk_session.user_id, total=total)
+        return KnowledgeWebsiteListResponse(items=items, total=total)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("KBController", "list_kb_websites", "Failed", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list websites")
+
+
+@router.post("/knowledge-base/websites", response_model=KnowledgeWebsiteResponse, status_code=status.HTTP_201_CREATED)
+def create_kb_website(
+    payload: KnowledgeWebsiteCreate,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session),
+) -> KnowledgeWebsiteResponse:
+    try:
+        _ensure_can_add_source(session, clerk_session.user_id)
+        scope_url = resolve_website_scope(payload.url)
+        website = create_website_record(session, clerk_session.user_id, payload.url, scope_url)
+        session.commit()
+        enqueue_website_processing(website.id, clerk_session.user_id)
+        session.refresh(website)
+        log_info("KBController", "create_kb_website", "Created", user_id=clerk_session.user_id, website_id=str(website.id), scope_url=scope_url)
+        return KnowledgeWebsiteResponse.model_validate(build_website_response(website))
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("KBController", "create_kb_website", "Failed", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to add website")
+
+
+@router.get("/knowledge-base/websites/{website_id}", response_model=KnowledgeWebsiteDetailResponse)
+def get_kb_website_detail(
+    website_id: UUID,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session),
+) -> KnowledgeWebsiteDetailResponse:
+    try:
+        website, pages = get_website_detail(session, website_id, clerk_session.user_id)
+        log_info("KBController", "get_kb_website_detail", "Fetched", user_id=clerk_session.user_id, website_id=str(website_id), pages=len(pages))
+        return KnowledgeWebsiteDetailResponse(website=website, pages=pages)
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("KBController", "get_kb_website_detail", "Failed", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load website")
+
+
+@router.post("/knowledge-base/websites/{website_id}/refresh", response_model=KnowledgeWebsiteResponse)
+def refresh_kb_website(
+    website_id: UUID,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session),
+) -> KnowledgeWebsiteResponse:
+    try:
+        website = mark_website_processing(session, website_id, clerk_session.user_id)
+        session.commit()
+        enqueue_website_processing(website.id, clerk_session.user_id)
+        session.refresh(website)
+        log_info("KBController", "refresh_kb_website", "Queued", user_id=clerk_session.user_id, website_id=str(website.id))
+        return KnowledgeWebsiteResponse.model_validate(build_website_response(website))
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("KBController", "refresh_kb_website", "Failed", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to refresh website")
+
+
+@router.delete("/knowledge-base/websites/{website_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_kb_website(
+    website_id: UUID,
+    session: Session = Depends(get_session),
+    clerk_session: ClerkSession = Depends(require_clerk_session),
+) -> None:
+    try:
+        delete_website(session, website_id, clerk_session.user_id)
+        log_info("KBController", "delete_kb_website", "Deleted", user_id=clerk_session.user_id, website_id=str(website_id))
+    except HTTPException:
+        raise
+    except Exception as error:
+        log_error("KBController", "delete_kb_website", "Failed", exc=error, user_id=clerk_session.user_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete website")

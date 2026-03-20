@@ -26,6 +26,10 @@ import type {
   KnowledgeDocumentContentResponse,
   KnowledgeDocumentListResponse,
   KnowledgeDocumentResponse,
+  KnowledgeWebsiteCreate,
+  KnowledgeWebsiteDetailResponse,
+  KnowledgeWebsiteListResponse,
+  KnowledgeWebsiteResponse,
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -174,6 +178,10 @@ export type {
   KnowledgeDocumentContentResponse,
   KnowledgeDocumentListResponse,
   KnowledgeDocumentResponse,
+  KnowledgeWebsiteCreate,
+  KnowledgeWebsiteDetailResponse,
+  KnowledgeWebsiteListResponse,
+  KnowledgeWebsiteResponse,
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -373,4 +381,29 @@ export const apiClient = {
     request<KnowledgeDocumentContentResponse>(
       `/knowledge-base/documents/${encodeURIComponent(id)}/content`,
     ),
+  listKnowledgeWebsites: () =>
+    request<KnowledgeWebsiteListResponse>("/knowledge-base/websites"),
+  addKnowledgeWebsite: (payload: KnowledgeWebsiteCreate) =>
+    request<KnowledgeWebsiteResponse>("/knowledge-base/websites", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      timeoutMs: 30000,
+    }),
+  getKnowledgeWebsiteDetail: (id: string) =>
+    request<KnowledgeWebsiteDetailResponse>(
+      `/knowledge-base/websites/${encodeURIComponent(id)}`,
+      { timeoutMs: 30000 },
+    ),
+  refreshKnowledgeWebsite: (id: string) =>
+    request<KnowledgeWebsiteResponse>(
+      `/knowledge-base/websites/${encodeURIComponent(id)}/refresh`,
+      {
+        method: "POST",
+        timeoutMs: 30000,
+      },
+    ),
+  deleteKnowledgeWebsite: (id: string) =>
+    request<void>(`/knowledge-base/websites/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 };

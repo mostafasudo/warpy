@@ -17,10 +17,20 @@ from .controllers.widget import router as widget_router
 from .controllers.widget_token import router as widget_token_router
 from .core.config import get_settings
 from .core.cors import configure_cors
+from .core.logger import log_warning
+from .workers.knowledge_base_jobs import ensure_knowledge_base_retrieval_backfill, ensure_website_refresh_sweep
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        ensure_website_refresh_sweep()
+    except Exception as error:
+        log_warning("App", "lifespan", "Failed to ensure knowledge website refresh sweep", error=type(error).__name__)
+    try:
+        ensure_knowledge_base_retrieval_backfill()
+    except Exception as error:
+        log_warning("App", "lifespan", "Failed to ensure knowledge retrieval backfill", error=type(error).__name__)
     yield
 
 

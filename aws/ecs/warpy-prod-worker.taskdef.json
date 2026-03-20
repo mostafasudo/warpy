@@ -3,7 +3,7 @@
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
-  "memory": "512",
+  "memory": "1024",
   "executionRoleArn": "",
   "containerDefinitions": [
     {
@@ -13,7 +13,7 @@
       "command": [
         "sh",
         "-c",
-        "rq worker default --url \"$REDIS_URL\" --worker-class app.workers.no_client_list_worker.NoClientListWorker"
+        "rq worker default --with-scheduler --url \"$REDIS_URL\" --worker-class app.workers.no_client_list_worker.NoClientListWorker"
       ],
       "environment": [],
       "logConfiguration": {

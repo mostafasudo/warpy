@@ -89,7 +89,17 @@ services:
       WIDGET_JWT_SECRET: ${WIDGET_JWT_SECRET:-}
       TEST_WIDGET_TOKEN_API_KEY: ${TEST_WIDGET_TOKEN_API_KEY:-}
       USE_GOOD_MODELS: ${USE_GOOD_MODELS:-false}
-    command: ["rq", "worker", "default", "--url", "redis://redis:6379/0"]
+    command:
+      [
+        "rq",
+        "worker",
+        "default",
+        "--with-scheduler",
+        "--url",
+        "redis://redis:6379/0",
+        "--worker-class",
+        "app.workers.no_client_list_worker.NoClientListWorker",
+      ]
     depends_on:
       postgres:
         condition: service_healthy

@@ -7,4 +7,5 @@ export const useKnowledgeBaseStatusQuery = () =>
   useQuery({
     queryKey: knowledgeBaseStatusQueryKey,
     queryFn: apiClient.getKnowledgeBaseStatus,
+    refetchInterval: 3000,
   })

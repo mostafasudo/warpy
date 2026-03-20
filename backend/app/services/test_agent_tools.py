@@ -366,6 +366,7 @@ def test_create_search_knowledge_base_tool(monkeypatch):
     session = DummySession([])
     tool = create_search_knowledge_base_tool(session, "user_1")
     assert tool.name == "search_knowledge_base"
+    assert "public website content" in tool.description
     result = json.loads(tool.invoke({"query": "how does it work"}))
     assert len(result["results"]) == 1
 
@@ -380,4 +381,4 @@ def test_create_search_knowledge_base_tool_empty(monkeypatch):
     tool = create_search_knowledge_base_tool(session, "user_1")
     result = json.loads(tool.invoke({"query": "nothing"}))
     assert result["results"] == []
-    assert "No relevant content" in result["message"]
+    assert "couldn't find" in result["message"]

@@ -16,5 +16,6 @@ def test_get_queue_uses_cached_connection(monkeypatch):
         queue_two = get_queue("critical")
     assert queue_one.connection is redis_instance
     assert queue_two.connection is redis_instance
+    assert queue_one.key == "{warpy}rq:queue:default"
+    assert queue_two.key == "{warpy}rq:queue:critical"
     redis_from_url.assert_called_once_with("redis://localhost:6379/1")
-

@@ -53,3 +53,53 @@ class KnowledgeDocumentContentResponse(BaseModel):
     file_name: str = Field(alias="fileName")
     chunks: list[KnowledgeChunkResponse]
     total_chunks: int = Field(alias="totalChunks")
+
+
+class KnowledgeWebsiteCreate(BaseModel):
+    url: str
+
+
+class KnowledgeWebsiteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID
+    input_url: str = Field(alias="inputUrl")
+    scope_url: str = Field(alias="scopeUrl")
+    status: str
+    page_count: int = Field(alias="pageCount")
+    ready_page_count: int = Field(alias="readyPageCount")
+    failed_page_count: int = Field(alias="failedPageCount")
+    searchable_page_count: int = Field(alias="searchablePageCount")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    last_crawled_at: datetime | None = Field(default=None, alias="lastCrawledAt")
+    last_successful_crawled_at: datetime | None = Field(default=None, alias="lastSuccessfulCrawledAt")
+    next_refresh_at: datetime | None = Field(default=None, alias="nextRefreshAt")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class KnowledgeWebsiteListResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[KnowledgeWebsiteResponse]
+    total: int
+
+
+class KnowledgeWebsitePageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID
+    page_name: str = Field(alias="pageName")
+    source_url: str = Field(alias="sourceUrl")
+    status: str
+    section_count: int = Field(alias="sectionCount")
+    is_searchable: bool = Field(alias="isSearchable")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class KnowledgeWebsiteDetailResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    website: KnowledgeWebsiteResponse
+    pages: list[KnowledgeWebsitePageResponse]

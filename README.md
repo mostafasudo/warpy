@@ -14,6 +14,7 @@ Embeddable agent widget for dashboards. Bend interfaces into authenticated API a
 - **Widget:** embeddable `<script>`
 - **Dashboard:** React SPA
 - **Backend:** FastAPI, LangChain, PostgreSQL/PGVector, SQLAlchemy, Redis, RQ, Pytest
+- **Knowledge Base:** uploaded files + public websites with source-aware hybrid retrieval
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
@@ -120,7 +121,7 @@ Run the background worker (local Redis/Postgres):
 ```sh
 cd backend
 . .venv/bin/activate
-rq worker default --url "${REDIS_URL:-redis://localhost:6379/0}"
+rq worker default --with-scheduler --url "${REDIS_URL:-redis://localhost:6379/0}" --worker-class app.workers.no_client_list_worker.NoClientListWorker
 ```
 
 Run tests:

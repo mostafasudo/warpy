@@ -278,6 +278,7 @@ export type UserRateLimitsResponse = {
 export type UserRateLimitsUpdate = UserRateLimitsResponse;
 
 export type KnowledgeDocumentStatus = "processing" | "ready" | "error"
+export type KnowledgeWebsiteStatus = "processing" | "ready" | "partial" | "error"
 
 export type KnowledgeDocumentResponse = {
   id: string
@@ -318,4 +319,46 @@ export type KnowledgeDocumentContentResponse = {
   fileName: string
   chunks: KnowledgeChunkResponse[]
   totalChunks: number
+}
+
+export type KnowledgeWebsiteCreate = {
+  url: string
+}
+
+export type KnowledgeWebsiteResponse = {
+  id: string
+  inputUrl: string
+  scopeUrl: string
+  status: KnowledgeWebsiteStatus
+  pageCount: number
+  readyPageCount: number
+  failedPageCount: number
+  searchablePageCount: number
+  errorMessage: string | null
+  lastCrawledAt: string | null
+  lastSuccessfulCrawledAt: string | null
+  nextRefreshAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type KnowledgeWebsiteListResponse = {
+  items: KnowledgeWebsiteResponse[]
+  total: number
+}
+
+export type KnowledgeWebsitePageResponse = {
+  id: string
+  pageName: string
+  sourceUrl: string
+  status: KnowledgeDocumentStatus
+  sectionCount: number
+  isSearchable: boolean
+  errorMessage: string | null
+  updatedAt: string
+}
+
+export type KnowledgeWebsiteDetailResponse = {
+  website: KnowledgeWebsiteResponse
+  pages: KnowledgeWebsitePageResponse[]
 }

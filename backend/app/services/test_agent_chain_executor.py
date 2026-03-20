@@ -442,6 +442,27 @@ def test_sanitize_localized_reply_strips_language_name_prefix():
     assert cleaned_inline == "I can only help with dashboard actions."
 
 
+def test_sanitize_user_facing_kb_language_only_rewrites_known_internal_phrases():
+    cleaned = AgentExecutor._sanitize_user_facing_kb_language(
+        "The indexed content mentions pricing tiers.",
+        used_knowledge_base=True,
+    )
+
+    technical = AgentExecutor._sanitize_user_facing_kb_language(
+        "This guide explains vector search and embeddings.",
+        used_knowledge_base=True,
+    )
+
+    unrelated = AgentExecutor._sanitize_user_facing_kb_language(
+        "This guide explains vector search and embeddings.",
+        used_knowledge_base=False,
+    )
+
+    assert cleaned == "The available information mentions pricing tiers."
+    assert technical == "This guide explains vector search and embeddings."
+    assert unrelated == "This guide explains vector search and embeddings."
+
+
 def test_sanitize_widget_suggestions_dedupes_and_trims():
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), widget_suggestions_enabled=True)
     suggestions = executor._sanitize_widget_suggestions(
@@ -769,6 +790,7 @@ def test_knowledge_base_enabled_includes_prompt_section():
     executor = AgentExecutor(session=None, user_id="user", llm_client=DummyLLM([]), knowledge_base_enabled=True)
     assert "search_knowledge_base" in executor._system_prompt
     assert "knowledge base" in executor._system_prompt
+    assert "public website content" in executor._system_prompt
 
 
 def test_knowledge_base_disabled_excludes_prompt_section():

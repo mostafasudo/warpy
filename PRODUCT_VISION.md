@@ -102,5 +102,6 @@ endpoints:
 
 - Kapa.ai offers a customizable widget for websites that answers technical documentation questions. Their onboarding process is similar—they ingest all your technical docs (API docs in our case). They also let you style the widget with custom hex codes to match your design. Companies like Docker, Reddit, Netlify, and OpenAI use it.
 - https://www.youtube.com/watch?v=p7Iculwh7q8
-- https://www.youtube.com/watch?v=KG4ONHqF1qg&list=WL&index=1
-- https://www.youtube.com/watch?v=IypXvHej9eY&t=78s
+- The Weird Death Of User Interfaces: https://www.youtube.com/watch?v=KG4ONHqF1qg&list=WL&index=1
+- Claude Extention: https://www.youtube.com/watch?v=IypXvHej9eY&t=78s
+- Clay's Sculpture, PostHog AI

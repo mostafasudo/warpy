@@ -40,6 +40,13 @@ class DocumentStatus(str, enum.Enum):
     error = "error"
 
 
+class WebsiteStatus(str, enum.Enum):
+    processing = "processing"
+    ready = "ready"
+    partial = "partial"
+    error = "error"
+
+
 class Feature(Base):
     __tablename__ = "features"
     __table_args__ = (
@@ -348,12 +355,21 @@ class ConversationAction(Base):
 
 class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
+    __table_args__ = (
+        UniqueConstraint("website_id", "source_url", name="uq_knowledge_documents_website_source_url"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Text, nullable=False, index=True)
     file_name = Column(Text, nullable=False)
     file_type = Column(Text, nullable=False)
     file_size = Column(Integer, nullable=False)
+    source_kind = Column(Text, nullable=False, server_default="file", default="file")
+    website_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_websites.id", ondelete="CASCADE"), nullable=True, index=True)
+    source_url = Column(Text, nullable=True)
+    source_hash = Column(Text, nullable=True)
+    content_language = Column(Text, nullable=True)
+    is_searchable = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     status = Column(
         Enum(DocumentStatus, name="document_status", native_enum=True, validate_strings=True),
         nullable=False,
@@ -365,6 +381,32 @@ class KnowledgeDocument(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     chunks = relationship("KnowledgeChunk", back_populates="document", cascade="all, delete-orphan")
+    website = relationship("KnowledgeWebsite", back_populates="documents")
+
+
+class KnowledgeWebsite(Base):
+    __tablename__ = "knowledge_websites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "scope_url", name="uq_knowledge_websites_user_scope_url"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    input_url = Column(Text, nullable=False)
+    scope_url = Column(Text, nullable=False)
+    status = Column(
+        Enum(WebsiteStatus, name="knowledge_website_status", native_enum=False, validate_strings=True),
+        nullable=False,
+        server_default="processing",
+    )
+    error_message = Column(Text, nullable=True)
+    last_crawled_at = Column(DateTime(timezone=True), nullable=True)
+    last_successful_crawled_at = Column(DateTime(timezone=True), nullable=True)
+    next_refresh_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    documents = relationship("KnowledgeDocument", back_populates="website", cascade="all, delete-orphan")
 
 
 class KnowledgeChunk(Base):
@@ -377,6 +419,8 @@ class KnowledgeChunk(Base):
     document_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Text, nullable=False, index=True)
     content = Column(Text, nullable=False)
+    section_title = Column(Text, nullable=True)
+    search_text = Column(Text, nullable=True)
     chunk_index = Column(Integer, nullable=False)
     chunk_metadata = Column("metadata", json_type, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

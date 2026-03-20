@@ -1,17 +1,21 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_info
 from ..models import Agent, DocumentStatus, KnowledgeChunk, KnowledgeDocument
+from .knowledge_website_service import SOURCE_KIND_FILE, get_knowledge_base_status as get_combined_knowledge_base_status, get_visible_document
 
 
 def list_documents(session: Session, user_id: str) -> tuple[list[KnowledgeDocument], int]:
     docs = session.scalars(
         select(KnowledgeDocument)
-        .where(KnowledgeDocument.user_id == user_id)
+        .where(
+            KnowledgeDocument.user_id == user_id,
+            KnowledgeDocument.source_kind == SOURCE_KIND_FILE,
+        )
         .order_by(KnowledgeDocument.created_at.desc())
     ).all()
     return list(docs), len(docs)
@@ -25,6 +29,7 @@ def create_document_record(
         file_name=file_name,
         file_type=file_type,
         file_size=file_size,
+        source_kind=SOURCE_KIND_FILE,
     )
     session.add(doc)
     session.flush()
@@ -47,6 +52,10 @@ def update_document_status(
         doc.chunk_count = chunk_count
     if doc_status == DocumentStatus.ready:
         doc.error_message = None
+        if doc.source_kind == SOURCE_KIND_FILE:
+            doc.is_searchable = True
+    elif doc.source_kind == SOURCE_KIND_FILE and doc_status == DocumentStatus.error:
+        doc.is_searchable = False
     if error_message is not None:
         doc.error_message = error_message
     session.flush()
@@ -54,52 +63,20 @@ def update_document_status(
 
 
 def delete_document(session: Session, document_id: UUID, user_id: str) -> None:
-    doc = session.scalar(
-        select(KnowledgeDocument).where(
-            KnowledgeDocument.id == document_id,
-            KnowledgeDocument.user_id == user_id,
-        )
-    )
-    if not doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    doc = get_visible_document(session, document_id, user_id)
     session.delete(doc)
     session.flush()
     log_info("KBService", "delete_document", "Document deleted", document_id=str(document_id))
 
 
 def get_knowledge_base_status(session: Session, user_id: str) -> dict:
-    agent = session.scalar(select(Agent).where(Agent.user_id == user_id))
-    enabled = agent.knowledge_base_enabled if agent else False
-
-    total = session.scalar(
-        select(func.count()).select_from(KnowledgeDocument).where(KnowledgeDocument.user_id == user_id)
-    ) or 0
-    ready = session.scalar(
-        select(func.count()).select_from(KnowledgeDocument).where(
-            KnowledgeDocument.user_id == user_id,
-            KnowledgeDocument.status == DocumentStatus.ready,
-        )
-    ) or 0
-
-    if ready == 0 and enabled and agent:
-        agent.knowledge_base_enabled = False
-        session.flush()
-        enabled = False
-
-    return {"enabled": enabled, "document_count": total, "ready_document_count": ready}
+    return get_combined_knowledge_base_status(session, user_id)
 
 
 def get_document_chunks(
     session: Session, document_id: UUID, user_id: str
 ) -> tuple[KnowledgeDocument, list[KnowledgeChunk]]:
-    doc = session.scalar(
-        select(KnowledgeDocument).where(
-            KnowledgeDocument.id == document_id,
-            KnowledgeDocument.user_id == user_id,
-        )
-    )
-    if not doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    doc = get_visible_document(session, document_id, user_id)
     chunks = list(
         session.scalars(
             select(KnowledgeChunk)
@@ -116,14 +93,9 @@ def toggle_knowledge_base(session: Session, user_id: str, enabled: bool) -> dict
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     if enabled:
-        ready = session.scalar(
-            select(func.count()).select_from(KnowledgeDocument).where(
-                KnowledgeDocument.user_id == user_id,
-                KnowledgeDocument.status == DocumentStatus.ready,
-            )
-        ) or 0
-        if ready == 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload at least one document first")
+        summary = get_combined_knowledge_base_status(session, user_id)
+        if int(summary["ready_document_count"]) == 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Add at least one source first")
 
     agent.knowledge_base_enabled = enabled
     session.flush()

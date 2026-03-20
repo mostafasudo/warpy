@@ -13,6 +13,7 @@ from app.services.knowledge_base_service import (
     toggle_knowledge_base,
     update_document_status,
 )
+from app.services.knowledge_website_service import SOURCE_KIND_FILE
 
 
 class FakeSession:
@@ -80,11 +81,19 @@ def test_create_document_record():
 
 def test_update_document_status():
     doc_id = UUID(int=1)
-    doc = KnowledgeDocument(id=doc_id, user_id="u", file_name="a.pdf", file_type=".pdf", file_size=100)
+    doc = KnowledgeDocument(
+        id=doc_id,
+        user_id="u",
+        file_name="a.pdf",
+        file_type=".pdf",
+        file_size=100,
+        source_kind=SOURCE_KIND_FILE,
+    )
     session = FakeSession(scalar_results=[doc])
     update_document_status(session, doc_id, DocumentStatus.ready, chunk_count=5)
     assert doc.status == DocumentStatus.ready
     assert doc.chunk_count == 5
+    assert doc.is_searchable is True
     assert session.flushed
 
 
@@ -129,16 +138,16 @@ def test_delete_document_not_found():
 
 
 def test_get_knowledge_base_status_no_agent():
-    session = FakeSession(scalar_results=[None, 2, 1])
+    session = FakeSession(scalar_results=[None, 2, 1, 1, 0])
     result = get_knowledge_base_status(session, "u")
     assert result["enabled"] is False
-    assert result["document_count"] == 2
+    assert result["document_count"] == 3
     assert result["ready_document_count"] == 1
 
 
 def test_get_knowledge_base_status_auto_disables():
     agent = Agent(user_id="u", knowledge_base_enabled=True)
-    session = FakeSession(scalar_results=[agent, 1, 0])
+    session = FakeSession(scalar_results=[agent, 1, 1, 0, 0])
     result = get_knowledge_base_status(session, "u")
     assert result["enabled"] is False
     assert agent.knowledge_base_enabled is False
@@ -146,9 +155,12 @@ def test_get_knowledge_base_status_auto_disables():
 
 def test_toggle_knowledge_base_enable():
     agent = Agent(user_id="u", knowledge_base_enabled=False)
-    session = FakeSession(scalar_results=[agent, 1, agent, 1, 1])
+    session = FakeSession(
+        scalar_results=[agent, agent, 1, 0, 1, 0, agent, 1, 0, 1, 0]
+    )
     result = toggle_knowledge_base(session, "u", True)
     assert agent.knowledge_base_enabled is True
+    assert result["enabled"] is True
 
 
 def test_toggle_knowledge_base_no_agent():
@@ -160,7 +172,7 @@ def test_toggle_knowledge_base_no_agent():
 
 def test_toggle_knowledge_base_no_ready_docs():
     agent = Agent(user_id="u", knowledge_base_enabled=False)
-    session = FakeSession(scalar_results=[agent, 0])
+    session = FakeSession(scalar_results=[agent, agent, 0, 0, 0, 0])
     with pytest.raises(HTTPException) as exc:
         toggle_knowledge_base(session, "u", True)
     assert exc.value.status_code == 400

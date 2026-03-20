@@ -350,7 +350,7 @@ def create_frontend_tool(tool: Tool | ToolSnapshot, schema_factory: SchemaFactor
 
 class SearchKnowledgeBaseInput(BaseModel):
     query: str = Field(
-        description="Search query to find relevant information from uploaded product documentation."
+        description="Search query to find relevant information from knowledge-base documents or public websites."
     )
 
 
@@ -365,7 +365,7 @@ def create_search_knowledge_base_tool(
         with _session_context(session, session_provider) as db_session:
             results = search_knowledge_base(db_session, user_id, query)
             if not results:
-                return json.dumps({"results": [], "message": "No relevant content found in the knowledge base."})
+                return json.dumps({"results": [], "message": "I couldn't find a matching answer in the knowledge base."})
             return json.dumps({"results": results}, indent=2)
 
     return StructuredTool.from_function(
@@ -373,9 +373,9 @@ def create_search_knowledge_base_tool(
         name="search_knowledge_base",
         description=(
             "Task: Search the knowledge base for relevant product information. "
-            "Use when the user asks questions that might be answered by uploaded documentation. "
-            "Returns relevant text passages from product docs. "
-            "Output: JSON with matching text passages and source metadata."
+            "Use when the user asks questions that might be answered by uploaded documents or public website content. "
+            "Returns source-aware evidence with the matching text, page or document title, section title, and source URL. "
+            "Output: JSON with evidence objects in the shape snippet/title/sectionTitle/sourceUrl/sourceKind."
         ),
         args_schema=SearchKnowledgeBaseInput,
     )

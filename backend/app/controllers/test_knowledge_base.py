@@ -26,7 +26,11 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     try:
         monkeypatch.setattr("app.services.tool_service.enqueue_tool_embedding", lambda *_args, **_kwargs: None)
         monkeypatch.setattr("app.workers.knowledge_base_jobs.enqueue_document_processing", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("app.workers.knowledge_base_jobs.enqueue_website_processing", lambda *_args, **_kwargs: None)
         monkeypatch.setattr("app.controllers.knowledge_base.enqueue_document_processing", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("app.controllers.knowledge_base.enqueue_website_processing", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("app.controllers.knowledge_base.resolve_website_scope", lambda raw_url: "https://knowledge.example.com/docs")
+        monkeypatch.setattr("app.main.ensure_website_refresh_sweep", lambda: None)
         yield get_settings()
     finally:
         engine.dispose()
@@ -176,6 +180,27 @@ def _insert_chunks(doc_id: str, user_id: str, contents: list[str]):
             session.add(chunk)
 
 
+def _insert_website_page(website_id: str, user_id: str, source_url: str, status: str = "ready", searchable: bool = True):
+    from app.core.database import session_scope
+    from app.models import DocumentStatus, KnowledgeDocument
+
+    with session_scope() as session:
+        page = KnowledgeDocument(
+            user_id=user_id,
+            file_name="Page",
+            file_type=".html",
+            file_size=100,
+            source_kind="website_page",
+            website_id=UUID(website_id),
+            source_url=source_url,
+            status=DocumentStatus(status),
+            chunk_count=2 if status == "ready" else 0,
+            is_searchable=searchable,
+            error_message=None if status == "ready" else "This page is not publicly accessible",
+        )
+        session.add(page)
+
+
 def test_get_document_content_success(client: TestClient):
     upload = client.post(
         "/knowledge-base/documents",
@@ -256,3 +281,145 @@ def test_get_document_content_user_scoped(client: TestClient, monkeypatch: pytes
 
     response = client.get(f"/knowledge-base/documents/{doc_id}/content", headers=auth_headers())
     assert response.status_code == 404
+
+
+def test_add_website_success(client: TestClient):
+    response = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["inputUrl"] == "knowledge.example.com"
+    assert data["scopeUrl"] == "https://knowledge.example.com/docs"
+    assert data["status"] == "processing"
+
+
+def test_add_website_blocked_for_free_plan_with_no_actions(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.models import BillingPlan
+    from app.services.billing_service import BillingActionsSummary
+
+    monkeypatch.setattr(
+        "app.controllers.knowledge_base.get_billing_actions_summary",
+        lambda session, user_id: BillingActionsSummary(
+            plan=BillingPlan.free,
+            total_remaining=0,
+            monthly_remaining=0,
+            monthly_quota=0,
+            topup_remaining=0,
+            lifetime_remaining=0,
+            is_widget_hidden=True,
+            can_manage_subscription=False,
+            subscription_status=None,
+            subscription_renews_at=None,
+        ),
+    )
+
+    response = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    )
+    assert response.status_code == 403
+    assert "Upgrade" in response.json()["detail"]
+
+
+def test_add_website_rejects_overlapping_scope(client: TestClient):
+    first = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com/docs/getting-started"},
+        headers=auth_headers(),
+    )
+    assert second.status_code == 409
+
+
+def test_list_websites(client: TestClient):
+    website = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    ).json()
+    _insert_website_page(website["id"], "user_1", "https://knowledge.example.com/docs/page-1")
+
+    response = client.get("/knowledge-base/websites", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["pageCount"] == 1
+    assert data["items"][0]["searchablePageCount"] == 1
+
+
+def test_get_website_detail(client: TestClient):
+    website = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    ).json()
+    _insert_website_page(website["id"], "user_1", "https://knowledge.example.com/docs/page-1")
+
+    response = client.get(
+        f"/knowledge-base/websites/{website['id']}",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["website"]["id"] == website["id"]
+    assert data["pages"][0]["sourceUrl"] == "https://knowledge.example.com/docs/page-1"
+
+
+def test_refresh_website(client: TestClient):
+    website = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    ).json()
+
+    response = client.post(
+        f"/knowledge-base/websites/{website['id']}/refresh",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "processing"
+
+
+def test_delete_website(client: TestClient):
+    website = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    ).json()
+
+    response = client.delete(
+        f"/knowledge-base/websites/{website['id']}",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 204
+
+    list_response = client.get("/knowledge-base/websites", headers=auth_headers())
+    assert list_response.json()["total"] == 0
+
+
+def test_toggle_accepts_ready_website_sources(client: TestClient):
+    create_agent()
+    website = client.post(
+        "/knowledge-base/websites",
+        json={"url": "knowledge.example.com"},
+        headers=auth_headers(),
+    ).json()
+    _insert_website_page(website["id"], "user_1", "https://knowledge.example.com/docs/page-1")
+
+    response = client.put(
+        "/knowledge-base/toggle",
+        json={"enabled": True},
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True

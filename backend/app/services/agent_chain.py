@@ -127,8 +127,18 @@ Screen Autopilot Tips:
 
 
 KNOWLEDGE_BASE_CONTEXT_FRAGMENT = """
-- You have access to a knowledge base with product documentation. Use search_knowledge_base when the user asks product questions or needs information from docs.
-- Prefer knowledge base answers over guessing. Cite the information naturally."""
+- You have access to a knowledge base with uploaded documents and public website content. Use search_knowledge_base when the user asks product questions or needs information from those sources.
+- Prefer knowledge base answers over guessing. Cite the information naturally.
+- Never mention internal system terms like indexed, embedded, vector, snippet, retrieval, or RAG. Describe the source naturally as docs, guides, help articles, or website pages."""
+
+# KB ANSWER FLOW
+# user question -> search_knowledge_base evidence -> model answer -> targeted plain-language guard
+KB_PHRASE_REPLACEMENTS = (
+    ("the indexed content", "the available information"),
+    ("indexed content", "available information"),
+    ("the indexed results", "the results"),
+    ("indexed results", "results"),
+)
 
 
 def build_system_prompt(
@@ -475,6 +485,36 @@ Keep it brief and friendly."""
         return text or fallback
 
     @staticmethod
+    def _has_knowledge_base_tool_usage(messages: list[BaseMessage]) -> bool:
+        for message in messages:
+            if not isinstance(message, AIMessage):
+                continue
+            for tool_call in message.tool_calls:
+                if tool_call.get("name") in KNOWLEDGE_BASE_TOOL_NAMES:
+                    return True
+        return False
+
+    @staticmethod
+    def _sanitize_user_facing_kb_language(content: str, *, used_knowledge_base: bool) -> str:
+        if not used_knowledge_base:
+            return " ".join(content.split()).strip()
+
+        def replace_match(match: re.Match[str], replacement: str) -> str:
+            if match.group(0)[:1].isupper():
+                return replacement[:1].upper() + replacement[1:]
+            return replacement
+
+        sanitized = content
+        for source, replacement in KB_PHRASE_REPLACEMENTS:
+            sanitized = re.sub(
+                rf"\b{re.escape(source)}\b",
+                lambda match, repl=replacement: replace_match(match, repl),
+                sanitized,
+                flags=re.IGNORECASE,
+            )
+        return " ".join(sanitized.split()).strip()
+
+    @staticmethod
     def _extract_conversation_for_suggestions(messages: list[BaseMessage]) -> str:
         lines: list[str] = []
         for message in messages:
@@ -529,7 +569,7 @@ Keep it brief and friendly."""
         if self.frontend_capability_enabled:
             capabilities.append("screen_autopilot: inspect the current page and take UI actions for the user")
         if self.knowledge_base_enabled:
-            capabilities.append("search_knowledge_base: answer product questions from uploaded docs")
+            capabilities.append("search_knowledge_base: answer product questions from uploaded documents and public websites")
         for tool in self._get_tools():
             if tool.name in DISCOVERY_TOOL_NAMES or tool.name in {"read_page", "find_elements", "frontend", "js_exec"}:
                 continue
@@ -686,9 +726,13 @@ Keep it brief and friendly."""
             runtime_messages.append(response)
 
             if not response.tool_calls:
-                suggestions = await self._maybe_generate_widget_suggestions(messages, response.content or "")
+                final_response = self._sanitize_user_facing_kb_language(
+                    response.content or "",
+                    used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                )
+                suggestions = await self._maybe_generate_widget_suggestions(messages, final_response)
                 return StepResult(
-                    response=response.content or "",
+                    response=final_response,
                     suggestions=suggestions,
                     done=True,
                     messages=messages,
@@ -925,7 +969,10 @@ Keep it brief and friendly."""
             response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
             messages.append(response)
             if not response.tool_calls:
-                return response.content or ""
+                return self._sanitize_user_facing_kb_language(
+                    response.content or "",
+                    used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                )
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]

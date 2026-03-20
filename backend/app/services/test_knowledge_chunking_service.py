@@ -64,6 +64,21 @@ def test_overlap_included_in_next_chunk(mock_config):
     assert "A" in chunks[1]["content"]
 
 
+@patch("app.services.knowledge_chunking_service.llm_config")
+def test_single_oversized_element_splits(mock_config):
+    mock_config.kb_chunk_max_chars = 50
+    mock_config.kb_chunk_overlap_chars = 10
+    elements = [{"type": "NarrativeText", "text": ("Alpha " * 25).strip(), "metadata": {"page_number": 1}}]
+
+    chunks = chunk_elements(elements)
+
+    assert len(chunks) >= 2
+    assert all(chunk["content"] for chunk in chunks)
+    assert all(len(chunk["content"]) <= 50 for chunk in chunks)
+    assert all(chunk["metadata"]["page_numbers"] == [1] for chunk in chunks)
+    assert all(chunk["metadata"]["element_types"] == ["NarrativeText"] for chunk in chunks)
+
+
 def test_empty_text_elements_skipped():
     elements = [
         {"type": "NarrativeText", "text": "", "metadata": {}},
