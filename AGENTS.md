@@ -119,6 +119,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). The ac
 - Don’t mock components; mock **HTTP layer only**: `apiDashboardMock`, `apiV1Mock`.
 - Don’t use `document.querySelectorAll` in tests.
 - Don’t give `frontend/index.html` review weight. Treat changes there as local testing noise, ignore them during review, and never push that file unless the user explicitly asks for it.
+- Don’t enable third-party or community telemetry/analytics for local tooling. Keep telemetry off and never opt in on the user’s behalf.
 
 ## Commands (file-scoped first)
 - **Typecheck TS:** `pnpm tsc --noEmit path/to/file.tsx`
