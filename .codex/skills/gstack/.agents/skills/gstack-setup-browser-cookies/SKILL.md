@@ -1,17 +1,10 @@
 ---
-name: debug
-version: 1.0.0
+name: setup-browser-cookies
 description: |
-  Systematic debugging with root cause investigation. Four phases: investigate,
-  analyze, hypothesize, implement. Iron Law: no fixes without root cause.
-allowed-tools:
-  - Bash
-  - Read
-  - Write
-  - Edit
-  - Grep
-  - Glob
-  - AskUserQuestion
+  Import cookies from your real browser (Comet, Chrome, Arc, Brave, Edge) into the
+  headless browse session. Opens an interactive picker UI where you select which
+  cookie domains to import. Use before QA testing authenticated pages. Use when asked
+  to "import cookies", "login to the site", or "authenticate the browser".
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -19,20 +12,34 @@ allowed-tools:
 ## Preamble (run first)
 
 ```bash
-_UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || .claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
+_UPD=$(~/.codex/skills/gstack/bin/gstack-update-check 2>/dev/null || .agents/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.gstack/sessions
 touch ~/.gstack/sessions/"$PPID"
 _SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
-_CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
+_CONTRIB=$(~/.codex/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
+_PROACTIVE=$(~/.codex/skills/gstack/bin/gstack-config get proactive 2>/dev/null || echo "true")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
+echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
+_TEL=$(~/.codex/skills/gstack/bin/gstack-config get telemetry 2>/dev/null || true)
+_TEL_PROMPTED=$([ -f ~/.gstack/.telemetry-prompted ] && echo "yes" || echo "no")
+_TEL_START=$(date +%s)
+_SESSION_ID="$$-$(date +%s)"
+echo "TELEMETRY: ${_TEL:-off}"
+echo "TEL_PROMPTED: $_TEL_PROMPTED"
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"setup-browser-cookies","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+for _PF in ~/.gstack/analytics/.pending-*; do [ -f "$_PF" ] && ~/.codex/skills/gstack/bin/gstack-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true; break; done
 ```
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
+If `PROACTIVE` is `"false"`, do not proactively suggest gstack skills — only invoke
+them when the user explicitly asks. The user opted out of proactive suggestions.
+
+If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.codex/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
 
 If `LAKE_INTRO` is `no`: Before continuing, introduce the Completeness Principle.
 Tell the user: "gstack follows the **Boil the Lake** principle — always do the complete
@@ -45,6 +52,39 @@ touch ~/.gstack/.completeness-intro-seen
 ```
 
 Only run `open` if the user says yes. Always run `touch` to mark as seen. This only happens once.
+
+If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: After the lake intro is handled,
+ask the user about telemetry. Use AskUserQuestion:
+
+> Help gstack get better! Community mode shares usage data (which skills you use, how long
+> they take, crash info) with a stable device ID so we can track trends and fix bugs faster.
+> No code, file paths, or repo names are ever sent.
+> Change anytime with `gstack-config set telemetry off`.
+
+Options:
+- A) Help gstack get better! (recommended)
+- B) No thanks
+
+If A: run `~/.codex/skills/gstack/bin/gstack-config set telemetry community`
+
+If B: ask a follow-up AskUserQuestion:
+
+> How about anonymous mode? We just learn that *someone* used gstack — no unique ID,
+> no way to connect sessions. Just a counter that helps us know if anyone's out there.
+
+Options:
+- A) Sure, anonymous is fine
+- B) No thanks, fully off
+
+If B→A: run `~/.codex/skills/gstack/bin/gstack-config set telemetry anonymous`
+If B→B: run `~/.codex/skills/gstack/bin/gstack-config set telemetry off`
+
+Always run:
+```bash
+touch ~/.gstack/.telemetry-prompted
+```
+
+This only happens once. If `TEL_PROMPTED` is `yes`, skip this entirely.
 
 ## AskUserQuestion Format
 
@@ -145,133 +185,106 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
-# Systematic Debugging
+## Telemetry (run last)
 
-## Iron Law
+After the skill workflow completes (success, error, or abort), log the telemetry event.
+Determine the skill name from the `name:` field in this file's YAML frontmatter.
+Determine the outcome from the workflow result (success if completed normally, error
+if it failed, abort if the user interrupted).
 
-**NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST.**
+**PLAN MODE EXCEPTION — ALWAYS RUN:** This command writes telemetry to
+`~/.gstack/analytics/` (user config directory, not project files). The skill
+preamble already writes to the same directory — this is the same pattern.
+Skipping this command loses session duration and outcome data.
 
-Fixing symptoms creates whack-a-mole debugging. Every fix that doesn't address root cause makes the next bug harder to find. Find the root cause, then fix it.
+Run this bash:
 
----
-
-## Phase 1: Root Cause Investigation
-
-Gather context before forming any hypothesis.
-
-1. **Collect symptoms:** Read the error messages, stack traces, and reproduction steps. If the user hasn't provided enough context, ask ONE question at a time via AskUserQuestion.
-
-2. **Read the code:** Trace the code path from the symptom back to potential causes. Use Grep to find all references, Read to understand the logic.
-
-3. **Check recent changes:**
-   ```bash
-   git log --oneline -20 -- <affected-files>
-   ```
-   Was this working before? What changed? A regression means the root cause is in the diff.
-
-4. **Reproduce:** Can you trigger the bug deterministically? If not, gather more evidence before proceeding.
-
-Output: **"Root cause hypothesis: ..."** — a specific, testable claim about what is wrong and why.
-
----
-
-## Phase 2: Pattern Analysis
-
-Check if this bug matches a known pattern:
-
-| Pattern | Signature | Where to look |
-|---------|-----------|---------------|
-| Race condition | Intermittent, timing-dependent | Concurrent access to shared state |
-| Nil/null propagation | NoMethodError, TypeError | Missing guards on optional values |
-| State corruption | Inconsistent data, partial updates | Transactions, callbacks, hooks |
-| Integration failure | Timeout, unexpected response | External API calls, service boundaries |
-| Configuration drift | Works locally, fails in staging/prod | Env vars, feature flags, DB state |
-| Stale cache | Shows old data, fixes on cache clear | Redis, CDN, browser cache, Turbo |
-
-Also check:
-- `TODOS.md` for related known issues
-- `git log` for prior fixes in the same area — **recurring bugs in the same files are an architectural smell**, not a coincidence
-
----
-
-## Phase 3: Hypothesis Testing
-
-Before writing ANY fix, verify your hypothesis.
-
-1. **Confirm the hypothesis:** Add a temporary log statement, assertion, or debug output at the suspected root cause. Run the reproduction. Does the evidence match?
-
-2. **If the hypothesis is wrong:** Return to Phase 1. Gather more evidence. Do not guess.
-
-3. **3-strike rule:** If 3 hypotheses fail, **STOP**. Use AskUserQuestion:
-   ```
-   3 hypotheses tested, none match. This may be an architectural issue
-   rather than a simple bug.
-
-   A) Continue investigating — I have a new hypothesis: [describe]
-   B) Escalate for human review — this needs someone who knows the system
-   C) Add logging and wait — instrument the area and catch it next time
-   ```
-
-**Red flags** — if you see any of these, slow down:
-- "Quick fix for now" — there is no "for now." Fix it right or escalate.
-- Proposing a fix before tracing data flow — you're guessing.
-- Each fix reveals a new problem elsewhere — wrong layer, not wrong code.
-
----
-
-## Phase 4: Implementation
-
-Once root cause is confirmed:
-
-1. **Fix the root cause, not the symptom.** The smallest change that eliminates the actual problem.
-
-2. **Minimal diff:** Fewest files touched, fewest lines changed. Resist the urge to refactor adjacent code.
-
-3. **Write a regression test** that:
-   - **Fails** without the fix (proves the test is meaningful)
-   - **Passes** with the fix (proves the fix works)
-
-4. **Run the full test suite.** Paste the output. No regressions allowed.
-
-5. **If the fix touches >5 files:** Use AskUserQuestion to flag the blast radius:
-   ```
-   This fix touches N files. That's a large blast radius for a bug fix.
-   A) Proceed — the root cause genuinely spans these files
-   B) Split — fix the critical path now, defer the rest
-   C) Rethink — maybe there's a more targeted approach
-   ```
-
----
-
-## Phase 5: Verification & Report
-
-**Fresh verification:** Reproduce the original bug scenario and confirm it's fixed. This is not optional.
-
-Run the test suite and paste the output.
-
-Output a structured debug report:
-```
-DEBUG REPORT
-════════════════════════════════════════
-Symptom:         [what the user observed]
-Root cause:      [what was actually wrong]
-Fix:             [what was changed, with file:line references]
-Evidence:        [test output, reproduction attempt showing fix works]
-Regression test: [file:line of the new test]
-Related:         [TODOS.md items, prior bugs in same area, architectural notes]
-Status:          DONE | DONE_WITH_CONCERNS | BLOCKED
-════════════════════════════════════════
+```bash
+_TEL_END=$(date +%s)
+_TEL_DUR=$(( _TEL_END - _TEL_START ))
+rm -f ~/.gstack/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
+~/.codex/skills/gstack/bin/gstack-telemetry-log \
+  --skill "SKILL_NAME" --duration "$_TEL_DUR" --outcome "OUTCOME" \
+  --used-browse "USED_BROWSE" --session-id "$_SESSION_ID" 2>/dev/null &
 ```
 
----
+Replace `SKILL_NAME` with the actual skill name from frontmatter, `OUTCOME` with
+success/error/abort, and `USED_BROWSE` with true/false based on whether `$B` was used.
+If you cannot determine the outcome, use "unknown". This runs in the background and
+never blocks the user.
 
-## Important Rules
+# Setup Browser Cookies
 
-- **3+ failed fix attempts → STOP and question the architecture.** Wrong architecture, not failed hypothesis.
-- **Never apply a fix you cannot verify.** If you can't reproduce and confirm, don't ship it.
-- **Never say "this should fix it."** Verify and prove it. Run the tests.
-- **If fix touches >5 files → AskUserQuestion** about blast radius before proceeding.
-- **Completion status:**
-  - DONE — root cause found, fix applied, regression test written, all tests pass
-  - DONE_WITH_CONCERNS — fixed but cannot fully verify (e.g., intermittent bug, requires staging)
-  - BLOCKED — root cause unclear after investigation, escalated
+Import logged-in sessions from your real Chromium browser into the headless browse session.
+
+## How it works
+
+1. Find the browse binary
+2. Run `cookie-import-browser` to detect installed browsers and open the picker UI
+3. User selects which cookie domains to import in their browser
+4. Cookies are decrypted and loaded into the Playwright session
+
+## Steps
+
+### 1. Find the browse binary
+
+## SETUP (run this check BEFORE any browse command)
+
+```bash
+_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+B=""
+[ -n "$_ROOT" ] && [ -x "$_ROOT/.agents/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.agents/skills/gstack/browse/dist/browse"
+[ -z "$B" ] && B=~/.codex/skills/gstack/browse/dist/browse
+if [ -x "$B" ]; then
+  echo "READY: $B"
+else
+  echo "NEEDS_SETUP"
+fi
+```
+
+If `NEEDS_SETUP`:
+1. Tell the user: "gstack browse needs a one-time build (~10 seconds). OK to proceed?" Then STOP and wait.
+2. Run: `cd <SKILL_DIR> && ./setup`
+3. If `bun` is not installed: `curl -fsSL https://bun.sh/install | bash`
+
+### 2. Open the cookie picker
+
+```bash
+$B cookie-import-browser
+```
+
+This auto-detects installed Chromium browsers (Comet, Chrome, Arc, Brave, Edge) and opens
+an interactive picker UI in your default browser where you can:
+- Switch between installed browsers
+- Search domains
+- Click "+" to import a domain's cookies
+- Click trash to remove imported cookies
+
+Tell the user: **"Cookie picker opened — select the domains you want to import in your browser, then tell me when you're done."**
+
+### 3. Direct import (alternative)
+
+If the user specifies a domain directly (e.g., `/setup-browser-cookies github.com`), skip the UI:
+
+```bash
+$B cookie-import-browser comet --domain github.com
+```
+
+Replace `comet` with the appropriate browser if specified.
+
+### 4. Verify
+
+After the user confirms they're done:
+
+```bash
+$B cookies
+```
+
+Show the user a summary of imported cookies (domain counts).
+
+## Notes
+
+- First import per browser may trigger a macOS Keychain dialog — click "Allow" / "Always Allow"
+- Cookie picker is served on the same port as the browse server (no extra process)
+- Only domain names and cookie counts are shown in the UI — no cookie values are exposed
+- The browse session persists cookies between commands, so imported cookies work immediately

@@ -8,6 +8,9 @@ description: |
   expansions), HOLD SCOPE (maximum rigor), SCOPE REDUCTION (strip to essentials).
   Use when asked to "think bigger", "expand scope", "strategy review", "rethink this",
   or "is this ambitious enough".
+  Proactively suggest when the user is questioning scope or ambition of a plan,
+  or when the plan feels like it could be thinking bigger.
+benefits-from: [office-hours]
 allowed-tools:
   - Read
   - Grep
@@ -28,11 +31,25 @@ touch ~/.gstack/sessions/"$PPID"
 _SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
+_PROACTIVE=$(~/.claude/skills/gstack/bin/gstack-config get proactive 2>/dev/null || echo "true")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
+echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
+_TEL=$(~/.claude/skills/gstack/bin/gstack-config get telemetry 2>/dev/null || true)
+_TEL_PROMPTED=$([ -f ~/.gstack/.telemetry-prompted ] && echo "yes" || echo "no")
+_TEL_START=$(date +%s)
+_SESSION_ID="$$-$(date +%s)"
+echo "TELEMETRY: ${_TEL:-off}"
+echo "TEL_PROMPTED: $_TEL_PROMPTED"
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"plan-ceo-review","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+for _PF in ~/.gstack/analytics/.pending-*; do [ -f "$_PF" ] && ~/.claude/skills/gstack/bin/gstack-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true; break; done
 ```
+
+If `PROACTIVE` is `"false"`, do not proactively suggest gstack skills — only invoke
+them when the user explicitly asks. The user opted out of proactive suggestions.
 
 If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
 
@@ -47,6 +64,39 @@ touch ~/.gstack/.completeness-intro-seen
 ```
 
 Only run `open` if the user says yes. Always run `touch` to mark as seen. This only happens once.
+
+If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: After the lake intro is handled,
+ask the user about telemetry. Use AskUserQuestion:
+
+> Help gstack get better! Community mode shares usage data (which skills you use, how long
+> they take, crash info) with a stable device ID so we can track trends and fix bugs faster.
+> No code, file paths, or repo names are ever sent.
+> Change anytime with `gstack-config set telemetry off`.
+
+Options:
+- A) Help gstack get better! (recommended)
+- B) No thanks
+
+If A: run `~/.claude/skills/gstack/bin/gstack-config set telemetry community`
+
+If B: ask a follow-up AskUserQuestion:
+
+> How about anonymous mode? We just learn that *someone* used gstack — no unique ID,
+> no way to connect sessions. Just a counter that helps us know if anyone's out there.
+
+Options:
+- A) Sure, anonymous is fine
+- B) No thanks, fully off
+
+If B→A: run `~/.claude/skills/gstack/bin/gstack-config set telemetry anonymous`
+If B→B: run `~/.claude/skills/gstack/bin/gstack-config set telemetry off`
+
+Always run:
+```bash
+touch ~/.gstack/.telemetry-prompted
+```
+
+This only happens once. If `TEL_PROMPTED` is `yes`, skip this entirely.
 
 ## AskUserQuestion Format
 
@@ -147,6 +197,34 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
+## Telemetry (run last)
+
+After the skill workflow completes (success, error, or abort), log the telemetry event.
+Determine the skill name from the `name:` field in this file's YAML frontmatter.
+Determine the outcome from the workflow result (success if completed normally, error
+if it failed, abort if the user interrupted).
+
+**PLAN MODE EXCEPTION — ALWAYS RUN:** This command writes telemetry to
+`~/.gstack/analytics/` (user config directory, not project files). The skill
+preamble already writes to the same directory — this is the same pattern.
+Skipping this command loses session duration and outcome data.
+
+Run this bash:
+
+```bash
+_TEL_END=$(date +%s)
+_TEL_DUR=$(( _TEL_END - _TEL_START ))
+rm -f ~/.gstack/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
+~/.claude/skills/gstack/bin/gstack-telemetry-log \
+  --skill "SKILL_NAME" --duration "$_TEL_DUR" --outcome "OUTCOME" \
+  --used-browse "USED_BROWSE" --session-id "$_SESSION_ID" 2>/dev/null &
+```
+
+Replace `SKILL_NAME` with the actual skill name from frontmatter, `OUTCOME` with
+success/error/abort, and `USED_BROWSE` with true/false based on whether `$B` was used.
+If you cannot determine the outcome, use "unknown". This runs in the background and
+never blocks the user.
+
 ## Step 0: Detect base branch
 
 Determine which branch this PR targets. Use the result as "the base branch" in all subsequent steps.
@@ -181,7 +259,7 @@ Do NOT make any code changes. Do NOT start implementation. Your only job right n
 
 ## Prime Directives
 1. Zero silent failures. Every failure mode must be visible — to the system, to the team, to the user. If a failure can happen silently, that is a critical defect in the plan.
-2. Every error has a name. Don't say "handle errors." Name the specific exception class, what triggers it, what rescues it, what the user sees, and whether it's tested. rescue StandardError is a code smell — call it out.
+2. Every error has a name. Don't say "handle errors." Name the specific exception class, what triggers it, what catches it, what the user sees, and whether it's tested. Catch-all error handling (e.g., catch Exception, rescue StandardError, except Exception) is a code smell — call it out.
 3. Data flows have shadow paths. Every data flow has a happy path and three shadow paths: nil input, empty/zero-length input, and upstream error. Trace all four for every new flow.
 4. Interactions have edge cases. Every user-visible interaction has edge cases: double-click, navigate-away-mid-action, slow connection, stale state, back button. Map them.
 5. Observability is scope, not afterthought. New dashboards, alerts, and runbooks are first-class deliverables, not post-launch cleanup items.
@@ -239,8 +317,8 @@ Run the following commands:
 git log --oneline -30                          # Recent history
 git diff <base> --stat                           # What's already changed
 git stash list                                 # Any stashed work
-grep -r "TODO\|FIXME\|HACK\|XXX" --include="*.rb" --include="*.js" -l
-find . -name "*.rb" -newer Gemfile.lock | head -20  # Recently touched files
+grep -r "TODO\|FIXME\|HACK\|XXX" -l --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git . | head -30
+git log --since=30.days --name-only --format="" | sort | uniq -c | sort -rn | head -20  # Recently touched files
 ```
 Then read CLAUDE.md, TODOS.md, and any existing architecture docs.
 
@@ -253,6 +331,37 @@ DESIGN=$(ls -t ~/.gstack/projects/$SLUG/*-$BRANCH-design-*.md 2>/dev/null | head
 [ -n "$DESIGN" ] && echo "Design doc found: $DESIGN" || echo "No design doc found"
 ```
 If a design doc exists (from `/office-hours`), read it. Use it as the source of truth for the problem statement, constraints, and chosen approach. If it has a `Supersedes:` field, note that this is a revised design.
+
+## Prerequisite Skill Offer
+
+When the design doc check above prints "No design doc found," offer the prerequisite
+skill before proceeding.
+
+Say to the user via AskUserQuestion:
+
+> "No design doc found for this branch. `/office-hours` produces a structured problem
+> statement, premise challenge, and explored alternatives — it gives this review much
+> sharper input to work with. Takes about 10 minutes. The design doc is per-feature,
+> not per-product — it captures the thinking behind this specific change."
+
+Options:
+- A) Run /office-hours first (in another window, then come back)
+- B) Skip — proceed with standard review
+
+If they skip: "No worries — standard review. If you ever want sharper input, try
+/office-hours first next time." Then proceed normally. Do not re-offer later in the session.
+
+**Mid-session detection:** During Step 0A (Premise Challenge), if the user can't
+articulate the problem, keeps changing the problem statement, answers with "I'm not
+sure," or is clearly exploring rather than reviewing — offer `/office-hours`:
+
+> "It sounds like you're still figuring out what to build — that's totally fine, but
+> that's what /office-hours is designed for. Want to pause this review and run
+> /office-hours first? It'll help you nail down the problem and approach, then come
+> back here for the strategic review."
+
+Options: A) Yes, run /office-hours first. B) No, keep going.
+If they keep going, proceed normally — no guilt, no re-asking.
 
 When reading TODOS.md, specifically:
 * Note any TODOs this plan touches, blocks, or unlocks
@@ -353,8 +462,7 @@ Rules:
 After the opt-in/cherry-pick ceremony, write the plan to disk so the vision and decisions survive beyond this conversation. Only run this step for EXPANSION and SELECTIVE EXPANSION modes.
 
 ```bash
-eval $(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
-mkdir -p ~/.gstack/projects/$SLUG/ceo-plans
+source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG/ceo-plans
 ```
 
 Before writing, check for existing CEO plans in the ceo-plans/ directory. If any are >30 days old or their branch has been merged/deleted, offer to archive them:
@@ -397,6 +505,70 @@ Repo: {owner/repo}
 ```
 
 Derive the feature slug from the plan being reviewed (e.g., "user-dashboard", "auth-refactor"). Use the date in YYYY-MM-DD format.
+
+After writing the CEO plan, run the spec review loop on it:
+
+## Spec Review Loop
+
+Before presenting the document to the user for approval, run an adversarial review.
+
+**Step 1: Dispatch reviewer subagent**
+
+Use the Agent tool to dispatch an independent reviewer. The reviewer has fresh context
+and cannot see the brainstorming conversation — only the document. This ensures genuine
+adversarial independence.
+
+Prompt the subagent with:
+- The file path of the document just written
+- "Read this document and review it on 5 dimensions. For each dimension, note PASS or
+  list specific issues with suggested fixes. At the end, output a quality score (1-10)
+  across all dimensions."
+
+**Dimensions:**
+1. **Completeness** — Are all requirements addressed? Missing edge cases?
+2. **Consistency** — Do parts of the document agree with each other? Contradictions?
+3. **Clarity** — Could an engineer implement this without asking questions? Ambiguous language?
+4. **Scope** — Does the document creep beyond the original problem? YAGNI violations?
+5. **Feasibility** — Can this actually be built with the stated approach? Hidden complexity?
+
+The subagent should return:
+- A quality score (1-10)
+- PASS if no issues, or a numbered list of issues with dimension, description, and fix
+
+**Step 2: Fix and re-dispatch**
+
+If the reviewer returns issues:
+1. Fix each issue in the document on disk (use Edit tool)
+2. Re-dispatch the reviewer subagent with the updated document
+3. Maximum 3 iterations total
+
+**Convergence guard:** If the reviewer returns the same issues on consecutive iterations
+(the fix didn't resolve them or the reviewer disagrees with the fix), stop the loop
+and persist those issues as "Reviewer Concerns" in the document rather than looping
+further.
+
+If the subagent fails, times out, or is unavailable — skip the review loop entirely.
+Tell the user: "Spec review unavailable — presenting unreviewed doc." The document is
+already written to disk; the review is a quality bonus, not a gate.
+
+**Step 3: Report and persist metrics**
+
+After the loop completes (PASS, max iterations, or convergence guard):
+
+1. Tell the user the result — summary by default:
+   "Your doc survived N rounds of adversarial review. M issues caught and fixed.
+   Quality score: X/10."
+   If they ask "what did the reviewer find?", show the full reviewer output.
+
+2. If issues remain after max iterations or convergence, add a "## Reviewer Concerns"
+   section to the document listing each unresolved issue. Downstream skills will see this.
+
+3. Append metrics:
+```bash
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"plan-ceo-review","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","iterations":ITERATIONS,"issues_found":FOUND,"issues_fixed":FIXED,"remaining":REMAINING,"quality_score":SCORE}' >> ~/.gstack/analytics/spec-review.jsonl 2>/dev/null || true
+```
+Replace ITERATIONS, FOUND, FIXED, REMAINING, SCORE with actual values from the review.
 
 ### 0E. Temporal Interrogation (EXPANSION, SELECTIVE EXPANSION, and HOLD modes)
 Think ahead to implementation: What decisions will need to be made during implementation that should be resolved NOW in the plan?
@@ -469,24 +641,24 @@ For every new method, service, or codepath that can fail, fill in this table:
 ```
   METHOD/CODEPATH          | WHAT CAN GO WRONG           | EXCEPTION CLASS
   -------------------------|-----------------------------|-----------------
-  ExampleService#call      | API timeout                 | Faraday::TimeoutError
+  ExampleService#call      | API timeout                 | TimeoutError
                            | API returns 429             | RateLimitError
-                           | API returns malformed JSON  | JSON::ParserError
-                           | DB connection pool exhausted| ActiveRecord::ConnectionTimeoutError
-                           | Record not found            | ActiveRecord::RecordNotFound
+                           | API returns malformed JSON  | JSONParseError
+                           | DB connection pool exhausted| ConnectionPoolExhausted
+                           | Record not found            | RecordNotFound
   -------------------------|-----------------------------|-----------------
 
   EXCEPTION CLASS              | RESCUED?  | RESCUE ACTION          | USER SEES
   -----------------------------|-----------|------------------------|------------------
-  Faraday::TimeoutError        | Y         | Retry 2x, then raise   | "Service temporarily unavailable"
+  TimeoutError                 | Y         | Retry 2x, then raise   | "Service temporarily unavailable"
   RateLimitError               | Y         | Backoff + retry         | Nothing (transparent)
-  JSON::ParserError            | N ← GAP   | —                      | 500 error ← BAD
-  ConnectionTimeoutError       | N ← GAP   | —                      | 500 error ← BAD
-  ActiveRecord::RecordNotFound | Y         | Return nil, log warning | "Not found" message
+  JSONParseError               | N ← GAP   | —                      | 500 error ← BAD
+  ConnectionPoolExhausted      | N ← GAP   | —                      | 500 error ← BAD
+  RecordNotFound               | Y         | Return nil, log warning | "Not found" message
 ```
 Rules for this section:
-* `rescue StandardError` is ALWAYS a smell. Name the specific exceptions.
-* `rescue => e` with only `Rails.logger.error(e.message)` is insufficient. Log the full context: what was being attempted, with what arguments, for what user/request.
+* Catch-all error handling (`rescue StandardError`, `catch (Exception e)`, `except Exception`) is ALWAYS a smell. Name the specific exceptions.
+* Catching an error with only a generic log message is insufficient. Log the full context: what was being attempted, with what arguments, for what user/request.
 * Every rescued error must either: retry with backoff, degrade gracefully with a user-visible message, or re-raise with added context. "Swallow and continue" is almost never acceptable.
 * For each GAP (unrescued error that should be rescued): specify the rescue action and what the user should see.
 * For LLM/AI service calls specifically: what happens when the response is malformed? When it's empty? When it hallucinates invalid JSON? When the model returns a refusal? Each of these is a distinct failure mode.
@@ -780,12 +952,16 @@ If any AskUserQuestion goes unanswered, note it here. Never silently default.
 
 ## Review Log
 
-After producing the Completion Summary above, persist the review result:
+After producing the Completion Summary above, persist the review result.
+
+**PLAN MODE EXCEPTION — ALWAYS RUN:** This command writes review metadata to
+`~/.gstack/` (user config directory, not project files). The skill preamble
+already writes to `~/.gstack/sessions/` and `~/.gstack/analytics/` — this is
+the same pattern. The review dashboard depends on this data. Skipping this
+command breaks the review readiness dashboard in /ship.
 
 ```bash
-eval $(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
-mkdir -p ~/.gstack/projects/$SLUG
-echo '{"skill":"plan-ceo-review","timestamp":"TIMESTAMP","status":"STATUS","unresolved":N,"critical_gaps":N,"mode":"MODE"}' >> ~/.gstack/projects/$SLUG/$BRANCH-reviews.jsonl
+~/.claude/skills/gstack/bin/gstack-review-log '{"skill":"plan-ceo-review","timestamp":"TIMESTAMP","status":"STATUS","unresolved":N,"critical_gaps":N,"mode":"MODE","commit":"COMMIT"}'
 ```
 
 Before running this command, substitute the placeholder values from the Completion Summary you just produced:
@@ -794,19 +970,17 @@ Before running this command, substitute the placeholder values from the Completi
 - **unresolved**: number from "Unresolved decisions" in the summary
 - **critical_gaps**: number from "Failure modes: ___ CRITICAL GAPS" in the summary
 - **MODE**: the mode the user selected (SCOPE_EXPANSION / SELECTIVE_EXPANSION / HOLD_SCOPE / SCOPE_REDUCTION)
+- **COMMIT**: output of `git rev-parse --short HEAD`
 
 ## Review Readiness Dashboard
 
 After completing the review, read the review log and config to display the dashboard.
 
 ```bash
-eval $(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
-cat ~/.gstack/projects/$SLUG/$BRANCH-reviews.jsonl 2>/dev/null || echo "NO_REVIEWS"
-echo "---CONFIG---"
-~/.claude/skills/gstack/bin/gstack-config get skip_eng_review 2>/dev/null || echo "false"
+~/.claude/skills/gstack/bin/gstack-review-read
 ```
 
-Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, plan-design-review, design-review-lite). Ignore entries with timestamps older than 7 days. For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. Display:
+Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, plan-design-review, design-review-lite, codex-review). Ignore entries with timestamps older than 7 days. For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. Display:
 
 ```
 +====================================================================+
@@ -817,6 +991,7 @@ Parse the output. Find the most recent entry for each skill (plan-ceo-review, pl
 | Eng Review      |  1   | 2026-03-16 15:00    | CLEAR     | YES      |
 | CEO Review      |  0   | —                   | —         | no       |
 | Design Review   |  0   | —                   | —         | no       |
+| Codex Review    |  0   | —                   | —         | no       |
 +--------------------------------------------------------------------+
 | VERDICT: CLEARED — Eng Review passed                                |
 +====================================================================+
@@ -826,12 +1001,34 @@ Parse the output. Find the most recent entry for each skill (plan-ceo-review, pl
 - **Eng Review (required by default):** The only review that gates shipping. Covers architecture, code quality, tests, performance. Can be disabled globally with \`gstack-config set skip_eng_review true\` (the "don't bother me" setting).
 - **CEO Review (optional):** Use your judgment. Recommend it for big product/business changes, new user-facing features, or scope decisions. Skip for bug fixes, refactors, infra, and cleanup.
 - **Design Review (optional):** Use your judgment. Recommend it for UI/UX changes. Skip for backend-only, infra, or prompt-only changes.
+- **Codex Review (enabled by default when Codex CLI is installed):** Independent review + adversarial challenge from OpenAI Codex CLI. Shows pass/fail gate. Runs automatically when enabled — configure with \`gstack-config set codex_reviews enabled|disabled\`.
 
 **Verdict logic:**
 - **CLEARED**: Eng Review has >= 1 entry within 7 days with status "clean" (or \`skip_eng_review\` is \`true\`)
 - **NOT CLEARED**: Eng Review missing, stale (>7 days), or has open issues
-- CEO and Design reviews are shown for context but never block shipping
+- CEO, Design, and Codex reviews are shown for context but never block shipping
 - If \`skip_eng_review\` config is \`true\`, Eng Review shows "SKIPPED (global)" and verdict is CLEARED
+
+**Staleness detection:** After displaying the dashboard, check if any existing reviews may be stale:
+- Parse the \`---HEAD---\` section from the bash output to get the current HEAD commit hash
+- For each review entry that has a \`commit\` field: compare it against the current HEAD. If different, count elapsed commits: \`git rev-list --count STORED_COMMIT..HEAD\`. Display: "Note: {skill} review from {date} may be stale — {N} commits since review"
+- For entries without a \`commit\` field (legacy entries): display "Note: {skill} review from {date} has no commit tracking — consider re-running for accurate staleness detection"
+- If all reviews match the current HEAD, do not display any staleness notes
+
+## Next Steps — Review Chaining
+
+After displaying the Review Readiness Dashboard, recommend the next review(s) based on what this CEO review discovered. Read the dashboard output to see which reviews have already been run and whether they are stale.
+
+**Recommend /plan-eng-review if eng review is not skipped globally** — check the dashboard output for `skip_eng_review`. If it is `true`, eng review is opted out — do not recommend it. Otherwise, eng review is the required shipping gate. If this CEO review expanded scope, changed architectural direction, or accepted scope expansions, emphasize that a fresh eng review is needed. If an eng review already exists in the dashboard but the commit hash shows it predates this CEO review, note that it may be stale and should be re-run.
+
+**Recommend /plan-design-review if UI scope was detected** — specifically if Section 11 (Design & UX Review) was NOT skipped, or if accepted scope expansions included UI-facing features. If an existing design review is stale (commit hash drift), note that. In SCOPE REDUCTION mode, skip this recommendation — design review is unlikely relevant for scope cuts.
+
+**If both are needed, recommend eng review first** (required gate), then design review.
+
+Use AskUserQuestion to present the next step. Include only applicable options:
+- **A)** Run /plan-eng-review next (required gate)
+- **B)** Run /plan-design-review next (only if UI scope detected)
+- **C)** Skip — I'll handle reviews manually
 
 ## docs/designs Promotion (EXPANSION and SELECTIVE EXPANSION only)
 

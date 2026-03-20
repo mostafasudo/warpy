@@ -23,7 +23,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). The ac
 
 `gstack` is vendored upstream and kept unmodified at `.codex/skills/gstack/`.
 
-Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names `browse`, `debug`, `design-consultation`, `design-review`, `document-release`, `gstack-upgrade`, `office-hours`, `plan-ceo-review`, `plan-design-review`, `plan-eng-review`, `qa`, `qa-only`, `retro`, `review`, `setup-browser-cookies`, and `ship` are mirrored there as discovery symlinks.
+Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names `browse`, `careful`, `codex`, `design-consultation`, `design-review`, `document-release`, `freeze`, `gstack-upgrade`, `guard`, `investigate`, `office-hours`, `plan-ceo-review`, `plan-design-review`, `plan-eng-review`, `qa`, `qa-only`, `retro`, `review`, `setup-browser-cookies`, `ship`, and `unfreeze` are mirrored there as discovery symlinks.
 
 After any gstack reinstall or update, including `/gstack-upgrade`, run `./scripts/sync-gstack-mirrors.sh` from the repo root. It reruns upstream `.codex/skills/gstack/setup` and refreshes the `.claude`, `.agent`, and `.cursor` mirrors while keeping `.codex/skills/gstack/` as the only real repo copy.
 

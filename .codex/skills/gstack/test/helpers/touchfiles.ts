@@ -57,9 +57,13 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'review-base-branch':       ['review/**'],
   'review-design-lite':       ['review/**', 'test/fixtures/review-eval-design-slop.*'],
 
+  // Office Hours
+  'office-hours-spec-review':  ['office-hours/**', 'scripts/gen-skill-docs.ts'],
+
   // Plan reviews
   'plan-ceo-review':           ['plan-ceo-review/**'],
   'plan-ceo-review-selective': ['plan-ceo-review/**'],
+  'plan-ceo-review-benefits':  ['plan-ceo-review/**', 'scripts/gen-skill-docs.ts'],
   'plan-eng-review':           ['plan-eng-review/**'],
   'plan-eng-review-artifact':  ['plan-eng-review/**'],
 
@@ -72,6 +76,17 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
 
   // Document-release
   'document-release': ['document-release/**'],
+
+  // Codex (Claude E2E — tests /codex skill via Claude)
+  'codex-review': ['codex/**'],
+
+  // Codex E2E (tests skills via Codex CLI)
+  'codex-discover-skill':  ['codex/**', '.agents/skills/**', 'test/helpers/codex-session-runner.ts'],
+  'codex-review-findings': ['review/**', '.agents/skills/gstack-review/**', 'codex/**', 'test/helpers/codex-session-runner.ts'],
+
+  // Gemini E2E (tests skills via Gemini CLI)
+  'gemini-discover-skill':  ['.agents/skills/**', 'test/helpers/gemini-session-runner.ts'],
+  'gemini-review-findings': ['review/**', '.agents/skills/gstack-review/**', 'test/helpers/gemini-session-runner.ts'],
 
   // QA bootstrap
   'qa-bootstrap': ['qa/**', 'browse/src/**', 'ship/**'],
@@ -90,6 +105,19 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
 
   // gstack-upgrade
   'gstack-upgrade-happy-path': ['gstack-upgrade/**'],
+
+  // Skill routing — journey-stage tests (depend on ALL skill descriptions)
+  'journey-ideation':       ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-plan-eng':       ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-think-bigger':   ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-debug':          ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-qa':             ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-code-review':    ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-ship':           ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-docs':           ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-retro':          ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-design-system':  ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'journey-visual-qa':      ['*/SKILL.md.tmpl', 'SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
 };
 
 /**
@@ -103,6 +131,7 @@ export const LLM_JUDGE_TOUCHFILES: Record<string, string[]> = {
   'regression vs baseline':           ['SKILL.md', 'SKILL.md.tmpl', 'browse/src/commands.ts', 'test/fixtures/eval-baselines.json'],
   'qa/SKILL.md workflow':             ['qa/SKILL.md', 'qa/SKILL.md.tmpl'],
   'qa/SKILL.md health rubric':        ['qa/SKILL.md', 'qa/SKILL.md.tmpl'],
+  'qa/SKILL.md anti-refusal':         ['qa/SKILL.md', 'qa/SKILL.md.tmpl', 'qa-only/SKILL.md', 'qa-only/SKILL.md.tmpl'],
   'cross-skill greptile consistency': ['review/SKILL.md', 'review/SKILL.md.tmpl', 'ship/SKILL.md', 'ship/SKILL.md.tmpl', 'review/greptile-triage.md', 'retro/SKILL.md', 'retro/SKILL.md.tmpl'],
   'baseline score pinning':           ['SKILL.md', 'SKILL.md.tmpl', 'test/fixtures/eval-baselines.json'],
 
@@ -119,6 +148,10 @@ export const LLM_JUDGE_TOUCHFILES: Record<string, string[]> = {
   'design-review/SKILL.md fix loop':      ['design-review/SKILL.md', 'design-review/SKILL.md.tmpl'],
   'design-consultation/SKILL.md research': ['design-consultation/SKILL.md', 'design-consultation/SKILL.md.tmpl'],
 
+  // Office Hours
+  'office-hours/SKILL.md spec review':    ['office-hours/SKILL.md', 'office-hours/SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+  'office-hours/SKILL.md design sketch':  ['office-hours/SKILL.md', 'office-hours/SKILL.md.tmpl', 'scripts/gen-skill-docs.ts'],
+
   // Other skills
   'retro/SKILL.md instructions':          ['retro/SKILL.md', 'retro/SKILL.md.tmpl'],
   'qa-only/SKILL.md workflow':            ['qa-only/SKILL.md', 'qa-only/SKILL.md.tmpl'],
@@ -130,6 +163,8 @@ export const LLM_JUDGE_TOUCHFILES: Record<string, string[]> = {
  */
 export const GLOBAL_TOUCHFILES = [
   'test/helpers/session-runner.ts',
+  'test/helpers/codex-session-runner.ts',
+  'test/helpers/gemini-session-runner.ts',
   'test/helpers/eval-store.ts',
   'test/helpers/llm-judge.ts',
   'scripts/gen-skill-docs.ts',

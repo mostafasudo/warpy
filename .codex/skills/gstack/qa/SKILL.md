@@ -5,7 +5,9 @@ description: |
   Systematically QA test a web application and fix bugs found. Runs QA testing,
   then iteratively fixes bugs in source code, committing each fix atomically and
   re-verifying. Use when asked to "qa", "QA", "test this site", "find bugs",
-  "test and fix", or "fix what's broken". Three tiers: Quick (critical/high only),
+  "test and fix", or "fix what's broken".
+  Proactively suggest when the user says a feature is ready for testing
+  or asks "does this work?". Three tiers: Quick (critical/high only),
   Standard (+ medium), Exhaustive (+ cosmetic). Produces before/after health scores,
   fix evidence, and a ship-readiness summary. For report-only mode, use /qa-only.
 allowed-tools:
@@ -31,11 +33,25 @@ touch ~/.gstack/sessions/"$PPID"
 _SESSIONS=$(find ~/.gstack/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.gstack/sessions -mmin +120 -type f -delete 2>/dev/null || true
 _CONTRIB=$(~/.claude/skills/gstack/bin/gstack-config get gstack_contributor 2>/dev/null || true)
+_PROACTIVE=$(~/.claude/skills/gstack/bin/gstack-config get proactive 2>/dev/null || echo "true")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
+echo "PROACTIVE: $_PROACTIVE"
 _LAKE_SEEN=$([ -f ~/.gstack/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
+_TEL=$(~/.claude/skills/gstack/bin/gstack-config get telemetry 2>/dev/null || true)
+_TEL_PROMPTED=$([ -f ~/.gstack/.telemetry-prompted ] && echo "yes" || echo "no")
+_TEL_START=$(date +%s)
+_SESSION_ID="$$-$(date +%s)"
+echo "TELEMETRY: ${_TEL:-off}"
+echo "TEL_PROMPTED: $_TEL_PROMPTED"
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"qa","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+for _PF in ~/.gstack/analytics/.pending-*; do [ -f "$_PF" ] && ~/.claude/skills/gstack/bin/gstack-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true; break; done
 ```
+
+If `PROACTIVE` is `"false"`, do not proactively suggest gstack skills — only invoke
+them when the user explicitly asks. The user opted out of proactive suggestions.
 
 If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined). If `JUST_UPGRADED <from> <to>`: tell user "Running gstack v{to} (just updated!)" and continue.
 
@@ -50,6 +66,39 @@ touch ~/.gstack/.completeness-intro-seen
 ```
 
 Only run `open` if the user says yes. Always run `touch` to mark as seen. This only happens once.
+
+If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: After the lake intro is handled,
+ask the user about telemetry. Use AskUserQuestion:
+
+> Help gstack get better! Community mode shares usage data (which skills you use, how long
+> they take, crash info) with a stable device ID so we can track trends and fix bugs faster.
+> No code, file paths, or repo names are ever sent.
+> Change anytime with `gstack-config set telemetry off`.
+
+Options:
+- A) Help gstack get better! (recommended)
+- B) No thanks
+
+If A: run `~/.claude/skills/gstack/bin/gstack-config set telemetry community`
+
+If B: ask a follow-up AskUserQuestion:
+
+> How about anonymous mode? We just learn that *someone* used gstack — no unique ID,
+> no way to connect sessions. Just a counter that helps us know if anyone's out there.
+
+Options:
+- A) Sure, anonymous is fine
+- B) No thanks, fully off
+
+If B→A: run `~/.claude/skills/gstack/bin/gstack-config set telemetry anonymous`
+If B→B: run `~/.claude/skills/gstack/bin/gstack-config set telemetry off`
+
+Always run:
+```bash
+touch ~/.gstack/.telemetry-prompted
+```
+
+This only happens once. If `TEL_PROMPTED` is `yes`, skip this entirely.
 
 ## AskUserQuestion Format
 
@@ -150,6 +199,34 @@ ATTEMPTED: [what you tried]
 RECOMMENDATION: [what the user should do next]
 ```
 
+## Telemetry (run last)
+
+After the skill workflow completes (success, error, or abort), log the telemetry event.
+Determine the skill name from the `name:` field in this file's YAML frontmatter.
+Determine the outcome from the workflow result (success if completed normally, error
+if it failed, abort if the user interrupted).
+
+**PLAN MODE EXCEPTION — ALWAYS RUN:** This command writes telemetry to
+`~/.gstack/analytics/` (user config directory, not project files). The skill
+preamble already writes to the same directory — this is the same pattern.
+Skipping this command loses session duration and outcome data.
+
+Run this bash:
+
+```bash
+_TEL_END=$(date +%s)
+_TEL_DUR=$(( _TEL_END - _TEL_START ))
+rm -f ~/.gstack/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
+~/.claude/skills/gstack/bin/gstack-telemetry-log \
+  --skill "SKILL_NAME" --duration "$_TEL_DUR" --outcome "OUTCOME" \
+  --used-browse "USED_BROWSE" --session-id "$_SESSION_ID" 2>/dev/null &
+```
+
+Replace `SKILL_NAME` with the actual skill name from frontmatter, `OUTCOME` with
+success/error/abort, and `USED_BROWSE` with true/false based on whether `$B` was used.
+If you cannot determine the outcome, use "unknown". This runs in the background and
+never blocks the user.
+
 ## Step 0: Detect base branch
 
 Determine which branch this PR targets. Use the result as "the base branch" in all subsequent steps.
@@ -193,13 +270,23 @@ You are a QA engineer AND a bug-fix engineer. Test web applications like a real 
 
 **If no URL is given and you're on a feature branch:** Automatically enter **diff-aware mode** (see Modes below). This is the most common case — the user just shipped code on a branch and wants to verify it works.
 
-**Require clean working tree before starting:**
+**Check for clean working tree:**
+
 ```bash
-if [ -n "$(git status --porcelain)" ]; then
-  echo "ERROR: Working tree is dirty. Commit or stash changes before running /qa."
-  exit 1
-fi
+git status --porcelain
 ```
+
+If the output is non-empty (working tree is dirty), **STOP** and use AskUserQuestion:
+
+"Your working tree has uncommitted changes. /qa needs a clean tree so each bug fix gets its own atomic commit."
+
+- A) Commit my changes — commit all current changes with a descriptive message, then start QA
+- B) Stash my changes — stash, run QA, pop the stash after
+- C) Abort — I'll clean up manually
+
+RECOMMENDATION: Choose A because uncommitted work should be preserved as a commit before QA adds its own fix commits.
+
+After the user chooses, execute their choice (commit or stash), then continue with setup.
 
 **Find the browse binary:**
 
@@ -391,7 +478,7 @@ Before falling back to git diff heuristics, check for richer test plan sources:
 
 1. **Project-scoped test plans:** Check `~/.gstack/projects/` for recent `*-test-plan-*.md` files for this repo
    ```bash
-   eval $(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
+   source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
    ls -t ~/.gstack/projects/$SLUG/*-test-plan-*.md 2>/dev/null | head -1
    ```
 2. **Conversation context:** Check if a prior `/plan-eng-review` or `/plan-ceo-review` produced test plan output in this conversation
@@ -420,6 +507,8 @@ This is the **primary mode** for developers verifying their work. When the user 
    - CSS/style files → which pages include those stylesheets
    - API endpoints → test them directly with `$B js "await fetch('/api/...')"`
    - Static pages (markdown, HTML) → navigate to them directly
+
+   **If no obvious pages/routes are identified from the diff:** Do not skip browser testing. The user invoked /qa because they want browser-based verification. Fall back to Quick mode — navigate to the homepage, follow the top 5 navigation targets, check console for errors, and test any interactive elements found. Backend, config, and infrastructure changes affect app behavior — always verify the app still works.
 
 3. **Detect the running app** — check common local dev ports:
    ```bash
@@ -675,6 +764,7 @@ Minimum 0 per category.
 9. **Never delete output files.** Screenshots and reports accumulate — that's intentional.
 10. **Use `snapshot -C` for tricky UIs.** Finds clickable divs that the accessibility tree misses.
 11. **Show screenshots to the user.** After every `$B screenshot`, `$B snapshot -a -o`, or `$B responsive` command, use the Read tool on the output file(s) so the user can see them inline. For `responsive` (3 files), Read all three. This is critical — without it, screenshots are invisible to the user.
+12. **Never refuse to use the browser.** When the user invokes /qa or /qa-only, they are requesting browser-based testing. Never suggest evals, unit tests, or other alternatives as a substitute. Even if the diff appears to have no UI changes, backend changes affect app behavior — always open the browser and test.
 
 Record baseline health score at end of Phase 6.
 
@@ -852,8 +942,7 @@ Write the report to both local and project-scoped locations:
 
 **Project-scoped:** Write test outcome artifact for cross-session context:
 ```bash
-eval $(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)
-mkdir -p ~/.gstack/projects/$SLUG
+source <(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null) && mkdir -p ~/.gstack/projects/$SLUG
 ```
 Write to `~/.gstack/projects/{slug}/{user}-{branch}-test-outcome-{datetime}.md`
 
@@ -885,7 +974,7 @@ If the repo has a `TODOS.md`:
 
 ## Additional Rules (qa-specific)
 
-11. **Clean working tree required.** Refuse to start if `git status --porcelain` is non-empty.
+11. **Clean working tree required.** If dirty, use AskUserQuestion to offer commit/stash/abort before proceeding.
 12. **One commit per fix.** Never bundle multiple fixes into one commit.
 13. **Only modify tests when generating regression tests in Phase 8e.5.** Never modify CI configuration. Never modify existing tests — only create new test files.
 14. **Revert on regression.** If a fix makes things worse, `git revert HEAD` immediately.
