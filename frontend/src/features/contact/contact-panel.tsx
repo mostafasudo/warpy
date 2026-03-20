@@ -1,10 +1,11 @@
-import { Mail } from "lucide-react"
+import { Calendar, Mail } from "lucide-react"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Button } from "@/components/ui/button"
 
 const supportEmail = "support@warpy.ai"
 const discordUrl = "https://discord.gg/JPjYjPdGD2"
+const bookCallUrl = "https://cal.com/levwtech"
 
 const DiscordLogo = () => (
   <svg
@@ -21,7 +22,7 @@ const DiscordLogo = () => (
 )
 
 export const ContactPanel = () => (
-  <PanelShell title="Contact Us" description="Reach our support team by email or in Discord.">
+  <PanelShell title="Contact Us" description="Reach our support team by email, in Discord, or on a call.">
     <div className="space-y-4">
       <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
         <p className="text-sm text-muted-foreground">
@@ -38,6 +39,15 @@ export const ContactPanel = () => (
           >
             Discord
           </a>
+          {" "}or{" "}
+          <a
+            className="font-medium text-foreground underline underline-offset-4"
+            href={bookCallUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            book a call
+          </a>
           .
         </p>
       </div>
@@ -52,6 +62,12 @@ export const ContactPanel = () => (
           <a href={discordUrl} target="_blank" rel="noreferrer">
             <DiscordLogo />
             Join Discord
+          </a>
+        </Button>
+        <Button asChild variant="secondary" className="w-fit">
+          <a href={bookCallUrl} target="_blank" rel="noreferrer">
+            <Calendar />
+            Book a call
           </a>
         </Button>
       </div>

@@ -5,7 +5,7 @@ import { render, screen } from "@testing-library/react"
 import { ContactPanel } from "./contact-panel"
 
 describe("ContactPanel", () => {
-  it("directs users to email support and Discord", () => {
+  it("directs users to email support, Discord, and booking a call", () => {
     render(<ContactPanel />)
 
     expect(screen.getByRole("heading", { name: "Contact Us" })).not.toBeNull()
@@ -15,5 +15,7 @@ describe("ContactPanel", () => {
     expect(screen.getByRole("link", { name: "Email support" })).toHaveAttribute("href", "mailto:support@warpy.ai")
     expect(screen.getByRole("link", { name: "Discord" })).toHaveAttribute("href", "https://discord.gg/JPjYjPdGD2")
     expect(screen.getByRole("link", { name: "Join Discord" })).toHaveAttribute("href", "https://discord.gg/JPjYjPdGD2")
+    expect(screen.getByRole("link", { name: "book a call" })).toHaveAttribute("href", "https://cal.com/levwtech")
+    expect(screen.getByRole("link", { name: "Book a call" })).toHaveAttribute("href", "https://cal.com/levwtech")
   })
 })
