@@ -322,6 +322,21 @@ const getKnowledgeSummary = ({
   return "Optional. Add websites or documents so the agent can answer with your own sources."
 }
 
+const formatActionShare = (count: number, totalActionCount: number) => {
+  if (totalActionCount <= 0) {
+    return "No action share yet"
+  }
+
+  const percentage = (count / totalActionCount) * 100
+
+  if (percentage < 1) {
+    return "<1% of actions"
+  }
+
+  const formatted = percentage >= 10 ? Math.round(percentage).toString() : percentage.toFixed(1).replace(/\.0$/, "")
+  return `${formatted}% of actions`
+}
+
 export const DashboardPanel = () => {
   const configQuery = useConfigQuery()
   const featuresQuery = useFeaturesQuery("")
@@ -348,7 +363,6 @@ export const DashboardPanel = () => {
   const conversationCount = activity?.conversationCount ?? 0
   const actionCount = activity?.actionCount ?? 0
   const topActions = activity?.topActions ?? []
-  const topActionMaxCount = topActions.reduce((max, item) => Math.max(max, item.count), 0)
   const completedCoreSteps =
     Number(hasAgent) +
     Number(environmentCount > 0) +
@@ -382,6 +396,7 @@ export const DashboardPanel = () => {
     documentCount: knowledgeBaseStatus?.documentCount ?? 0,
     readyDocumentCount: knowledgeBaseStatus?.readyDocumentCount ?? 0,
   })
+  const showActivityInsightsCta = statusHeader.primaryAction.section !== "activity"
 
   const setupSteps: StepCardProps[] = [
     {
@@ -632,10 +647,12 @@ export const DashboardPanel = () => {
                 Conversations and actions from the last 30 days, with the top actions people use most.
               </p>
             </div>
-            <Button type="button" variant="secondary" onClick={() => setSection("activity")} className="self-start md:self-auto">
-              View all activity
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            {showActivityInsightsCta ? (
+              <Button type="button" variant="secondary" onClick={() => setSection("activity")} className="self-start md:self-auto">
+                View all activity
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
 
           {activityQuery.isPending ? (
@@ -686,16 +703,11 @@ export const DashboardPanel = () => {
                           <p className="truncate text-sm font-medium">{item.action}</p>
                           <p className="truncate text-xs text-muted-foreground">{item.feature || "Unassigned feature"}</p>
                         </div>
-                        <div className="flex items-center gap-3 sm:justify-end">
-                          <div className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-muted sm:block">
-                            <div
-                              className="h-full rounded-full bg-primary/70"
-                              style={{ width: `${topActionMaxCount > 0 ? Math.max((item.count / topActionMaxCount) * 100, 18) : 0}%` }}
-                            />
-                          </div>
-                          <p className="min-w-10 text-right text-sm font-medium tabular-nums text-muted-foreground">
+                        <div className="space-y-0.5 text-left sm:text-right">
+                          <p className="min-w-10 text-sm font-medium tabular-nums text-muted-foreground">
                             {item.count.toLocaleString()}
                           </p>
+                          <p className="text-xs text-muted-foreground">{formatActionShare(item.count, actionCount)}</p>
                         </div>
                       </div>
                     ))

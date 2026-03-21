@@ -115,6 +115,7 @@ describe("DashboardPanel", () => {
     render(<DashboardPanel />)
 
     expect(screen.getByText("Add an environment base URL")).not.toBeNull()
+    expect(within(screen.getByTestId("overview-usage-insights")).getByRole("button", { name: "View all activity" })).not.toBeNull()
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Add environments" }))
     expect(useNavigationStore.getState().section).toBe("api")
   })
@@ -266,11 +267,13 @@ describe("DashboardPanel", () => {
     expect(screen.getByText("Your agent is live")).not.toBeNull()
     expect(screen.getByText("Early traction is coming in")).not.toBeNull()
     expect(screen.getByText("Create order")).not.toBeNull()
+    expect(screen.getByText("58% of actions")).not.toBeNull()
     expect(
       within(screen.getByTestId("overview-opportunities")).getByText(
         "Knowledge base is enabled. Add websites or documents to make it useful."
       )
     ).not.toBeNull()
+    expect(within(screen.getByTestId("overview-usage-insights")).queryByRole("button", { name: "View all activity" })).toBeNull()
 
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Review activity" }))
     expect(useNavigationStore.getState().section).toBe("activity")
