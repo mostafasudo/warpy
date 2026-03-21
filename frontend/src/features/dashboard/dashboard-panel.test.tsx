@@ -268,6 +268,8 @@ describe("DashboardPanel", () => {
     expect(screen.getByText("Early traction is coming in")).not.toBeNull()
     expect(screen.getByText("Create order")).not.toBeNull()
     expect(screen.queryByText("4/4 core steps complete")).toBeNull()
+    expect(screen.queryByText("Live overview")).toBeNull()
+    expect(screen.queryByText("5 conversations in the last 30 days")).toBeNull()
     expect(
       within(screen.getByTestId("overview-top-actions")).getByText(
         "The actions people ask the widget to run most often. Bars compare the actions shown here."

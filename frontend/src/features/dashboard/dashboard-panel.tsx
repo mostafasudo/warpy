@@ -56,7 +56,7 @@ type OverviewAction = {
 }
 
 type StatusHeader = {
-  eyebrow: string
+  eyebrow?: string
   title: string
   description: string
   primaryAction: OverviewAction
@@ -245,7 +245,6 @@ const getStatusHeader = ({
   }
 
   return {
-    eyebrow: "Live overview",
     title: "Your agent is live",
     description: `In the last 30 days it handled ${conversationCount.toLocaleString()} conversation${conversationCount === 1 ? "" : "s"} and ran ${actionCount.toLocaleString()} action${actionCount === 1 ? "" : "s"}. Review the activity feed and tune what happens next.`,
     primaryAction: { label: "Review activity", section: "activity" },
@@ -508,11 +507,8 @@ export const DashboardPanel = () => {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_auto] xl:items-start">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={coreReady ? "default" : "secondary"}>{statusHeader.eyebrow}</Badge>
+                {statusHeader.eyebrow ? <Badge variant={coreReady ? "default" : "secondary"}>{statusHeader.eyebrow}</Badge> : null}
                 {!coreReady ? <Badge variant="outline">{completedCoreSteps}/4 core steps complete</Badge> : null}
-                {conversationCount > 0 ? (
-                  <Badge variant="outline">{conversationCount.toLocaleString()} conversations in the last 30 days</Badge>
-                ) : null}
               </div>
               <div className="space-y-2">
                 <h3 className="text-2xl font-semibold tracking-tight">{statusHeader.title}</h3>
