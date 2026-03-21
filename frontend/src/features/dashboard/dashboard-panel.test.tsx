@@ -267,7 +267,11 @@ describe("DashboardPanel", () => {
     expect(screen.getByText("Your agent is live")).not.toBeNull()
     expect(screen.getByText("Early traction is coming in")).not.toBeNull()
     expect(screen.getByText("Create order")).not.toBeNull()
-    expect(screen.getByText("58% of actions")).not.toBeNull()
+    expect(
+      within(screen.getByTestId("overview-top-actions")).getByText(
+        "The actions people ask the widget to run most often. Bars compare the actions shown here."
+      )
+    ).not.toBeNull()
     expect(
       within(screen.getByTestId("overview-opportunities")).getByText(
         "Knowledge base is enabled. Add websites or documents to make it useful."
