@@ -509,7 +509,7 @@ export const DashboardPanel = () => {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={coreReady ? "default" : "secondary"}>{statusHeader.eyebrow}</Badge>
-                <Badge variant="outline">{completedCoreSteps}/4 core steps complete</Badge>
+                {!coreReady ? <Badge variant="outline">{completedCoreSteps}/4 core steps complete</Badge> : null}
                 {conversationCount > 0 ? (
                   <Badge variant="outline">{conversationCount.toLocaleString()} conversations in the last 30 days</Badge>
                 ) : null}
