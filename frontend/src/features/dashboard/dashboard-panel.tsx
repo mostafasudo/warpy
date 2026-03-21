@@ -151,14 +151,16 @@ const StepCard = ({ title, description, tone, icon }: StepCardProps) => (
 
 const OpportunityCard = ({ title, description, ctaLabel, onClick }: OpportunityCardProps) => (
   <div className="rounded-xl border border-border/60 bg-card/60 p-4">
-    <div className="space-y-2">
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="text-sm text-muted-foreground">{description}</p>
+    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div className="space-y-2">
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="max-w-xl text-sm text-muted-foreground">{description}</p>
+      </div>
+      <Button type="button" variant="secondary" onClick={onClick} className="shrink-0 self-start">
+        {ctaLabel}
+        <ArrowRight className="h-4 w-4" />
+      </Button>
     </div>
-    <Button type="button" variant="secondary" onClick={onClick} className="mt-4 w-full justify-between">
-      {ctaLabel}
-      <ArrowRight className="h-4 w-4" />
-    </Button>
   </div>
 )
 
@@ -309,10 +311,10 @@ const getKnowledgeSummary = ({
   readyDocumentCount: number
 }) => {
   if (readyDocumentCount > 0) {
-    return `${readyDocumentCount} document${readyDocumentCount === 1 ? "" : "s"} ready for retrieval.`
+    return `${readyDocumentCount} knowledge source${readyDocumentCount === 1 ? "" : "s"} ready for retrieval.`
   }
   if (documentCount > 0) {
-    return `${documentCount} document${documentCount === 1 ? "" : "s"} added and still processing.`
+    return `${documentCount} knowledge source${documentCount === 1 ? "" : "s"} added and still processing.`
   }
   if (enabled) {
     return "Knowledge base is enabled. Add websites or documents to make it useful."
@@ -346,6 +348,7 @@ export const DashboardPanel = () => {
   const conversationCount = activity?.conversationCount ?? 0
   const actionCount = activity?.actionCount ?? 0
   const topActions = activity?.topActions ?? []
+  const topActionMaxCount = topActions.reduce((max, item) => Math.max(max, item.count), 0)
   const completedCoreSteps =
     Number(hasAgent) +
     Number(environmentCount > 0) +
@@ -498,9 +501,9 @@ export const DashboardPanel = () => {
       title="Overview"
       description="See what your agent should do next and how people are using it."
     >
-      <div className="space-y-6" data-testid="overview-panel">
+      <div className="mx-auto max-w-[1540px] space-y-6" data-testid="overview-panel">
         <div className="rounded-2xl border border-border/70 bg-muted/20 p-6" data-testid="overview-status-header">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_auto] xl:items-start">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={coreReady ? "default" : "secondary"}>{statusHeader.eyebrow}</Badge>
@@ -514,8 +517,8 @@ export const DashboardPanel = () => {
                 <p className="max-w-3xl text-sm text-muted-foreground">{statusHeader.description}</p>
               </div>
             </div>
-            <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[240px]">
-              <Button type="button" onClick={() => setSection(statusHeader.primaryAction.section)} className="justify-between">
+            <div className="flex items-start xl:justify-end">
+              <Button type="button" onClick={() => setSection(statusHeader.primaryAction.section)} className="shrink-0">
                 {statusHeader.primaryAction.label}
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -607,7 +610,7 @@ export const DashboardPanel = () => {
                       </div>
                       <BookOpen className="mt-1 h-5 w-5 text-primary" />
                     </div>
-                    <Button type="button" variant="secondary" className="mt-4 justify-between" onClick={() => setSection("knowledge-base")}>
+                    <Button type="button" variant="secondary" className="mt-4 self-start" onClick={() => setSection("knowledge-base")}>
                       Open knowledge base
                       <ArrowRight className="h-4 w-4" />
                     </Button>
@@ -629,7 +632,7 @@ export const DashboardPanel = () => {
                 Conversations and actions from the last 30 days, with the top actions people use most.
               </p>
             </div>
-            <Button type="button" variant="secondary" onClick={() => setSection("activity")} className="justify-between">
+            <Button type="button" variant="secondary" onClick={() => setSection("activity")} className="self-start md:self-auto">
               View all activity
               <ArrowRight className="h-4 w-4" />
             </Button>
@@ -653,14 +656,16 @@ export const DashboardPanel = () => {
               }}
             />
           ) : (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>{insightMetric({ label: "Conversations", value: conversationCount.toLocaleString(), helper: "Last 30 days.", icon: <MessageCircle className="h-5 w-5" /> })}</div>
-                <div>{insightMetric({ label: "Actions", value: actionCount.toLocaleString(), helper: "Last 30 days.", icon: <Activity className="h-5 w-5" /> })}</div>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-card/60 p-4" data-testid="overview-activity-narrative">
-                <p className="text-sm font-semibold">{activityNarrative.title}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{activityNarrative.description}</p>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.8fr)]">
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>{insightMetric({ label: "Conversations", value: conversationCount.toLocaleString(), helper: "Last 30 days.", icon: <MessageCircle className="h-5 w-5" /> })}</div>
+                  <div>{insightMetric({ label: "Actions", value: actionCount.toLocaleString(), helper: "Last 30 days.", icon: <Activity className="h-5 w-5" /> })}</div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card/60 p-4" data-testid="overview-activity-narrative">
+                  <p className="text-sm font-semibold">{activityNarrative.title}</p>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{activityNarrative.description}</p>
+                </div>
               </div>
               <div className="rounded-xl border border-border/60 bg-card/60 p-4" data-testid="overview-top-actions">
                 <div className="space-y-1">
@@ -669,13 +674,29 @@ export const DashboardPanel = () => {
                 </div>
                 <div className="mt-4 space-y-3">
                   {topActions.length ? (
-                    topActions.slice(0, 3).map((item) => (
-                      <div key={`${item.feature}-${item.action}`} className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
+                    topActions.slice(0, 3).map((item, index) => (
+                      <div
+                        key={`${item.feature}-${item.action}`}
+                        className="grid gap-3 rounded-lg border border-border/50 bg-muted/10 px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          {(index + 1).toString().padStart(2, "0")}
+                        </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{item.action}</p>
                           <p className="truncate text-xs text-muted-foreground">{item.feature || "Unassigned feature"}</p>
                         </div>
-                        <p className="text-sm tabular-nums text-muted-foreground">{item.count.toLocaleString()}</p>
+                        <div className="flex items-center gap-3 sm:justify-end">
+                          <div className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-muted sm:block">
+                            <div
+                              className="h-full rounded-full bg-primary/70"
+                              style={{ width: `${topActionMaxCount > 0 ? Math.max((item.count / topActionMaxCount) * 100, 18) : 0}%` }}
+                            />
+                          </div>
+                          <p className="min-w-10 text-right text-sm font-medium tabular-nums text-muted-foreground">
+                            {item.count.toLocaleString()}
+                          </p>
+                        </div>
                       </div>
                     ))
                   ) : (

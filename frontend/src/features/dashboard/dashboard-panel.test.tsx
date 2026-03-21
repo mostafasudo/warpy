@@ -203,7 +203,7 @@ describe("DashboardPanel", () => {
     expect(screen.getByText("Your agent is ready for first conversations")).not.toBeNull()
     expect(screen.queryByTestId("overview-guided-setup")).toBeNull()
     expect(screen.getByTestId("overview-opportunities")).not.toBeNull()
-    expect(within(screen.getByTestId("overview-opportunities")).getByText("1 document added and still processing.")).not.toBeNull()
+    expect(within(screen.getByTestId("overview-opportunities")).getByText("1 knowledge source added and still processing.")).not.toBeNull()
 
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Tune the agent" }))
     expect(useNavigationStore.getState().section).toBe("agent")
