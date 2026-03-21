@@ -108,7 +108,11 @@ No extra AWS services or extra worker types were added. The existing worker now 
 
 ## Frontend
 
+- New agents start with `knowledge_base_enabled = true` by default.
 - Knowledge Base has both `Upload documents` and `Add website`.
+- First-run onboarding can also create the first website source. It reuses the exact same website record and ingest pipeline, so the source later appears on the Knowledge Base page without any migration step.
+- When onboarding adds that first website, it also creates or reuses the agent and enables the knowledge base immediately.
+- The dashboard toggle is always available; readiness only affects whether search has grounded content yet.
 - `Add website` opens a modal with plain helper text:
   - the website must be publicly accessible
   - everything under the provided website or path will be read

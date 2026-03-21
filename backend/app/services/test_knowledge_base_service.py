@@ -145,12 +145,20 @@ def test_get_knowledge_base_status_no_agent():
     assert result["ready_document_count"] == 1
 
 
-def test_get_knowledge_base_status_auto_disables():
+def test_get_knowledge_base_status_keeps_enabled_while_sources_exist_but_are_not_ready():
     agent = Agent(user_id="u", knowledge_base_enabled=True)
     session = FakeSession(scalar_results=[agent, 1, 1, 0, 0])
     result = get_knowledge_base_status(session, "u")
-    assert result["enabled"] is False
-    assert agent.knowledge_base_enabled is False
+    assert result["enabled"] is True
+    assert agent.knowledge_base_enabled is True
+
+
+def test_get_knowledge_base_status_keeps_enabled_when_all_sources_are_gone():
+    agent = Agent(user_id="u", knowledge_base_enabled=True)
+    session = FakeSession(scalar_results=[agent, 0, 0, 0, 0])
+    result = get_knowledge_base_status(session, "u")
+    assert result["enabled"] is True
+    assert agent.knowledge_base_enabled is True
 
 
 def test_toggle_knowledge_base_enable():
@@ -170,12 +178,12 @@ def test_toggle_knowledge_base_no_agent():
     assert exc.value.status_code == 404
 
 
-def test_toggle_knowledge_base_no_ready_docs():
+def test_toggle_knowledge_base_enable_without_ready_docs():
     agent = Agent(user_id="u", knowledge_base_enabled=False)
     session = FakeSession(scalar_results=[agent, agent, 0, 0, 0, 0])
-    with pytest.raises(HTTPException) as exc:
-        toggle_knowledge_base(session, "u", True)
-    assert exc.value.status_code == 400
+    result = toggle_knowledge_base(session, "u", True)
+    assert agent.knowledge_base_enabled is True
+    assert result["enabled"] is True
 
 
 def test_get_document_chunks_success():

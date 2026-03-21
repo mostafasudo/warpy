@@ -38,6 +38,8 @@ We use the GitHub Project in this repo (Projects tab) for planning and task trac
 ## Docs
 If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
 
+First-run onboarding now lives in [docs/onboarding.md](docs/onboarding.md). New accounts land in a standalone onboarding gate before the signed-in shell, where they can add their website, production API base URL, auth mapping, and get an installable agent script tag in one flow.
+
 ## Landing page
 
 The marketing/landing site lives in the `landing/` submodule ([LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing)).

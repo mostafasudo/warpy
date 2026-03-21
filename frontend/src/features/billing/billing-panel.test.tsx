@@ -1,10 +1,16 @@
-/// <reference types="@testing-library/jest-dom" />
 import { beforeEach, describe, expect, it, jest } from "@jest/globals"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-import * as billingPanelModule from "./billing-panel"
+import "@testing-library/jest-dom"
+import { useCreateSubscriptionCheckout } from "@/mutations/use-create-subscription-checkout"
+import { useCreateTopupCheckout } from "@/mutations/use-create-topup-checkout"
+import { useOpenBillingPortal } from "@/mutations/use-open-billing-portal"
+import { useBillingSummaryQuery } from "@/queries/use-billing-summary"
+import { useNavigationStore } from "@/stores/navigation"
 import { useToastStore } from "@/stores/toast"
+import * as billingNavigationModule from "./billing-navigation"
+import { BillingPanel } from "./billing-panel"
 
 jest.mock("@/queries/use-billing-summary", () => ({
   useBillingSummaryQuery: jest.fn()
@@ -22,14 +28,16 @@ jest.mock("@/mutations/use-open-billing-portal", () => ({
   useOpenBillingPortal: jest.fn()
 }))
 
-const mockedUseBillingSummaryQuery = require("@/queries/use-billing-summary").useBillingSummaryQuery as jest.Mock
-const mockedUseCreateSubscriptionCheckout = require("@/mutations/use-create-subscription-checkout").useCreateSubscriptionCheckout as jest.Mock
-const mockedUseCreateTopupCheckout = require("@/mutations/use-create-topup-checkout").useCreateTopupCheckout as jest.Mock
-const mockedUseOpenBillingPortal = require("@/mutations/use-open-billing-portal").useOpenBillingPortal as jest.Mock
+const mockedUseBillingSummaryQuery = useBillingSummaryQuery as jest.Mock
+const mockedUseCreateSubscriptionCheckout = useCreateSubscriptionCheckout as jest.Mock
+const mockedUseCreateTopupCheckout = useCreateTopupCheckout as jest.Mock
+const mockedUseOpenBillingPortal = useOpenBillingPortal as jest.Mock
 
 describe("BillingPanel", () => {
   beforeEach(() => {
+    jest.restoreAllMocks()
     useToastStore.setState({ toasts: [] })
+    useNavigationStore.setState({ section: "billing", sidebarCollapsed: false })
     mockedUseBillingSummaryQuery.mockReturnValue({
       data: {
         plan: "basic",
@@ -52,7 +60,7 @@ describe("BillingPanel", () => {
     mockedUseCreateTopupCheckout.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
     mockedUseOpenBillingPortal.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
 
-    render(<billingPanelModule.BillingPanel />)
+    render(<BillingPanel />)
 
     expect(await screen.findByText("Billing")).not.toBeNull()
     expect(screen.getAllByText("Basic").length).toBeGreaterThan(0)
@@ -60,15 +68,18 @@ describe("BillingPanel", () => {
   })
 
   it("starts subscription checkout", async () => {
-    const mutateAsync = jest.fn(async (_plan: "basic" | "pro") => ({ url: "https://checkout.test/basic" }))
+    const mutateAsync = jest.fn(async (...args: Array<unknown>) => {
+      void args
+      return { url: "https://checkout.test/basic" }
+    })
     mockedUseCreateSubscriptionCheckout.mockReturnValue({ mutateAsync, isPending: false })
     mockedUseCreateTopupCheckout.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
     mockedUseOpenBillingPortal.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
 
-    const navigateSpy = jest.spyOn(billingPanelModule, "navigateToUrl").mockImplementation(() => {})
+    const navigateSpy = jest.spyOn(billingNavigationModule, "navigateToUrl").mockImplementation(() => {})
 
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    render(<billingPanelModule.BillingPanel />)
+    render(<BillingPanel />)
 
     await user.click(await screen.findByRole("button", { name: "Choose Pro" }))
     expect(mutateAsync).toHaveBeenCalledWith("pro")
@@ -76,17 +87,20 @@ describe("BillingPanel", () => {
   })
 
   it("starts top-up checkout and opens portal", async () => {
-    const topupMutate = jest.fn(async (_pkg: "1000" | "5000" | "10000") => ({ url: "https://checkout.test/topup" }))
+    const topupMutate = jest.fn(async (...args: Array<unknown>) => {
+      void args
+      return { url: "https://checkout.test/topup" }
+    })
     const portalMutate = jest.fn(async () => ({ url: "https://portal.test" }))
     mockedUseCreateSubscriptionCheckout.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
     mockedUseCreateTopupCheckout.mockReturnValue({ mutateAsync: topupMutate, isPending: false })
     mockedUseOpenBillingPortal.mockReturnValue({ mutateAsync: portalMutate, isPending: false })
 
-    const navigateSpy = jest.spyOn(billingPanelModule, "navigateToUrl").mockImplementation(() => {})
-    const openSpy = jest.spyOn(billingPanelModule, "openInNewTab").mockImplementation(() => null)
+    const navigateSpy = jest.spyOn(billingNavigationModule, "navigateToUrl").mockImplementation(() => {})
+    const openSpy = jest.spyOn(billingNavigationModule, "openInNewTab").mockImplementation(() => null)
 
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    render(<billingPanelModule.BillingPanel />)
+    render(<BillingPanel />)
 
     await user.click(await screen.findByRole("button", { name: "Buy 1,000 actions ($50)" }))
     expect(topupMutate).toHaveBeenCalledWith("1000")
@@ -117,8 +131,20 @@ describe("BillingPanel", () => {
     mockedUseCreateTopupCheckout.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
     mockedUseOpenBillingPortal.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
 
-    render(<billingPanelModule.BillingPanel />)
+    render(<BillingPanel />)
     expect(await screen.findByText("Billing")).not.toBeNull()
     expect(screen.queryByRole("button", { name: "Manage subscription" })).toBeNull()
+  })
+
+  it("routes contact sales to the contact tab", async () => {
+    mockedUseCreateSubscriptionCheckout.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
+    mockedUseCreateTopupCheckout.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
+    mockedUseOpenBillingPortal.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+
+    render(<BillingPanel />)
+
+    await user.click(await screen.findByRole("button", { name: "Contact sales" }))
+    expect(useNavigationStore.getState().section).toBe("contact")
   })
 })

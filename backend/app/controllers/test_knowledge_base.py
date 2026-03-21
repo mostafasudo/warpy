@@ -139,14 +139,19 @@ def test_toggle_requires_agent(client: TestClient):
     assert response.status_code == 404
 
 
-def test_toggle_requires_ready_docs(client: TestClient):
+def test_toggle_allows_enabling_without_ready_docs(client: TestClient):
     create_agent()
     response = client.put(
         "/knowledge-base/toggle",
         json={"enabled": True},
         headers=auth_headers(),
     )
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "documentCount": 0,
+        "readyDocumentCount": 0,
+    }
 
 
 def test_documents_are_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPatch):

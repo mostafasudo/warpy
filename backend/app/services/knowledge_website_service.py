@@ -496,19 +496,7 @@ def get_due_websites(session: Session, limit: int) -> list[tuple[Any, str]]:
     return [(website_id, website_user_id) for website_id, website_user_id in rows]
 
 
-def get_knowledge_base_status(session: Session, user_id: str) -> dict[str, Any]:
-    agent = session.scalar(select(Agent).where(Agent.user_id == user_id))
-    enabled = agent.knowledge_base_enabled if agent else False
-
-    file_count = session.scalar(
-        select(func.count()).select_from(KnowledgeDocument).where(
-            KnowledgeDocument.user_id == user_id,
-            KnowledgeDocument.source_kind == SOURCE_KIND_FILE,
-        )
-    ) or 0
-    website_count = session.scalar(
-        select(func.count()).select_from(KnowledgeWebsite).where(KnowledgeWebsite.user_id == user_id)
-    ) or 0
+def _get_ready_knowledge_source_count(session: Session, user_id: str) -> int:
     ready_file_count = session.scalar(
         select(func.count()).select_from(KnowledgeDocument).where(
             KnowledgeDocument.user_id == user_id,
@@ -527,14 +515,28 @@ def get_knowledge_base_status(session: Session, user_id: str) -> dict[str, Any]:
             ),
         )
     ) or 0
+    return int(ready_file_count) + int(ready_website_count)
 
-    ready_count = int(ready_file_count) + int(ready_website_count)
+
+def has_retrievable_knowledge_sources(session: Session, user_id: str) -> bool:
+    return _get_ready_knowledge_source_count(session, user_id) > 0
+
+
+def get_knowledge_base_status(session: Session, user_id: str) -> dict[str, Any]:
+    agent = session.scalar(select(Agent).where(Agent.user_id == user_id))
+    enabled = agent.knowledge_base_enabled if agent else False
+
+    file_count = session.scalar(
+        select(func.count()).select_from(KnowledgeDocument).where(
+            KnowledgeDocument.user_id == user_id,
+            KnowledgeDocument.source_kind == SOURCE_KIND_FILE,
+        )
+    ) or 0
+    website_count = session.scalar(
+        select(func.count()).select_from(KnowledgeWebsite).where(KnowledgeWebsite.user_id == user_id)
+    ) or 0
+    ready_count = _get_ready_knowledge_source_count(session, user_id)
     total_count = int(file_count) + int(website_count)
-
-    if ready_count == 0 and enabled and agent:
-        agent.knowledge_base_enabled = False
-        session.flush()
-        enabled = False
 
     return {"enabled": enabled, "document_count": total_count, "ready_document_count": ready_count}
 

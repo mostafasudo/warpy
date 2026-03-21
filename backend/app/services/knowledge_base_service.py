@@ -92,11 +92,6 @@ def toggle_knowledge_base(session: Session, user_id: str, enabled: bool) -> dict
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    if enabled:
-        summary = get_combined_knowledge_base_status(session, user_id)
-        if int(summary["ready_document_count"]) == 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Add at least one source first")
-
     agent.knowledge_base_enabled = enabled
     session.flush()
     return get_knowledge_base_status(session, user_id)

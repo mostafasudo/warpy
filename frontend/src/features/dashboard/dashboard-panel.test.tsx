@@ -1,8 +1,8 @@
-/// <reference types="@testing-library/jest-dom" />
 import { beforeEach, describe, expect, it, jest } from "@jest/globals"
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
+import "@testing-library/jest-dom"
 import { DashboardPanel } from "./dashboard-panel"
 import { useActivitySummaryQuery } from "@/queries/use-activity-summary"
 import { useAgentQuery } from "@/queries/use-agent"
@@ -101,7 +101,7 @@ describe("DashboardPanel", () => {
     expect(screen.getByTestId("overview-guided-setup")).not.toBeNull()
     expect(
       within(screen.getByTestId("overview-knowledge-card")).getByText(
-        "Optional. Add websites or documents so the agent can answer with your own sources."
+        "Add websites or documents so the agent can answer with your own sources."
       )
     ).not.toBeNull()
 
@@ -110,11 +110,21 @@ describe("DashboardPanel", () => {
   })
 
   it("pushes environment setup when the agent exists but no base URL is configured", async () => {
+    setOverviewMocks({
+      config: makeQuery({
+        data: {
+          baseUrl: { local: "", production: "" },
+          headers: {},
+        },
+      }),
+    })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
 
     render(<DashboardPanel />)
 
     expect(screen.getByText("Add an environment base URL")).not.toBeNull()
+    expect(screen.queryByText("Add an Authorization header next")).toBeNull()
+    expect(screen.queryByText("2 environments configured.")).toBeNull()
     expect(within(screen.getByTestId("overview-usage-insights")).getByRole("button", { name: "View all activity" })).not.toBeNull()
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Add environments" }))
     expect(useNavigationStore.getState().section).toBe("api")
@@ -134,7 +144,7 @@ describe("DashboardPanel", () => {
     render(<DashboardPanel />)
 
     expect(screen.getByText("Add an Authorization header next")).not.toBeNull()
-    expect(screen.getByText("1 header configured, but Authorization is still missing.")).not.toBeNull()
+    expect(screen.getByText("1 header configured, but Authorization is still missing for backend tools.")).not.toBeNull()
 
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Add authorization header" }))
     expect(useNavigationStore.getState().section).toBe("api")
@@ -204,10 +214,42 @@ describe("DashboardPanel", () => {
     expect(screen.getByText("Your agent is ready for first conversations")).not.toBeNull()
     expect(screen.queryByTestId("overview-guided-setup")).toBeNull()
     expect(screen.getByTestId("overview-opportunities")).not.toBeNull()
+    expect(
+      within(screen.getByTestId("overview-opportunities")).getByText(
+        "You already have 1 feature and 2 mapped actions. Add more to expand what the agent can do."
+      )
+    ).not.toBeNull()
     expect(within(screen.getByTestId("overview-opportunities")).getByText("1 knowledge source added and still processing.")).not.toBeNull()
+    expect(
+      within(screen.getByTestId("overview-opportunities")).getAllByRole("button").map((button) => button.textContent?.replace(/\s+/g, " ").trim())
+    ).toEqual(["Open features", "Open agent", "Open knowledge base"])
 
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Tune the agent" }))
     expect(useNavigationStore.getState().section).toBe("agent")
+  })
+
+  it("keeps knowledge sources optional when the feature is enabled but no sources exist yet", () => {
+    setOverviewMocks({
+      config: makeQuery({
+        data: {
+          baseUrl: { production: "https://api.example.com" },
+          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
+        },
+      }),
+      features: makeQuery({ data: [] }),
+      knowledgeBase: makeQuery({
+        data: { enabled: true, documentCount: 0, readyDocumentCount: 0 },
+      }),
+    })
+
+    render(<DashboardPanel />)
+
+    expect(
+      within(screen.getByTestId("overview-step-add-knowledge-sources")).getByText("Coming up")
+    ).not.toBeNull()
+    expect(
+      within(screen.getByTestId("overview-step-add-knowledge-sources")).queryByText("Done")
+    ).toBeNull()
   })
 
   it("encourages more feature work when conversations exist but no actions ran", async () => {
@@ -272,7 +314,7 @@ describe("DashboardPanel", () => {
     expect(screen.queryByText("5 conversations in the last 30 days")).toBeNull()
     expect(
       within(screen.getByTestId("overview-top-actions")).getByText(
-        "The actions people ask the widget to run most often. Bars compare the actions shown here."
+        "The actions people ask the widget to run most often."
       )
     ).not.toBeNull()
     expect(
@@ -280,6 +322,13 @@ describe("DashboardPanel", () => {
         "Knowledge base is enabled. Add websites or documents to make it useful."
       )
     ).not.toBeNull()
+    expect(
+      within(screen.getByTestId("overview-opportunities")).getByText(
+        "You already have 1 feature and 2 mapped actions. Add more to expand what the agent can do."
+      )
+    ).not.toBeNull()
+    expect(within(screen.getByTestId("overview-opportunities")).queryByText("Review activity")).toBeNull()
+    expect(within(screen.getByTestId("overview-opportunities")).queryByRole("button", { name: "View activity" })).toBeNull()
     expect(within(screen.getByTestId("overview-usage-insights")).queryByRole("button", { name: "View all activity" })).toBeNull()
 
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Review activity" }))

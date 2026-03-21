@@ -48,6 +48,7 @@ import { useRefreshKnowledgeWebsite } from "@/mutations/use-refresh-knowledge-we
 import { useToggleKnowledgeBase } from "@/mutations/use-toggle-knowledge-base"
 import { useUploadKnowledgeDocument } from "@/mutations/use-upload-knowledge-document"
 import { useBillingSummaryQuery } from "@/queries/use-billing-summary"
+import { useAgentQuery } from "@/queries/use-agent"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
 import { useKnowledgeDocumentsQuery } from "@/queries/use-knowledge-documents"
 import { useKnowledgeWebsitesQuery } from "@/queries/use-knowledge-websites"
@@ -328,6 +329,7 @@ export const KnowledgeBasePanel = () => {
   const [websiteUrl, setWebsiteUrl] = useState("")
 
   const billingQuery = useBillingSummaryQuery()
+  const agentQuery = useAgentQuery()
   const statusQuery = useKnowledgeBaseStatusQuery()
   const documentsQuery = useKnowledgeDocumentsQuery()
   const websitesQuery = useKnowledgeWebsitesQuery()
@@ -343,9 +345,11 @@ export const KnowledgeBasePanel = () => {
   const status = statusQuery.data
   const documents = documentsQuery.data?.items ?? []
   const websites = websitesQuery.data?.items ?? []
-  const canEnable =
-    documents.some((doc) => doc.status === "ready") ||
-    websites.some((website) => website.searchablePageCount > 0)
+  const hasAgent = Boolean(agentQuery.data)
+  const isMissingAgent =
+    agentQuery.error instanceof Error &&
+    agentQuery.error.message === "Agent not found"
+  const canToggleKnowledgeBase = hasAgent && !agentQuery.isPending
   const isUploadBlocked =
     billingQuery.data?.plan === "free" &&
     (billingQuery.data?.actionsRemaining ?? 0) <= 0
@@ -493,33 +497,28 @@ export const KnowledgeBasePanel = () => {
 
   const toggleSwitch = (
     <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2">
-      {canEnable ? (
-        <>
-          <Switch
-            checked={status?.enabled ?? false}
-            onCheckedChange={handleToggle}
-            disabled={toggleMutation.isPending}
-            data-testid="kb-toggle"
-          />
-          <span className="text-sm font-medium">
-            {status?.enabled ? "Enabled" : "Disabled"}
-          </span>
-        </>
+      {canToggleKnowledgeBase ? (
+        <Switch
+          checked={status?.enabled ?? false}
+          onCheckedChange={handleToggle}
+          disabled={toggleMutation.isPending}
+          data-testid="kb-toggle"
+        />
       ) : (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center">
               <Switch checked={false} disabled data-testid="kb-toggle" />
-              <span className="text-sm font-medium text-muted-foreground">
-                Disabled
-              </span>
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            Add at least one ready source to enable
+            Create the agent first to control knowledge retrieval
           </TooltipContent>
         </Tooltip>
       )}
+      <span className="text-sm font-medium">
+        {status?.enabled ? "Enabled" : "Disabled"}
+      </span>
     </div>
   )
 
@@ -542,8 +541,9 @@ export const KnowledgeBasePanel = () => {
               <div className="space-y-1">
                 <p className="text-sm font-semibold">Enable knowledge base</p>
                 <p className="text-xs text-muted-foreground">
-                  Your agent will use any ready documents and websites you add
-                  here.
+                  {isMissingAgent
+                    ? "Create the agent first, then choose whether it should use your knowledge sources."
+                    : "Your agent will use any ready documents and websites you add here."}
                 </p>
               </div>
               {toggleSwitch}

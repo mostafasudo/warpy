@@ -151,6 +151,72 @@ describe("apiClient", () => {
     )
   })
 
+  it("supports onboarding operations", async () => {
+    const responses = [
+      jsonResponse({ status: "not_started", shouldShow: true, nextStep: "website" }),
+      jsonResponse({ status: "in_progress", shouldShow: true, nextStep: "website" }),
+      jsonResponse({
+        id: "website-1",
+        inputUrl: "https://example.com",
+        scopeUrl: "https://example.com",
+        status: "processing",
+        errorMessage: null,
+        pageCount: 0,
+        readyPageCount: 0,
+        failedPageCount: 0,
+        searchablePageCount: 0,
+        lastCrawledAt: null,
+        lastSuccessfulCrawledAt: null,
+        nextRefreshAt: null,
+        createdAt: "2026-03-21T00:00:00Z",
+        updatedAt: "2026-03-21T00:00:00Z"
+      }),
+      jsonResponse({
+        id: "agent-1",
+        userId: "user-1",
+        createdAt: "2026-03-21T00:00:00Z",
+        updatedAt: "2026-03-21T00:00:00Z"
+      })
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await expect(apiClient.getOnboardingState()).resolves.toEqual({
+      status: "not_started",
+      shouldShow: true,
+      nextStep: "website"
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/onboarding/state", "http://api.test"), expect.any(Object))
+
+    await expect(apiClient.startOnboarding()).resolves.toEqual({
+      status: "in_progress",
+      shouldShow: true,
+      nextStep: "website"
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/onboarding/start", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await expect(apiClient.addOnboardingWebsite({ url: "example.com" })).resolves.toEqual(
+      expect.objectContaining({ id: "website-1", scopeUrl: "https://example.com" })
+    )
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/onboarding/website", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await expect(apiClient.finalizeOnboarding()).resolves.toEqual(
+      expect.objectContaining({ id: "agent-1", userId: "user-1" })
+    )
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/onboarding/finalize", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+  })
+
   it("applies trimmed search term", async () => {
     const fetchSpy = jest.spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
     fetchSpy.mockImplementation(() => Promise.resolve(jsonResponse({ items: [], page: 1, pageSize: 10, total: 0 })))

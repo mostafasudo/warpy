@@ -203,7 +203,7 @@ const getStatusHeader = ({
     return {
       eyebrow: "Setup incomplete",
       title: "Add an Authorization header next",
-      description: `${environmentCount} environment${environmentCount === 1 ? "" : "s"} ${environmentCount === 1 ? "is" : "are"} ready, but requests still need authorization before the agent can act safely.`,
+      description: `${environmentCount} environment${environmentCount === 1 ? "" : "s"} ${environmentCount === 1 ? "is" : "are"} ready, but requests still need authorization for the agent to run backend tools.`,
       primaryAction: { label: "Add authorization header", section: "api" },
     }
   }
@@ -212,7 +212,7 @@ const getStatusHeader = ({
     return {
       eyebrow: "Setup incomplete",
       title: "Add your first feature",
-      description: "The agent can connect and authenticate now. Group the actions you want it to run into features next.",
+      description: "The agent can connect and use authenticated backend tools now. Group the actions you want it to run into features next.",
       primaryAction: { label: "Add features", section: "features" },
     }
   }
@@ -230,7 +230,7 @@ const getStatusHeader = ({
     return {
       eyebrow: "Ready to go live",
       title: "Your agent is ready for first conversations",
-      description: "Core setup is complete. Tune how the agent behaves, then optionally add knowledge sources before sending traffic.",
+      description: "Core setup is complete. Keep expanding features and tools, tune how the agent behaves, then add knowledge sources before sending traffic.",
       primaryAction: { label: "Tune the agent", section: "agent" },
     }
   }
@@ -264,7 +264,7 @@ const getActivityNarrative = ({
     if (coreReady) {
       return {
         title: "No conversations yet",
-        description: "Core setup is complete. Tune the agent, add optional knowledge, and send traffic when you are ready.",
+        description: "Core setup is complete. Tune the agent, add knowledge, and send traffic when you are ready.",
       }
     }
     return {
@@ -318,8 +318,11 @@ const getKnowledgeSummary = ({
   if (enabled) {
     return "Knowledge base is enabled. Add websites or documents to make it useful."
   }
-  return "Optional. Add websites or documents so the agent can answer with your own sources."
+  return "Add websites or documents so the agent can answer with your own sources."
 }
+
+const getConfiguredEnvironmentCount = (baseUrls: Record<string, string> | undefined) =>
+  Object.values(baseUrls ?? {}).filter((value) => value.trim().length > 0).length
 
 export const DashboardPanel = () => {
   const configQuery = useConfigQuery()
@@ -338,7 +341,7 @@ export const DashboardPanel = () => {
   const hasAgent = Boolean(agentQuery.data)
   const hasSetupError = configQuery.isError || featuresQuery.isError || (agentQuery.isError && !isMissingAgent)
   const isSetupLoading = configQuery.isPending || featuresQuery.isPending || agentQuery.isPending
-  const environmentCount = Object.keys(config?.baseUrl ?? {}).length
+  const environmentCount = getConfiguredEnvironmentCount(config?.baseUrl)
   const headerEntries = Object.entries(config?.headers ?? {})
   const headerCount = headerEntries.length
   const hasAuthorizationHeader = headerEntries.some(([name]) => name.trim().toLowerCase() === "authorization")
@@ -382,6 +385,7 @@ export const DashboardPanel = () => {
     documentCount: knowledgeBaseStatus?.documentCount ?? 0,
     readyDocumentCount: knowledgeBaseStatus?.readyDocumentCount ?? 0,
   })
+  const hasKnowledgeSources = (knowledgeBaseStatus?.documentCount ?? 0) > 0
   const showActivityInsightsCta = statusHeader.primaryAction.section !== "activity"
 
   const setupSteps: StepCardProps[] = [
@@ -402,10 +406,10 @@ export const DashboardPanel = () => {
     {
       title: "Add headers",
       description: headerCount === 0
-        ? "No headers yet. Add Authorization at minimum so requests can authenticate."
+        ? "No headers yet. Add Authorization so the agent can run backend tools."
         : hasAuthorizationHeader
           ? `${headerCount} header${headerCount === 1 ? "" : "s"} configured, including Authorization.`
-          : `${headerCount} header${headerCount === 1 ? "" : "s"} configured, but Authorization is still missing.`,
+          : `${headerCount} header${headerCount === 1 ? "" : "s"} configured, but Authorization is still missing for backend tools.`,
       tone: hasAuthorizationHeader ? "done" : hasAgent && environmentCount > 0 ? "current" : "upcoming",
       icon: <Braces className="h-5 w-5" />,
     },
@@ -436,7 +440,7 @@ export const DashboardPanel = () => {
     {
       title: "Add knowledge sources",
       description: knowledgeSummary,
-      tone: knowledgeBaseStatus?.enabled || (knowledgeBaseStatus?.documentCount ?? 0) > 0 ? "done" : coreReady ? "optional" : "upcoming",
+      tone: hasKnowledgeSources ? "done" : coreReady ? "optional" : "upcoming",
       icon: <BookOpen className="h-5 w-5" />,
     },
   ]
@@ -452,9 +456,9 @@ export const DashboardPanel = () => {
       label: "Headers",
       value: headerCount.toLocaleString(),
       helper: hasAuthorizationHeader
-        ? "Authorization is in place."
+        ? "Authorization is in place for backend tools."
         : headerCount > 0
-          ? "Authorization is still missing."
+          ? "Authorization is still missing for backend tools."
           : "No headers configured yet.",
       icon: <Braces className="h-5 w-5" />,
     },
@@ -474,6 +478,14 @@ export const DashboardPanel = () => {
 
   const opportunities: OpportunityCardProps[] = [
     {
+      title: "Add more features and tools",
+      description: configuredActionCount > 0
+        ? `You already have ${featureCount} feature${featureCount === 1 ? "" : "s"} and ${configuredActionCount} mapped action${configuredActionCount === 1 ? "" : "s"}. Add more to expand what the agent can do.`
+        : "Keep expanding what the agent can do by adding more features and backend tools.",
+      ctaLabel: "Open features",
+      onClick: () => setSection("features"),
+    },
+    {
       title: "Tune the agent",
       description: conversationCount > 0
         ? "Use real conversations to sharpen instructions, safety, and behavior."
@@ -486,14 +498,6 @@ export const DashboardPanel = () => {
       description: knowledgeSummary,
       ctaLabel: "Open knowledge base",
       onClick: () => setSection("knowledge-base"),
-    },
-    {
-      title: "Review activity",
-      description: conversationCount > 0
-        ? "Open the full activity view to inspect recent conversations and actions."
-        : "When conversations start coming in, this is where you will inspect them.",
-      ctaLabel: "View activity",
-      onClick: () => setSection("activity"),
     },
   ]
 
@@ -622,10 +626,7 @@ export const DashboardPanel = () => {
         <section className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-5" data-testid="overview-usage-insights">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <MessageCircle className="h-4 w-4 text-primary" />
-                Usage insights
-              </div>
+              <div className="text-sm font-semibold">Usage insights</div>
               <p className="text-sm text-muted-foreground">
                 Conversations and actions from the last 30 days, with the top actions people use most.
               </p>
@@ -671,7 +672,7 @@ export const DashboardPanel = () => {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Top actions</p>
                   <p className="text-sm text-muted-foreground">
-                    The actions people ask the widget to run most often. Bars compare the actions shown here.
+                    The actions people ask the widget to run most often.
                   </p>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -718,10 +719,7 @@ export const DashboardPanel = () => {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <section className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-5" data-testid="overview-opportunities">
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Keep improving
-                </div>
+                <div className="text-sm font-semibold">Keep improving</div>
                 <p className="text-sm text-muted-foreground">
                   Core setup is complete. These are the best next moves based on the current account state.
                 </p>
@@ -735,12 +733,9 @@ export const DashboardPanel = () => {
 
             <section className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-5" data-testid="overview-readiness-strip">
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Activity className="h-4 w-4 text-primary" />
-                  Readiness strip
-                </div>
+                <div className="text-sm font-semibold">Core setup</div>
                 <p className="text-sm text-muted-foreground">
-                  Keep the core setup visible while usage becomes the main story.
+                  Quick view of the setup that powers your agent.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -764,10 +759,7 @@ export const DashboardPanel = () => {
 
         <section className="space-y-4 rounded-2xl border border-dashed border-border/70 bg-muted/10 p-5" data-testid="overview-secondary-navigation">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Activity className="h-4 w-4 text-primary" />
-              Quick access
-            </div>
+            <div className="text-sm font-semibold">Quick access</div>
             <p className="text-sm text-muted-foreground">
               Jump straight to the area you want to work on next.
             </p>

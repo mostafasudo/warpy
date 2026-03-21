@@ -26,9 +26,8 @@ def test_get_settings_cached(monkeypatch):
     assert cached is same
 
 
-def test_unstructured_api_key_default():
+def test_unstructured_api_key_default(monkeypatch):
     get_settings.cache_clear()
-    settings = Settings()
+    monkeypatch.delenv("UNSTRUCTURED_API_KEY", raising=False)
+    settings = Settings(_env_file=None)
     assert settings.unstructured_api_key == ""
-
-

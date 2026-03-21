@@ -11,9 +11,10 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import func, select
 from starlette.websockets import WebSocketDisconnect
 
+from app.controllers.widget import build_widget_agent_runtime
 from app.core.llm_config import LLMConfig
 from app.main import create_app
-from app.models import BillingAccount, BillingActionConsumption, Conversation, ConversationAction, Message
+from app.models import Agent, BillingAccount, BillingActionConsumption, Conversation, ConversationAction, DocumentStatus, KnowledgeDocument, Message
 from app.schemas.auth import ClerkSession
 from app.services.agent_chain import StepResult
 from app.services.billing_service import get_or_create_billing_account
@@ -156,6 +157,45 @@ def test_widget_config_returns_headers(client: TestClient):
     assert body["widgetInputPlaceholder"] == "Ask Warpy…"
     assert body["widgetSuggestionsEnabled"] is False
     assert body["widgetStarterSuggestions"] == []
+
+
+def test_build_widget_agent_runtime_hides_knowledge_base_without_searchable_sources():
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        agent = Agent(user_id="user_1", knowledge_base_enabled=True)
+        session.add(agent)
+        session.flush()
+
+        runtime = build_widget_agent_runtime(session, agent)
+
+    assert runtime.executor_config["knowledge_base_enabled"] is False
+
+
+def test_build_widget_agent_runtime_enables_knowledge_base_when_searchable_source_exists():
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        agent = Agent(user_id="user_1", knowledge_base_enabled=True)
+        session.add(agent)
+        session.flush()
+        session.add(
+            KnowledgeDocument(
+                user_id="user_1",
+                file_name="guide.md",
+                file_type=".md",
+                file_size=32,
+                source_kind="file",
+                status=DocumentStatus.ready,
+                chunk_count=1,
+                is_searchable=True,
+            )
+        )
+        session.flush()
+
+        runtime = build_widget_agent_runtime(session, agent)
+
+    assert runtime.executor_config["knowledge_base_enabled"] is True
 
 
 def test_widget_session_returns_dynamic_suggestions(client: TestClient, monkeypatch: pytest.MonkeyPatch):

@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { getApiUrl } from "@/api/client"
+import { buildScriptSnippet, getWidgetCdnUrl, normalizeCustomerBaseUrl } from "@/lib/widget-install"
 import { useAgentQuery } from "@/queries/use-agent"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
@@ -34,16 +35,6 @@ import type { WidgetBehavior, WidgetInstallFramework, WidgetInstallPackageManage
 import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
 import { useAgentCustomSystemPromptQuery } from "@/queries/use-agent-custom-system-prompt"
 import { useAgentUserRateLimitsQuery } from "@/queries/use-agent-user-rate-limits"
-
-declare const __VITE_WIDGET_CDN_URL__: string | undefined
-
-const getWidgetCdnUrl = (): string => {
-  if (typeof __VITE_WIDGET_CDN_URL__ !== "undefined") return __VITE_WIDGET_CDN_URL__
-  if (typeof process !== "undefined" && process.env?.VITE_WIDGET_CDN_URL) {
-    return process.env.VITE_WIDGET_CDN_URL
-  }
-  return ""
-}
 
 type EnvironmentTabsProps = {
   environments: string[]
@@ -109,16 +100,6 @@ const PACKAGE_MANAGER_OPTIONS: Array<{ value: WidgetInstallPackageManager; label
   { value: "yarn", label: "yarn" }
 ]
 
-const getNormalizedBaseUrl = (baseUrl: string) => baseUrl.trim()
-
-const buildScriptSnippet = (agentId: string, baseUrl: string, scriptSrc: string) => {
-  const normalizedBaseUrl = getNormalizedBaseUrl(baseUrl)
-  const baseUrlAttribute = normalizedBaseUrl ? `\n  data-base-url="${normalizedBaseUrl}"` : ""
-  return `<script src="${scriptSrc}"
-  data-agent-id="${agentId}"${baseUrlAttribute}
-></script>`
-}
-
 const buildInstallCommand = (packageManager: WidgetInstallPackageManager) => {
   if (packageManager === "pnpm") return "pnpm add @warpy-ai/widget"
   if (packageManager === "yarn") return "yarn add @warpy-ai/widget"
@@ -138,7 +119,7 @@ const buildUsageSnippet = ({
   scriptSrc: string
   scriptSnippet: string
 }) => {
-  const normalizedBaseUrl = getNormalizedBaseUrl(baseUrl)
+  const normalizedBaseUrl = normalizeCustomerBaseUrl(baseUrl)
   const baseUrlProp = normalizedBaseUrl ? `\n  baseUrl="${normalizedBaseUrl}"` : ""
   const baseUrlObjectEntry = normalizedBaseUrl ? `\n    baseUrl: "${normalizedBaseUrl}",` : ""
   if (framework === "script") return scriptSnippet

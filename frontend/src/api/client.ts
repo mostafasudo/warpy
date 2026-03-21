@@ -30,6 +30,7 @@ import type {
   KnowledgeWebsiteDetailResponse,
   KnowledgeWebsiteListResponse,
   KnowledgeWebsiteResponse,
+  OnboardingStateResponse,
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -182,6 +183,7 @@ export type {
   KnowledgeWebsiteDetailResponse,
   KnowledgeWebsiteListResponse,
   KnowledgeWebsiteResponse,
+  OnboardingStateResponse,
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
@@ -260,6 +262,21 @@ export const apiClient = {
   getAgent: () => request<AgentResponse>("/agent"),
   createAgent: () =>
     request<AgentResponse>("/agent", {
+      method: "POST",
+    }),
+  getOnboardingState: () => request<OnboardingStateResponse>("/onboarding/state"),
+  startOnboarding: () =>
+    request<OnboardingStateResponse>("/onboarding/start", {
+      method: "POST",
+    }),
+  addOnboardingWebsite: (payload: KnowledgeWebsiteCreate) =>
+    request<KnowledgeWebsiteResponse>("/onboarding/website", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      timeoutMs: 30000,
+    }),
+  finalizeOnboarding: () =>
+    request<AgentResponse>("/onboarding/finalize", {
       method: "POST",
     }),
   getAgentWidgetSecurity: () => request<WidgetSecurityResponse>("/agent/widget-security"),

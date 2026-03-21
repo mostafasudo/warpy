@@ -181,6 +181,16 @@ class BillingActionConsumption(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class UserOnboardingState(Base):
+    __tablename__ = "user_onboarding_states"
+
+    user_id = Column(Text, primary_key=True)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class Tool(Base):
     __tablename__ = "tools"
     __table_args__ = (
@@ -250,7 +260,7 @@ class Agent(Base):
     widget_install_package_manager = Column(Text, nullable=False, server_default="npm")
     widget_security_disclosure_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     frontend_capability_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
-    knowledge_base_enabled = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    knowledge_base_enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     custom_user_system_prompt = Column(
         Text,
         nullable=False,

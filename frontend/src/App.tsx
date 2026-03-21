@@ -1,4 +1,4 @@
-import { Shell } from "@/components/shell"
+import { SignedInApp } from "@/components/signed-in-app"
 import { SignedInBoundary, SignedOutCard } from "@/components/signed-out-card"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ToastContainer } from "@/components/toast-container"
@@ -9,7 +9,7 @@ function App() {
       <main className="min-h-screen bg-background text-foreground">
         <SignedOutCard />
         <SignedInBoundary>
-          <Shell />
+          <SignedInApp />
         </SignedInBoundary>
       </main>
       <ToastContainer />

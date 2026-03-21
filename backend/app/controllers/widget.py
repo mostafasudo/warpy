@@ -33,6 +33,7 @@ from ..services.agent_chain import AgentExecutor
 from ..services.openai_responses_ws import OpenAIResponsesTransportError, OpenAIResponsesWebSocketSession
 from ..services.agent_service import build_agent_executor_config
 from ..services.billing_service import consume_actions_for_tool_results, get_billing_actions_summary
+from ..services.knowledge_website_service import has_retrievable_knowledge_sources
 from ..services.transcription_service import transcribe_audio
 from ..workers.queue import get_redis_connection
 from ..services.widget_service import (
@@ -411,7 +412,12 @@ def build_logged_tool_calls(tool_calls: list) -> list[ToolCallForLog]:
     return logged_calls
 
 
-def build_widget_agent_runtime(agent) -> WidgetAgentRuntime:
+def build_widget_agent_runtime(session: Session, agent) -> WidgetAgentRuntime:
+    executor_config = dict(build_agent_executor_config(agent))
+    executor_config["knowledge_base_enabled"] = (
+        bool(executor_config.get("knowledge_base_enabled"))
+        and has_retrievable_knowledge_sources(session, agent.user_id)
+    )
     return WidgetAgentRuntime(
         id=agent.id,
         user_id=agent.user_id,
@@ -419,7 +425,7 @@ def build_widget_agent_runtime(agent) -> WidgetAgentRuntime:
         user_rate_limit_enabled=agent.user_rate_limit_enabled,
         user_rate_limit_daily=agent.user_rate_limit_daily,
         user_rate_limit_monthly=agent.user_rate_limit_monthly,
-        executor_config=dict(build_agent_executor_config(agent)),
+        executor_config=executor_config,
     )
 
 
@@ -542,7 +548,7 @@ def preload_widget_request(
                 if not conversation:
                     raise WidgetRequestFailure("CONVERSATION_NOT_FOUND", "Conversation not found")
                 resolved_conversation_id = conversation.id
-            resolved_agent = build_widget_agent_runtime(agent_record)
+            resolved_agent = build_widget_agent_runtime(session, agent_record)
         else:
             if payload.agent_id != resolved_agent.id:
                 raise WidgetRequestFailure("INVALID_REQUEST", "Invalid widget session request")

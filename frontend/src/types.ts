@@ -13,6 +13,15 @@ export type ConfigResponse = {
   headers: HeaderConfig;
 };
 
+export type OnboardingStatus = "not_started" | "in_progress" | "completed" | "not_applicable";
+export type OnboardingStep = "website" | "baseUrl" | "auth" | "agent";
+
+export type OnboardingStateResponse = {
+  status: OnboardingStatus;
+  shouldShow: boolean;
+  nextStep: OnboardingStep;
+};
+
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ToolParameters = {

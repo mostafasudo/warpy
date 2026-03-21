@@ -11,6 +11,7 @@ import { useDeleteKnowledgeWebsite } from "@/mutations/use-delete-knowledge-webs
 import { useRefreshKnowledgeWebsite } from "@/mutations/use-refresh-knowledge-website"
 import { useToggleKnowledgeBase } from "@/mutations/use-toggle-knowledge-base"
 import { useUploadKnowledgeDocument } from "@/mutations/use-upload-knowledge-document"
+import { useAgentQuery } from "@/queries/use-agent"
 import { useBillingSummaryQuery } from "@/queries/use-billing-summary"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
 import { useKnowledgeDocumentContentQuery } from "@/queries/use-knowledge-document-content"
@@ -49,6 +50,10 @@ jest.mock("@/stores/toast", () => {
 jest.mock("@/queries/use-billing-summary", () => ({
   useBillingSummaryQuery: jest.fn(),
   billingSummaryQueryKey: ["billing", "summary"],
+}))
+
+jest.mock("@/queries/use-agent", () => ({
+  useAgentQuery: jest.fn(),
 }))
 
 jest.mock("@/queries/use-knowledge-base-status", () => ({
@@ -101,6 +106,8 @@ jest.mock("@/mutations/use-toggle-knowledge-base", () => ({
 
 const mockedUseBillingSummaryQuery =
   useBillingSummaryQuery as unknown as jest.Mock
+const mockedUseAgentQuery =
+  useAgentQuery as unknown as jest.Mock
 const mockedUseKnowledgeBaseStatusQuery =
   useKnowledgeBaseStatusQuery as unknown as jest.Mock
 const mockedUseKnowledgeDocumentsQuery =
@@ -184,6 +191,11 @@ describe("KnowledgeBasePanel", () => {
     mockedUseBillingSummaryQuery.mockReturnValue({
       data: { plan: "free", actionsRemaining: 50 },
       isLoading: false,
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-1", userId: "user-1" },
+      isPending: false,
+      error: null,
     })
     mockedUseKnowledgeBaseStatusQuery.mockReturnValue({
       isLoading: false,
@@ -299,7 +311,7 @@ describe("KnowledgeBasePanel", () => {
     ).toBeNull()
   })
 
-  it("keeps toggle disabled when no ready sources exist", async () => {
+  it("keeps the toggle available even when no ready sources exist", async () => {
     mockedUseKnowledgeBaseStatusQuery.mockReturnValue({
       isLoading: false,
       data: { enabled: false, documentCount: 1, readyDocumentCount: 0 },
@@ -313,8 +325,24 @@ describe("KnowledgeBasePanel", () => {
 
     expect((await screen.findByTestId("kb-toggle")) as HTMLButtonElement).toHaveProperty(
       "disabled",
+      false,
+    )
+  })
+
+  it("disables the toggle until the agent exists", async () => {
+    mockedUseAgentQuery.mockReturnValue({
+      data: null,
+      isPending: false,
+      error: new Error("Agent not found"),
+    })
+
+    render(<KnowledgeBasePanel />, { wrapper: createWrapper() })
+
+    expect((await screen.findByTestId("kb-toggle")) as HTMLButtonElement).toHaveProperty(
+      "disabled",
       true,
     )
+    expect(screen.getByText("Create the agent first, then choose whether it should use your knowledge sources.")).toBeTruthy()
   })
 
   it("enables toggle when a ready website exists", async () => {

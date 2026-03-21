@@ -10,17 +10,11 @@ import { useCreateSubscriptionCheckout } from "@/mutations/use-create-subscripti
 import { useCreateTopupCheckout } from "@/mutations/use-create-topup-checkout"
 import { useOpenBillingPortal } from "@/mutations/use-open-billing-portal"
 import { useBillingSummaryQuery } from "@/queries/use-billing-summary"
+import { navigateToUrl, openInNewTab } from "./billing-navigation"
 import { cn } from "@/lib/utils"
+import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { BillingPlan } from "@/types"
-
-export const navigateToUrl = (url: string) => {
-  window.location.assign(url)
-}
-
-export const openInNewTab = (url: string) => {
-  window.open(url, "_blank", "noopener,noreferrer")
-}
 
 const planLabel: Record<BillingPlan, string> = {
   free: "Free",
@@ -62,6 +56,7 @@ const PlanCard = ({
 
 export const BillingPanel = () => {
   const addToast = useToastStore(toastSelectors.addToast)
+  const setSection = useNavigationStore(navigationSelectors.setSection)
   const { data, isPending } = useBillingSummaryQuery()
   const subscriptionCheckout = useCreateSubscriptionCheckout()
   const topupCheckout = useCreateTopupCheckout()
@@ -243,7 +238,15 @@ export const BillingPanel = () => {
           </Button>
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          Enterprise plans are custom. Contact sales to set up flexible pricing and action limits.
+          Enterprise plans are custom.{" "}
+          <button
+            type="button"
+            className="font-medium text-foreground underline underline-offset-4"
+            onClick={() => setSection("contact")}
+          >
+            Contact sales
+          </button>{" "}
+          to set up flexible pricing and action limits.
         </p>
       </div>
     </PanelShell>

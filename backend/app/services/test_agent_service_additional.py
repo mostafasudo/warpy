@@ -7,7 +7,7 @@ from app.core.agent_custom_system_prompt import DEFAULT_CUSTOM_USER_SYSTEM_PROMP
 from app.core import database
 from app.core.config import get_settings
 from app.models import Agent, Base
-from app.services.agent_service import build_agent_executor_config, create_agent
+from app.services.agent_service import build_agent_executor_config, create_agent, get_or_create_agent
 
 
 def setup_session(monkeypatch: pytest.MonkeyPatch):
@@ -36,7 +36,7 @@ def test_build_agent_executor_config_defaults_without_agent():
     config = build_agent_executor_config(None)
     assert config == {
         "frontend_capability_enabled": True,
-        "knowledge_base_enabled": False,
+        "knowledge_base_enabled": True,
         "widget_suggestions_enabled": False,
         "custom_user_system_prompt": DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
     }
@@ -47,10 +47,31 @@ def test_build_agent_executor_config_defaults_transient_agent_fields():
     config = build_agent_executor_config(agent)
     assert config == {
         "frontend_capability_enabled": True,
-        "knowledge_base_enabled": False,
+        "knowledge_base_enabled": True,
         "widget_suggestions_enabled": False,
         "custom_user_system_prompt": DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
     }
+
+
+def test_create_agent_defaults_knowledge_base_enabled(monkeypatch: pytest.MonkeyPatch):
+    engine = setup_session(monkeypatch)
+    try:
+        with database.session_scope() as session:
+            agent = create_agent(session, "user")
+            assert agent.knowledge_base_enabled is True
+    finally:
+        engine.dispose()
+
+
+def test_get_or_create_agent_reuses_existing_row(monkeypatch: pytest.MonkeyPatch):
+    engine = setup_session(monkeypatch)
+    try:
+        with database.session_scope() as session:
+            created = create_agent(session, "user")
+            reused = get_or_create_agent(session, "user")
+            assert reused.id == created.id
+    finally:
+        engine.dispose()
 
 
 def test_build_agent_executor_config_uses_agent_values():

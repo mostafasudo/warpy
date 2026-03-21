@@ -22,33 +22,11 @@ const DiscordLogo = () => (
 )
 
 export const ContactPanel = () => (
-  <PanelShell title="Contact Us" description="Reach our support team by email, in Discord, or on a call.">
+  <PanelShell title="Contact Us" description="Reach our team by email, in Discord, or book a call.">
     <div className="space-y-4">
       <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
         <p className="text-sm text-muted-foreground">
-          For all support inquiries, email us at{" "}
-          <a className="font-medium text-foreground underline underline-offset-4" href={`mailto:${supportEmail}`}>
-            {supportEmail}
-          </a>
-          {" "}or join our{" "}
-          <a
-            className="font-medium text-foreground underline underline-offset-4"
-            href={discordUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Discord
-          </a>
-          {" "}or{" "}
-          <a
-            className="font-medium text-foreground underline underline-offset-4"
-            href={bookCallUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            book a call
-          </a>
-          .
+          For all support inquiries, email us at {supportEmail} or join our Discord or book a call.
         </p>
       </div>
       <div className="flex flex-wrap gap-3">
