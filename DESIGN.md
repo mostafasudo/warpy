@@ -7,6 +7,8 @@
 **Brand Archetype: The Adaptive Architect**  
 Warpy is a precision engine, not a chatty assistant. It combines the visionary capability of The Magician (generating UI from nothing) with the structural rigor of The Sage (analyzing deep data).
 
+**Vibe:** Futuristic, advanced tech—wormholes and black holes. Warpy bends space to get you where you need to go.
+
 ### Core Values & Tone
 
 - **Minimal Intrusion:** The widget must be as vanilla and minimal as possible. It must avoid being invasive to the user's dashboard and styling. Warpy overlays, morphs, and acts, but never disrupts or overwrites the host product experience.
@@ -40,6 +42,7 @@ Warpy is a precision engine, not a chatty assistant. It combines the visionary c
 
 ### Secondary Taglines:
 
+- "Warp your UI to match what the user wants."
 - "Static is Dead. Go Fluid."
 - "Your Dashboard, Unlocked."
 - "From Read-Only to Real-Time."
