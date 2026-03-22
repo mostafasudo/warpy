@@ -1,6 +1,6 @@
 import { type ReactNode } from "react"
 
-import { Activity, ArrowRight, BookOpen, Braces, Link2, MessageCircle, Network, RefreshCw, Sparkles } from "lucide-react"
+import { Activity, ArrowRight, BookOpen, Braces, Link2, MessageCircle, Network, RefreshCw, Sparkles, Workflow } from "lucide-react"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Badge } from "@/components/ui/badge"
@@ -472,7 +472,7 @@ export const DashboardPanel = () => {
       label: "Mapped actions",
       value: configuredActionCount.toLocaleString(),
       helper: configuredActionCount > 0 ? "Real actions are available." : "Add actions inside your features next.",
-      icon: <Activity className="h-5 w-5" />,
+      icon: <Workflow className="h-5 w-5" />,
     },
   ]
 
