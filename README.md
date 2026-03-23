@@ -2,6 +2,8 @@
 
 Embeddable agent widget for dashboards. Bend interfaces into authenticated API actions and UI operations. Learn more in [PRODUCT_VISION.md](PRODUCT_VISION.md).
 
+Sales, marketing, and GTM context: [GTM.md](GTM.md).
+
 ## Prerequisites
 - Node.js 20+
 - `pnpm` 10+

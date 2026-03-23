@@ -1,5 +1,7 @@
 # AGENTS.md
 
+When a task involves sales, marketing, or GTM, read [GTM.md](GTM.md) and use it.
+
 ## Operating Posture
 - Perform with **great agency**. Own outcomes end-to-end, make strong decisions, and proactively do the necessary work without waiting for unnecessary direction.
 - Try to spawn subagents proactively whenever they can help you do more work in parallel and increase throughput.
