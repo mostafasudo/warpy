@@ -1,6 +1,6 @@
 # Warpy
 
-Embeddable agent widget for dashboards. Bend interfaces into authenticated API actions and UI operations. Learn more in [PRODUCT](PRODUCT).
+Embeddable agent widget for dashboards. Bend interfaces into authenticated API actions and UI operations. Learn more in [PRODUCT](PRODUCT.md).
 
 Sales, marketing, and GTM context: [GTM.md](GTM.md).
 
