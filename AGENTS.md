@@ -24,9 +24,10 @@ When a task involves sales, marketing, or GTM, read [GTM.md](GTM.md) and use it.
 4. Run the full frontend and backend testing sweep
 5. Run the code review tool/skill for a careful review with `/review`
 6. If there are review comments to address, apply `docs/receiving-code-review.md` before making those changes
-7. Call other relevant skills such as `/browse`, `/qa`, `/design-review`, `/retro`, and `/document-release` when they materially improve the outcome and keep documentation up to date
+7. **Manual QA (`/qa`):** Confirm the feature was actually built and does what it should. Test manually end to end: follow `docs/chrome-cdp.md`, drive Chrome, and click through the full flow yourself—do not rely on automated tests alone. While doing so, tail Docker Compose logs for `warpy-frontend`, `warpy-backend`, and `warpy-worker` (names may include a suffix such as `-1`) and verify traffic, jobs, and errors match what you expect.
+8. Call other relevant skills such as `/browse`, `/design-review`, `/retro`, and `/document-release` when they materially improve the outcome and keep documentation up to date
 
-When invoking these skills, act with agency: make decisions yourself, pick what you recommend, and minimize questions to the user—reserve questions only for truly important choices.
+When moving through these steps and invoking those skills, act with agency: make decisions yourself, pick what you recommend, and minimize questions to the user—reserve questions only for truly critical choices.
 
 ## What is Warpy
 Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
