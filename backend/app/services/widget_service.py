@@ -6,9 +6,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_info, log_warning
-from ..models import Agent, AuthType, Conversation, Message, SessionHeader, WidgetRun, WidgetRunStatus
+from ..models import Agent, AuthType, Conversation, Message, SessionHeader, StorageSource, WidgetRun, WidgetRunStatus
 from ..schemas.widget import (
     SessionHeaderConfig,
+    WidgetAuthConfig,
     WIDGET_SUGGESTION_MAX_COUNT,
     WIDGET_SUGGESTION_MAX_LENGTH,
     WidgetConfigResponse,
@@ -19,6 +20,10 @@ from .user_rate_limit_service import is_rate_limited
 
 def get_agent_by_id(session: Session, agent_id: UUID) -> Agent | None:
     return session.scalar(select(Agent).where(Agent.id == agent_id))
+
+
+def _is_cookie_auth_request_credentials(header: SessionHeader) -> bool:
+    return header.source == StorageSource.cookies and not header.key.strip()
 
 
 def get_widget_config(
@@ -66,15 +71,24 @@ def get_widget_config(
     
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == agent.user_id)).all()
     header_map = {}
+    auth_config = WidgetAuthConfig()
+    send_cookies_with_requests = False
     for header in headers:
-        auth_type = header.auth_type
         if header.header_name.lower() == "authorization":
-            auth_type = auth_type or AuthType.bearer
-        config_kwargs = {"source": header.source, "key": header.key}
-        if auth_type:
-            config_kwargs["auth_type"] = auth_type
-        header_map[header.header_name] = SessionHeaderConfig(**config_kwargs)
+            if _is_cookie_auth_request_credentials(header):
+                send_cookies_with_requests = True
+            else:
+                auth_config = WidgetAuthConfig(
+                    mode="header",
+                    source=header.source,
+                    key=header.key,
+                    authType=header.auth_type or AuthType.bearer,
+                )
+            continue
+        header_map[header.header_name] = SessionHeaderConfig(source=header.source, key=header.key)
     return WidgetConfigResponse(
+        auth=auth_config,
+        send_cookies_with_requests=send_cookies_with_requests,
         headers=header_map,
         is_widget_hidden=summary.is_widget_hidden or is_user_rate_limited,
         actions_remaining=summary.total_remaining,

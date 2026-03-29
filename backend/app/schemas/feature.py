@@ -45,6 +45,7 @@ class FeatureResponse(FeaturePayload):
     id: UUID
     enabled_state: FeatureEnabledState = Field(alias="enabledState")
     tool_count: int = Field(alias="toolCount")
+    backend_tool_count: int = Field(alias="backendToolCount")
 
 
 class FeatureTogglePayload(BaseModel):

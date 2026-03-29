@@ -315,6 +315,88 @@ describe("ActivityPanel", () => {
     expect(screen.queryByText(/"tool": "log-name"/)).toBeNull()
   })
 
+  it("renders network failures as destructive badges even without an HTTP status", async () => {
+    mockedSummary.mockReturnValue({
+      data: {
+        conversationCount: 1,
+        actionCount: 1,
+        hasAnyConversation: true,
+        topActions: []
+      },
+      isPending: false
+    })
+
+    mockedConversations.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              {
+                id: "c1-uuid",
+                participant: "widget",
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z",
+                userMessageCount: 1,
+                actionCount: 1
+              }
+            ],
+            nextCursor: null
+          }
+        ]
+      },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+
+    mockedDetail.mockImplementation((args: any) => ({
+      data: args?.conversationId
+        ? {
+          pages: [
+            {
+              id: "c1-uuid",
+              participant: "widget",
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-02T00:00:00Z",
+              messages: [
+                { role: "user", content: "Load products", createdAt: "2026-01-02T00:00:00Z" },
+                { role: "assistant", content: "It failed", createdAt: "2026-01-02T00:00:01Z" }
+              ],
+              nextMessageCursor: null,
+              actions: [
+                {
+                  id: "a-backend-network-1",
+                  createdAt: "2026-01-02T00:00:02Z",
+                  toolType: "backend",
+                  feature: "Products",
+                  action: "Product list",
+                  statusCode: null,
+                  error: "Failed to fetch",
+                  responseBody: null,
+                  request: { params: {}, query: { limit: 10 }, body: {} }
+                }
+              ],
+              nextActionCursor: null
+            }
+          ]
+        }
+        : undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    }))
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<ActivityPanel />)
+
+    await user.click(screen.getByTestId("view-c1-uuid"))
+    const failedBadge = await screen.findByText("Failed")
+    expect(failedBadge.className).toContain("bg-destructive")
+  })
+
   it("renders screen autopilot actions separately from tool actions", async () => {
     mockedSummary.mockReturnValue({
       data: {
@@ -397,9 +479,11 @@ describe("ActivityPanel", () => {
 
     await user.click(screen.getByTestId("view-c1-uuid"))
     expect(await screen.findByText("Screen Autopilot · Open menu")).not.toBeNull()
-    expect(screen.getByText("Success")).not.toBeNull()
+    const successBadge = screen.getByText("Success")
+    expect(successBadge.className).toContain("bg-emerald-500/15")
     await user.click(screen.getByTestId("action-details"))
-    expect(screen.getByText("click")).not.toBeNull()
+    const frontendActionBadge = screen.getByText("click")
+    expect(frontendActionBadge.className).toContain("bg-emerald-500/15")
   })
 
   it("shows global empty state when no activity", () => {

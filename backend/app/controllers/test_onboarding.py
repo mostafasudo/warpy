@@ -65,12 +65,16 @@ def _save_config(user_id: str = "user_1", *, production_url: str = "https://api.
     from app.schemas.config import ConfigPayload
     from app.services.config_service import upsert_config
 
-    headers = {"authorization": {"source": "cookies", "key": "token", "authType": "bearer"}} if auth_header else {}
     with session_scope() as session:
         upsert_config(
             session,
             user_id,
-            ConfigPayload(baseUrl={"local": "", "production": production_url}, headers=headers),
+            ConfigPayload(
+                baseUrl={"local": "", "production": production_url},
+                auth={"mode": "none"},
+                sendCookiesWithRequests=auth_header,
+                headers={},
+            ),
         )
 
 

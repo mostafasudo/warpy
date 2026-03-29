@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { buildScriptSnippet, getWidgetCdnUrl, normalizeCustomerBaseUrl } from "@/lib/widget-install"
 import { useAddOnboardingWebsite } from "@/mutations/use-add-onboarding-website"
 import { useCreateAgent } from "@/mutations/use-create-agent"
@@ -17,7 +18,7 @@ import { useKnowledgeWebsitesQuery } from "@/queries/use-knowledge-websites"
 import { onboardingStateQueryKey } from "@/queries/use-onboarding-state"
 import { useSaveConfig } from "@/queries/use-save-config"
 import { toastSelectors, useToastStore } from "@/stores/toast"
-import type { AuthorizationType, ConfigResponse, OnboardingStateResponse, StorageSource } from "@/types"
+import type { AuthConfig, AuthStorageSource, AuthorizationType, ConfigResponse, OnboardingStateResponse } from "@/types"
 
 type OnboardingGateProps = {
   state: OnboardingStateResponse
@@ -43,8 +44,8 @@ const stepMeta: Record<OnboardingStep, { label: string; title: string; descripti
   },
   auth: {
     label: "Auth",
-    title: "How should requests find the auth token?",
-    description: "Point Warpy at the token your dashboard already stores in the browser.",
+    title: "How should requests authenticate in your app?",
+    description: "Choose the auth methods your API expects.",
     icon: KeyRound
   },
   agent: {
@@ -53,11 +54,6 @@ const stepMeta: Record<OnboardingStep, { label: string; title: string; descripti
     description: "Paste this script into your dashboard to let users ask for help and run real actions.",
     icon: Sparkles
   }
-}
-
-const getHeaderEntry = (headers: ConfigResponse["headers"]) => {
-  const match = Object.entries(headers).find(([name]) => name.trim().toLowerCase() === "authorization")
-  return match ? { name: match[0], value: match[1] } : null
 }
 
 const getPreviousStep = (step: OnboardingStep): OnboardingStep => {
@@ -94,8 +90,42 @@ const buildConfigPayload = (config: ConfigResponse | undefined, overrides: Parti
     ...config?.baseUrl,
     ...overrides.baseUrl
   },
+  auth: overrides.auth ?? config?.auth ?? { mode: "none" },
+  sendCookiesWithRequests: overrides.sendCookiesWithRequests ?? config?.sendCookiesWithRequests ?? false,
   headers: overrides.headers ?? (config?.headers ?? {})
 })
+
+const normalizeAuth = (
+  config: ConfigResponse | undefined
+): {
+  auth: { mode: "none"; source: AuthStorageSource; key: string; authType: AuthorizationType } | { mode: "header"; source: AuthStorageSource; key: string; authType: AuthorizationType }
+  sendCookiesWithRequests: boolean
+} => {
+  if (config?.auth?.mode === "header") {
+    return {
+      auth: {
+        mode: "header",
+        source: config.auth.source ?? "localStorage",
+        key: config.auth.key ?? "",
+        authType: config.auth.authType ?? "bearer"
+      },
+      sendCookiesWithRequests: Boolean(
+        config.sendCookiesWithRequests || (config.auth as { mode?: string } | undefined)?.mode === "browserCookies"
+      )
+    }
+  }
+  return {
+    auth: {
+      mode: "none",
+      source: "localStorage",
+      key: "",
+      authType: "bearer"
+    },
+    sendCookiesWithRequests: Boolean(
+      config?.sendCookiesWithRequests || (config?.auth as { mode?: string } | undefined)?.mode === "browserCookies"
+    )
+  }
+}
 
 const StepCard = ({
   step,
@@ -161,8 +191,10 @@ export const OnboardingGate = ({ state, onContinueToDashboard }: OnboardingGateP
   const [websiteInput, setWebsiteInput] = useState("")
   const [baseUrlInput, setBaseUrlInput] = useState("")
   const [authType, setAuthType] = useState<AuthorizationType>("bearer")
-  const [storageSource, setStorageSource] = useState<StorageSource>("localStorage")
+  const [storageSource, setStorageSource] = useState<AuthStorageSource>("localStorage")
   const [tokenKey, setTokenKey] = useState("")
+  const [authorizationEnabled, setAuthorizationEnabled] = useState(false)
+  const [sendCookiesWithRequests, setSendCookiesWithRequests] = useState(false)
   const [copied, setCopied] = useState(false)
   const [agentError, setAgentError] = useState<string | null>(null)
   const hasStartedRef = useRef(false)
@@ -172,7 +204,6 @@ export const OnboardingGate = ({ state, onContinueToDashboard }: OnboardingGateP
   const hasHydratedAuthRef = useRef(false)
 
   const primaryWebsite = websitesQuery.data?.items?.[0] ?? null
-  const authorizationHeader = getHeaderEntry(configQuery.data?.headers ?? {})
   const productionBaseUrl = configQuery.data?.baseUrl.production ?? ""
   const effectiveAgent = agentQuery.data ?? null
   const scriptSrc = getWidgetCdnUrl() || `${window.location.origin}/widget/agent.js`
@@ -208,12 +239,15 @@ export const OnboardingGate = ({ state, onContinueToDashboard }: OnboardingGateP
   }, [productionBaseUrl])
 
   useEffect(() => {
-    if (hasHydratedAuthRef.current || !authorizationHeader) return
+    if (hasHydratedAuthRef.current || !configQuery.data) return
     hasHydratedAuthRef.current = true
-    setTokenKey(authorizationHeader.value.key)
-    setStorageSource(authorizationHeader.value.source)
-    setAuthType(authorizationHeader.value.authType ?? "bearer")
-  }, [authorizationHeader])
+    const normalized = normalizeAuth(configQuery.data)
+    setAuthorizationEnabled(normalized.auth.mode === "header")
+    setTokenKey(normalized.auth.key)
+    setStorageSource(normalized.auth.source)
+    setAuthType(normalized.auth.authType)
+    setSendCookiesWithRequests(normalized.sendCookiesWithRequests)
+  }, [configQuery.data])
 
   useEffect(() => {
     if (currentStep !== "agent") {
@@ -249,7 +283,10 @@ export const OnboardingGate = ({ state, onContinueToDashboard }: OnboardingGateP
   const baseUrlPlaceholder = buildApiPlaceholder(websiteInput || primaryWebsite?.inputUrl || "")
   const canContinueWebsite = Boolean(websiteInput.trim()) && !addOnboardingWebsite.isPending
   const canContinueBaseUrl = Boolean(baseUrlInput.trim()) && !saveConfig.isPending && !configQuery.isPending
-  const canContinueAuth = Boolean(tokenKey.trim()) && !saveConfig.isPending && !configQuery.isPending
+  const canContinueAuth =
+    (sendCookiesWithRequests || (authorizationEnabled && Boolean(tokenKey.trim()))) &&
+    !saveConfig.isPending &&
+    !configQuery.isPending
   const isPreparingAgent = currentStep === "agent" && !effectiveAgent && (agentQuery.isPending || createAgent.isPending || !agentError)
 
   const handleWebsiteContinue = async () => {
@@ -280,20 +317,20 @@ export const OnboardingGate = ({ state, onContinueToDashboard }: OnboardingGateP
   }
 
   const handleAuthContinue = async () => {
-    const currentHeaders = configQuery.data?.headers ?? {}
-    const nextHeaders = Object.fromEntries(
-      Object.entries(currentHeaders).filter(([name]) => name.trim().toLowerCase() !== "authorization")
-    )
-    nextHeaders.authorization = {
-      source: storageSource,
-      key: tokenKey.trim(),
-      authType
-    }
+    const authPayload: AuthConfig = !authorizationEnabled || !tokenKey.trim()
+      ? { mode: "none" }
+      : {
+          mode: "header",
+          source: storageSource,
+          key: tokenKey.trim(),
+          authType
+        }
 
     try {
       await saveConfig.mutateAsync(
         buildConfigPayload(configQuery.data, {
-          headers: nextHeaders
+          auth: authPayload,
+          sendCookiesWithRequests
         })
       )
       setCurrentStep("agent")
@@ -358,44 +395,71 @@ export const OnboardingGate = ({ state, onContinueToDashboard }: OnboardingGateP
 
     if (currentStep === "auth") {
       return (
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Auth type</Label>
-            <Select value={authType} onValueChange={(value) => setAuthType(value as AuthorizationType)}>
-              <SelectTrigger data-testid="onboarding-auth-type-trigger">
-                <SelectValue placeholder="Select auth type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bearer">Bearer</SelectItem>
-                <SelectItem value="basic">Basic</SelectItem>
-                <SelectItem value="none">No prefix</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Token location</Label>
-            <Select value={storageSource} onValueChange={(value) => setStorageSource(value as StorageSource)}>
-              <SelectTrigger data-testid="onboarding-storage-trigger">
-                <SelectValue placeholder="Select token location" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="localStorage">Local storage</SelectItem>
-                <SelectItem value="sessionStorage">Session storage</SelectItem>
-                <SelectItem value="cookies">Cookie</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="onboarding-token-key">Token key</Label>
-            <Input
-              id="onboarding-token-key"
-              value={tokenKey}
-              onChange={(event) => setTokenKey(event.target.value)}
-              placeholder="authorization"
-              autoFocus
-              data-testid="onboarding-token-key-input"
-            />
-          </div>
+        <div className="space-y-4">
+          <section className="rounded-xl border border-border/70 bg-background/70 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="pr-4 text-sm font-semibold">Send Authorization header</h3>
+              <Switch
+                id="onboarding-auth-header-switch"
+                checked={authorizationEnabled}
+                onCheckedChange={setAuthorizationEnabled}
+                data-testid="onboarding-auth-header-switch"
+              />
+            </div>
+
+            {authorizationEnabled ? (
+              <div className="mt-4 grid gap-4 border-t border-border/60 pt-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Format</Label>
+                  <Select value={authType} onValueChange={(value) => setAuthType(value as AuthorizationType)}>
+                    <SelectTrigger data-testid="onboarding-auth-type-trigger">
+                      <SelectValue placeholder="Select auth type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bearer">Bearer</SelectItem>
+                      <SelectItem value="basic">Basic</SelectItem>
+                      <SelectItem value="none">No prefix</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Storage</Label>
+                  <Select value={storageSource} onValueChange={(value) => setStorageSource(value as AuthStorageSource)}>
+                    <SelectTrigger data-testid="onboarding-storage-trigger">
+                      <SelectValue placeholder="Select token location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="localStorage">Local storage</SelectItem>
+                      <SelectItem value="sessionStorage">Session storage</SelectItem>
+                      <SelectItem value="cookies">Cookies</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="onboarding-token-key">Key</Label>
+                  <Input
+                    id="onboarding-token-key"
+                    value={tokenKey}
+                    onChange={(event) => setTokenKey(event.target.value)}
+                    placeholder="authorization"
+                    autoFocus
+                    data-testid="onboarding-token-key-input"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </section>
+          <section className="rounded-xl border border-border/70 bg-background/70 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="pr-4 text-sm font-semibold">Include cookies on requests</h3>
+              <Switch
+                id="onboarding-send-cookies-switch"
+                checked={sendCookiesWithRequests}
+                onCheckedChange={setSendCookiesWithRequests}
+                data-testid="onboarding-send-cookies-switch"
+              />
+            </div>
+          </section>
         </div>
       )
     }

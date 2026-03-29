@@ -8,6 +8,7 @@ import { AgentPanel } from "./agent-panel"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
+import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agent-widget-security-draft"
 import { useUpdateAgentCustomSystemPrompt } from "@/mutations/use-update-agent-custom-system-prompt"
 import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-frontend-capability"
 import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget-install"
@@ -73,6 +74,10 @@ jest.mock("@/mutations/use-update-agent-widget-security-draft", () => ({
   useUpdateAgentWidgetSecurityDraft: jest.fn()
 }))
 
+jest.mock("@/mutations/use-discard-agent-widget-security-draft", () => ({
+  useDiscardAgentWidgetSecurityDraft: jest.fn()
+}))
+
 jest.mock("@/mutations/use-update-agent-widget-config", () => ({
   useUpdateAgentWidgetConfig: jest.fn()
 }))
@@ -116,6 +121,7 @@ const mockedUseAgentWidgetInstallQuery = useAgentWidgetInstallQuery as unknown a
 const mockedUseUpdateAgentWidgetSecurityDraft = useUpdateAgentWidgetSecurityDraft as unknown as jest.Mock
 const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown as jest.Mock
 const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
+const mockedUseDiscardAgentWidgetSecurityDraft = useDiscardAgentWidgetSecurityDraft as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetConfig = useUpdateAgentWidgetConfig as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetInstall = useUpdateAgentWidgetInstall as unknown as jest.Mock
 const mockedUseAgentCustomSystemPromptQuery = useAgentCustomSystemPromptQuery as unknown as jest.Mock
@@ -204,6 +210,10 @@ describe("AgentPanel", () => {
       isPending: false
     })
     mockedUseDeployAgentWidgetSecurity.mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false
+    })
+    mockedUseDiscardAgentWidgetSecurityDraft.mockReturnValue({
       mutateAsync: jest.fn(),
       isPending: false
     })
@@ -1394,5 +1404,48 @@ describe("AgentPanel", () => {
     await openAdvancedSecurity(user)
     await user.click(screen.getByRole("button", { name: /deploy changes/i }))
     expect(mutateAsync).toHaveBeenCalled()
+  })
+
+  it("discards unsaved advanced security changes", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    mockedUseAgentWidgetSecurityQuery.mockReturnValue({
+      data: {
+        ...baseWidgetSecurity,
+        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null, apiKeyLast4: null },
+        hasStagedChanges: true
+      },
+      isPending: false
+    })
+
+    const mutateAsync = jest.fn(async () => baseWidgetSecurity)
+    mockedUseDiscardAgentWidgetSecurityDraft.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await openAdvancedSecurity(user)
+    await user.click(screen.getByRole("button", { name: /discard changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalled()
+      expect(getAddToast()).toHaveBeenCalledWith({
+        title: "Discarded",
+        description: "Unsaved changes discarded.",
+        variant: "success"
+      })
+    })
   })
 })

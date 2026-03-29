@@ -73,7 +73,14 @@ def test_feature_crud_and_toggle(configure_settings, client: TestClient):
     assert features_response.status_code == 200
     data = features_response.json()
     assert data[0]["toolCount"] == 1
+    assert data[0]["backendToolCount"] == 1
     assert data[0]["tools"][0]["feature"]["id"] == feature_id
+    assert data[0]["tools"][0]["feature"]["backendToolCount"] == 1
+
+    feature_tools_response = client.get(f"/features/{feature_id}/tools", headers=auth_headers())
+    assert feature_tools_response.status_code == 200
+    feature_tools = feature_tools_response.json()["items"]
+    assert feature_tools[0]["feature"]["backendToolCount"] == 1
 
     toggle = client.post(f"/features/{feature_id}/enabled", json={"agentEnabled": False}, headers=auth_headers())
     assert toggle.status_code == 200
@@ -87,3 +94,4 @@ def test_feature_crud_and_toggle(configure_settings, client: TestClient):
     data_after = after_delete.json()
     assert len(data_after) == 1
     assert data_after[0]["toolCount"] == 0
+    assert data_after[0]["backendToolCount"] == 0

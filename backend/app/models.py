@@ -80,6 +80,10 @@ class Feature(Base):
     def tool_count(self):
         return len(self.tools)
 
+    @property
+    def backend_tool_count(self):
+        return sum(1 for tool in self.tools if tool.tool_type == "backend")
+
 
 class HttpMethod(str, enum.Enum):
     get = "GET"

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, ChevronDown, Copy, Info, Layers, MessageSquare, RotateCw, Terminal } from "lucide-react"
 import clsx from "clsx"
 
+import { DirtyActions, UnsavedBadge } from "@/components/dirty-state"
 import { PanelShell } from "@/components/panel-shell"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -600,9 +601,7 @@ const ConfigureWidgetPanel = () => {
                   <p className="text-sm text-muted-foreground">Appearance and behavior</p>
                 </div>
                 {isDirty ? (
-                  <Badge className="h-6 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                    Unsaved
-                  </Badge>
+                  <UnsavedBadge className="h-6" />
                 ) : null}
               </div>
               <div className="flex items-center gap-3">
@@ -846,31 +845,22 @@ const ConfigureWidgetPanel = () => {
                   />
                 </div>
 
-                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-                  <Button
-                    variant="ghost"
-                    onClick={handleDiscard}
-                    disabled={!isDirty || updateConfig.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Discard changes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRestoreDefaults}
-                    disabled={updateConfig.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Restore defaults
-                  </Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={!isDirty || updateConfig.isPending || Boolean(suggestionsValidationMessage)}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Save changes
-                  </Button>
-                </div>
+                <DirtyActions
+                  onDiscard={handleDiscard}
+                  discardDisabled={!isDirty || updateConfig.isPending}
+                  onPrimary={handleSave}
+                  primaryDisabled={!isDirty || updateConfig.isPending || Boolean(suggestionsValidationMessage)}
+                  secondaryAction={
+                    <Button
+                      variant="outline"
+                      onClick={handleRestoreDefaults}
+                      disabled={updateConfig.isPending}
+                      className="w-full justify-center sm:w-auto"
+                    >
+                      Restore defaults
+                    </Button>
+                  }
+                />
               </div>
             </CollapsibleContent>
           </div>
@@ -951,9 +941,7 @@ const CustomInstructionsPanel = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold">Custom Instructions</h3>
                   {isDirty ? (
-                    <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                      Unsaved
-                    </Badge>
+                    <UnsavedBadge />
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -1000,31 +988,22 @@ const CustomInstructionsPanel = () => {
                   />
                 </div>
 
-                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-                  <Button
-                    variant="ghost"
-                    onClick={handleDiscard}
-                    disabled={!isDirty || updatePrompt.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Discard changes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRestoreDefaults}
-                    disabled={updatePrompt.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Restore defaults
-                  </Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={!isDirty || updatePrompt.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Save changes
-                  </Button>
-                </div>
+                <DirtyActions
+                  onDiscard={handleDiscard}
+                  discardDisabled={!isDirty || updatePrompt.isPending}
+                  onPrimary={handleSave}
+                  primaryDisabled={!isDirty || updatePrompt.isPending}
+                  secondaryAction={
+                    <Button
+                      variant="outline"
+                      onClick={handleRestoreDefaults}
+                      disabled={updatePrompt.isPending}
+                      className="w-full justify-center sm:w-auto"
+                    >
+                      Restore defaults
+                    </Button>
+                  }
+                />
               </div>
             </CollapsibleContent>
           </div>
@@ -1186,9 +1165,7 @@ const UserRateLimitsPanel = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold">User Rate Limits</h3>
                   {isDirty ? (
-                    <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                      Unsaved
-                    </Badge>
+                    <UnsavedBadge />
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">Limit actions per user (by IP)</p>
@@ -1275,23 +1252,12 @@ const UserRateLimitsPanel = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-                  <Button
-                    variant="ghost"
-                    onClick={handleDiscard}
-                    disabled={!isDirty || updateMutation.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Discard changes
-                  </Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={!isDirty || updateMutation.isPending}
-                    className="w-full justify-center sm:w-auto"
-                  >
-                    Save changes
-                  </Button>
-                </div>
+                <DirtyActions
+                  onDiscard={handleDiscard}
+                  discardDisabled={!isDirty || updateMutation.isPending}
+                  onPrimary={handleSave}
+                  primaryDisabled={!isDirty || updateMutation.isPending}
+                />
               </div>
             </CollapsibleContent>
           </div>
@@ -1312,7 +1278,7 @@ const AdvancedSecurityPanel = () => {
 
   const active = data?.active
   const draft = data?.draft
-  const hasStagedChanges = data?.hasStagedChanges ?? false
+  const hasUnsavedChanges = data?.hasStagedChanges ?? false
 
   const effectiveRequireSignedWidgetToken =
     draft?.requireSignedWidgetToken ?? active?.requireSignedWidgetToken ?? false
@@ -1320,8 +1286,8 @@ const AdvancedSecurityPanel = () => {
     draft?.widgetRefreshEndpointPath ?? active?.widgetRefreshEndpointPath ?? "/widget-token"
   const effectiveApiKeyLast4 = draft?.apiKeyLast4 ?? active?.apiKeyLast4
 
-  const showApiKeyStaged = Boolean(draft?.apiKeyLast4)
-  const showRefreshEndpointStaged = Boolean(draft?.widgetRefreshEndpointPath)
+  const showApiKeyUnsaved = Boolean(draft?.apiKeyLast4)
+  const showRefreshEndpointUnsaved = Boolean(draft?.widgetRefreshEndpointPath)
 
   const [widgetRefreshEndpointDraft, setWidgetRefreshEndpointDraft] = useState<string>(
     effectiveWidgetRefreshEndpointPath
@@ -1396,7 +1362,7 @@ const AdvancedSecurityPanel = () => {
     try {
       await discardDraft.mutateAsync()
       setNewApiKey(null)
-      addToast({ title: "Discarded", description: "Staged changes reverted.", variant: "success" })
+      addToast({ title: "Discarded", description: "Unsaved changes discarded.", variant: "success" })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not discard changes"
       addToast({ title: "Discard failed", description: message, variant: "error" })
@@ -1430,10 +1396,8 @@ const AdvancedSecurityPanel = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold">Advanced Security</h3>
-                  {hasStagedChanges ? (
-                    <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                      Staged
-                    </Badge>
+                  {hasUnsavedChanges ? (
+                    <UnsavedBadge />
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">Optional Widget JWT Auth</p>
@@ -1484,10 +1448,8 @@ const AdvancedSecurityPanel = () => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Label className="text-sm font-semibold">Widget API Key</Label>
-                    {showApiKeyStaged ? (
-                      <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                        Staged
-                      </Badge>
+                    {showApiKeyUnsaved ? (
+                      <UnsavedBadge />
                     ) : null}
                   </div>
                   {newApiKey ? (
@@ -1536,10 +1498,8 @@ const AdvancedSecurityPanel = () => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Label className="text-sm font-semibold">Widget Refresh Endpoint</Label>
-                    {showRefreshEndpointStaged ? (
-                      <Badge className="h-5 rounded-md bg-primary/10 px-2 text-[10px] font-bold uppercase tracking-wide text-primary">
-                        Staged
-                      </Badge>
+                    {showRefreshEndpointUnsaved ? (
+                      <UnsavedBadge />
                     ) : null}
                   </div>
                   <div className="flex overflow-hidden rounded-lg border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
@@ -1597,25 +1557,13 @@ const AdvancedSecurityPanel = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-                  {hasStagedChanges ? (
-                    <Button
-                      variant="ghost"
-                      onClick={handleDiscard}
-                      disabled={discardDraft.isPending}
-                      className={clsx("w-full sm:w-auto", "justify-center")}
-                    >
-                      Discard changes
-                    </Button>
-                  ) : null}
-                  <Button
-                    onClick={handleDeploy}
-                    disabled={!hasStagedChanges || deployDraft.isPending}
-                    className={clsx("w-full sm:w-auto", "justify-center")}
-                  >
-                    Deploy Changes
-                  </Button>
-                </div>
+                <DirtyActions
+                  onDiscard={handleDiscard}
+                  discardDisabled={!hasUnsavedChanges || discardDraft.isPending}
+                  onPrimary={handleDeploy}
+                  primaryDisabled={!hasUnsavedChanges || deployDraft.isPending}
+                  primaryLabel="Deploy changes"
+                />
               </div>
             </CollapsibleContent>
           </div>

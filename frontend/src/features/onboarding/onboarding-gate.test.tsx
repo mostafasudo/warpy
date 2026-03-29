@@ -127,6 +127,8 @@ describe("OnboardingGate", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: {
         baseUrl: { local: "http://localhost:3000", production: "" },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
         headers: {}
       },
       isPending: false
@@ -197,20 +199,23 @@ describe("OnboardingGate", () => {
         local: "http://localhost:3000",
         production: "https://api.example.com"
       },
+      auth: { mode: "none" },
+      sendCookiesWithRequests: false,
       headers: {}
     })
-    expect(await screen.findByTestId("onboarding-token-key-input")).not.toBeNull()
+    expect(await screen.findByTestId("onboarding-auth-header-switch")).not.toBeNull()
   })
 
-  it("stores authorization as a lowercase header and preserves other session headers", async () => {
+  it("stores authorization header auth separately and preserves other session headers", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: {
         baseUrl: {
           local: "http://localhost:3000",
           production: "https://api.example.com"
         },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
         headers: {
-          Authorization: { source: "cookies", key: "legacy_token", authType: "bearer" },
           "x-user-id": { source: "cookies", key: "user_id" }
         }
       },
@@ -221,10 +226,11 @@ describe("OnboardingGate", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     renderGate({ status: "in_progress", shouldShow: true, nextStep: "auth" })
 
-    await user.click(screen.getByTestId("onboarding-auth-type-trigger"))
-    await user.click(await screen.findByRole("option", { name: "Basic" }))
+    await user.click(screen.getByTestId("onboarding-auth-header-switch"))
     await user.click(screen.getByTestId("onboarding-storage-trigger"))
     await user.click(await screen.findByRole("option", { name: "Session storage" }))
+    await user.click(screen.getByTestId("onboarding-auth-type-trigger"))
+    await user.click(await screen.findByRole("option", { name: "Basic" }))
     await user.clear(screen.getByTestId("onboarding-token-key-input"))
     await user.type(screen.getByTestId("onboarding-token-key-input"), "session_token")
     await user.click(screen.getByRole("button", { name: "Continue" }))
@@ -234,9 +240,86 @@ describe("OnboardingGate", () => {
         local: "http://localhost:3000",
         production: "https://api.example.com"
       },
+      auth: { mode: "header", source: "sessionStorage", key: "session_token", authType: "basic" },
+      sendCookiesWithRequests: false,
       headers: {
-        "x-user-id": { source: "cookies", key: "user_id" },
-        authorization: { source: "sessionStorage", key: "session_token", authType: "basic" }
+        "x-user-id": { source: "cookies", key: "user_id" }
+      }
+    })
+  })
+
+  it("allows authorization headers to read from cookies during onboarding", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: {
+          local: "http://localhost:3000",
+          production: "https://api.example.com"
+        },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: {}
+      },
+      isPending: false
+    })
+    saveConfigMutateAsync.mockImplementation(async (payload: unknown) => payload)
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderGate({ status: "in_progress", shouldShow: true, nextStep: "auth" })
+
+    await user.click(screen.getByTestId("onboarding-auth-header-switch"))
+    await user.click(screen.getByTestId("onboarding-storage-trigger"))
+    await user.click(await screen.findByRole("option", { name: "Cookies" }))
+    await user.type(screen.getByTestId("onboarding-token-key-input"), "auth_token")
+    await user.click(screen.getByRole("button", { name: "Continue" }))
+
+    expect(saveConfigMutateAsync).toHaveBeenCalledWith({
+      baseUrl: {
+        local: "http://localhost:3000",
+        production: "https://api.example.com"
+      },
+      auth: { mode: "header", source: "cookies", key: "auth_token", authType: "bearer" },
+      sendCookiesWithRequests: false,
+      headers: {}
+    })
+  })
+
+  it("stores cookie auth without prompting for a token key", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: {
+          local: "http://localhost:3000",
+          production: "https://api.example.com"
+        },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: {
+          "x-user-id": { source: "cookies", key: "user_id" }
+        }
+      },
+      isPending: false
+    })
+    saveConfigMutateAsync.mockImplementation(async (payload: unknown) => payload)
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderGate({ status: "in_progress", shouldShow: true, nextStep: "auth" })
+
+    expect(screen.queryByTestId("onboarding-token-key-input")).toBeNull()
+    await user.click(screen.getByTestId("onboarding-send-cookies-switch"))
+
+    expect(screen.queryByTestId("onboarding-token-key-input")).toBeNull()
+    expect(screen.queryByTestId("onboarding-auth-type-trigger")).toBeNull()
+
+    await user.click(screen.getByRole("button", { name: "Continue" }))
+
+    expect(saveConfigMutateAsync).toHaveBeenCalledWith({
+      baseUrl: {
+        local: "http://localhost:3000",
+        production: "https://api.example.com"
+      },
+      auth: { mode: "none" },
+      sendCookiesWithRequests: true,
+      headers: {
+        "x-user-id": { source: "cookies", key: "user_id" }
       }
     })
   })
@@ -248,18 +331,19 @@ describe("OnboardingGate", () => {
           local: "http://localhost:3000",
           production: "https://api.example.com"
         },
-        headers: {
-          Authorization: { source: "cookies", key: "session_token", authType: "basic" }
-        }
+        auth: { mode: "none" },
+        sendCookiesWithRequests: true,
+        headers: {}
       },
       isPending: false
     })
 
     renderGate({ status: "in_progress", shouldShow: true, nextStep: "auth" })
 
-    expect((screen.getByTestId("onboarding-token-key-input") as HTMLInputElement).value).toBe("session_token")
-    expect(screen.getByTestId("onboarding-auth-type-trigger").textContent).toContain("Basic")
-    expect(screen.getByTestId("onboarding-storage-trigger").textContent).toContain("Cookie")
+    expect(screen.getByTestId("onboarding-send-cookies-switch").getAttribute("data-state")).toBe("checked")
+    expect(screen.getByTestId("onboarding-auth-header-switch").getAttribute("data-state")).toBe("unchecked")
+    expect(screen.queryByTestId("onboarding-token-key-input")).toBeNull()
+    expect(screen.queryByTestId("onboarding-auth-type-trigger")).toBeNull()
   })
 
   it("renders the agent snippet and only finalizes onboarding when continuing to the dashboard", async () => {
@@ -275,6 +359,8 @@ describe("OnboardingGate", () => {
           local: "http://localhost:3000",
           production: "api.example.com"
         },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
         headers: {}
       },
       isPending: false
@@ -357,7 +443,7 @@ describe("OnboardingGate", () => {
     )
 
     await user.click(screen.getByRole("button", { name: "Skip" }))
-    expect(await screen.findByTestId("onboarding-token-key-input")).not.toBeNull()
+    expect(await screen.findByTestId("onboarding-auth-header-switch")).not.toBeNull()
 
     view.rerender(
       <OnboardingGate
@@ -367,6 +453,6 @@ describe("OnboardingGate", () => {
     )
 
     expect(screen.queryByTestId("onboarding-base-url-input")).toBeNull()
-    expect(screen.getByTestId("onboarding-token-key-input")).not.toBeNull()
+    expect(screen.getByTestId("onboarding-auth-header-switch")).not.toBeNull()
   })
 })

@@ -46,17 +46,29 @@ const makeQuery = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-const makeFeature = (overrides: Record<string, unknown> = {}) => ({
-  id: "feature-1",
-  name: "Orders",
-  enabledState: "enabled",
-  toolCount: 1,
-  tools: [],
+const makeFeature = (overrides: Record<string, unknown> = {}) => {
+  const toolCount = typeof overrides.toolCount === "number" ? overrides.toolCount : 1
+  return {
+    id: "feature-1",
+    name: "Orders",
+    enabledState: "enabled",
+    toolCount,
+    backendToolCount: typeof overrides.backendToolCount === "number" ? overrides.backendToolCount : toolCount,
+    tools: [],
+    ...overrides,
+  }
+}
+
+const makeConfigData = (overrides: Record<string, unknown> = {}) => ({
+  baseUrl: {},
+  auth: { mode: "none" },
+  sendCookiesWithRequests: false,
+  headers: {},
   ...overrides,
 })
 
 const setOverviewMocks = ({
-  config = makeQuery({ data: { baseUrl: {}, headers: {} } }),
+  config = makeQuery({ data: makeConfigData() }),
   features = makeQuery({ data: [] }),
   activity = makeQuery({
     data: { conversationCount: 0, actionCount: 0, hasAnyConversation: false, topActions: [] },
@@ -97,7 +109,7 @@ describe("DashboardPanel", () => {
     render(<DashboardPanel />)
 
     expect(screen.getByText("Set up your agent first")).not.toBeNull()
-    expect(screen.getByText("0/4 core steps complete")).not.toBeNull()
+    expect(screen.getByText("1/4 core steps complete")).not.toBeNull()
     expect(screen.getByTestId("overview-guided-setup")).not.toBeNull()
     expect(
       within(screen.getByTestId("overview-knowledge-card")).getByText(
@@ -112,10 +124,7 @@ describe("DashboardPanel", () => {
   it("pushes environment setup when the agent exists but no base URL is configured", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
-          baseUrl: { local: "", production: "" },
-          headers: {},
-        },
+        data: makeConfigData({ baseUrl: { local: "", production: "" } }),
       }),
     })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
@@ -123,7 +132,7 @@ describe("DashboardPanel", () => {
     render(<DashboardPanel />)
 
     expect(screen.getByText("Add an environment base URL")).not.toBeNull()
-    expect(screen.queryByText("Add an Authorization header next")).toBeNull()
+    expect(screen.queryByText("Add auth for backend tools next")).toBeNull()
     expect(screen.queryByText("2 environments configured.")).toBeNull()
     expect(within(screen.getByTestId("overview-usage-insights")).getByRole("button", { name: "View all activity" })).not.toBeNull()
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Add environments" }))
@@ -133,30 +142,30 @@ describe("DashboardPanel", () => {
   it("pushes authorization header setup when environments exist but auth is missing", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
           headers: { tenant: { source: "cookies", key: "tenant_id" } },
-        },
+        }),
+      }),
+      features: makeQuery({
+        data: [makeFeature({ toolCount: 1, backendToolCount: 1 })],
       }),
     })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
 
     render(<DashboardPanel />)
 
-    expect(screen.getByText("Add an Authorization header next")).not.toBeNull()
-    expect(screen.getByText("1 header configured, but Authorization is still missing for backend tools.")).not.toBeNull()
+    expect(screen.getByText("Add auth for backend tools next")).not.toBeNull()
+    expect(screen.getByText("1 extra header set, but auth is still missing.")).not.toBeNull()
 
-    await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Add authorization header" }))
+    await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Add auth" }))
     expect(useNavigationStore.getState().section).toBe("api")
   })
 
-  it("pushes feature creation when auth is ready but no features exist", async () => {
+  it("pushes feature creation when auth is optional and no backend tools exist yet", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
-          baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+        data: makeConfigData({ baseUrl: { production: "https://api.example.com" } }),
       }),
     })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
@@ -169,13 +178,49 @@ describe("DashboardPanel", () => {
     expect(useNavigationStore.getState().section).toBe("features")
   })
 
+  it("keeps frontend-only setups unblocked when auth is missing", () => {
+    setOverviewMocks({
+      config: makeQuery({
+        data: makeConfigData({ baseUrl: { production: "https://api.example.com" } }),
+      }),
+      features: makeQuery({
+        data: [makeFeature({ toolCount: 2, backendToolCount: 0 })],
+      }),
+    })
+
+    render(<DashboardPanel />)
+
+    expect(screen.getByText("Your agent is ready for first conversations")).not.toBeNull()
+    expect(screen.queryByText("Add auth for backend tools next")).toBeNull()
+    expect(screen.getByText("Optional for now.")).not.toBeNull()
+  })
+
+  it("treats Authorization headers sourced from cookies as ready auth", () => {
+    setOverviewMocks({
+      config: makeQuery({
+        data: makeConfigData({
+          baseUrl: { production: "https://api.example.com" },
+          auth: { mode: "header", source: "cookies", key: "auth_token", authType: "bearer" },
+        }),
+      }),
+      features: makeQuery({
+        data: [makeFeature({ toolCount: 2, backendToolCount: 2 })],
+      }),
+    })
+
+    render(<DashboardPanel />)
+
+    expect(screen.queryByText("Add auth for backend tools next")).toBeNull()
+    expect(screen.getByText("Authorization is set.")).not.toBeNull()
+  })
+
   it("pushes action mapping when features exist without mapped actions", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 0 })],
@@ -195,10 +240,10 @@ describe("DashboardPanel", () => {
   it("shows ready-state opportunities when core setup is complete but usage has not started", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 2 })],
@@ -231,10 +276,10 @@ describe("DashboardPanel", () => {
   it("keeps knowledge sources optional when the feature is enabled but no sources exist yet", () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({ data: [] }),
       knowledgeBase: makeQuery({
@@ -255,10 +300,10 @@ describe("DashboardPanel", () => {
   it("encourages more feature work when conversations exist but no actions ran", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 2 })],
@@ -282,10 +327,10 @@ describe("DashboardPanel", () => {
   it("shows early traction copy when conversations and actions are live", async () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 2 })],
@@ -338,10 +383,10 @@ describe("DashboardPanel", () => {
   it("shows building usage copy for mid-range activity", () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 2 })],
@@ -364,10 +409,10 @@ describe("DashboardPanel", () => {
   it("shows strong activity copy for high usage", () => {
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 2 })],
@@ -434,10 +479,10 @@ describe("DashboardPanel", () => {
 
     setOverviewMocks({
       config: makeQuery({
-        data: {
+        data: makeConfigData({
           baseUrl: { production: "https://api.example.com" },
-          headers: { Authorization: { source: "cookies", key: "token", authType: "bearer" } },
-        },
+          sendCookiesWithRequests: true,
+        }),
       }),
       features: makeQuery({
         data: [makeFeature({ toolCount: 2 })],

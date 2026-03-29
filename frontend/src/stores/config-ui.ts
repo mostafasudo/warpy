@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-import type { AuthorizationType, StorageSource } from "@/types"
+import type { StorageSource } from "@/types"
 
 type BaseFormState = {
   envName: string
@@ -12,7 +12,6 @@ type HeaderFormState = {
   name: string
   source: StorageSource
   key: string
-  authType: AuthorizationType
   editingKey: string | null
 }
 
@@ -43,7 +42,6 @@ const defaultHeaderForm: HeaderFormState = {
   name: "",
   source: "localStorage",
   key: "",
-  authType: "bearer",
   editingKey: null
 }
 

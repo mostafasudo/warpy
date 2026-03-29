@@ -89,6 +89,8 @@ def test_get_widget_config_empty(db_session: Session):
     db_session.flush()
 
     config = get_widget_config(db_session, agent)
+    assert config.auth.mode == "none"
+    assert config.send_cookies_with_requests is False
     assert config.headers == {}
     assert config.require_signed_widget_token is False
     assert config.widget_refresh_endpoint_path == "/widget-token"
@@ -109,10 +111,56 @@ def test_get_widget_config_with_headers(db_session: Session):
     db_session.flush()
 
     config = get_widget_config(db_session, agent)
-    assert "Authorization" in config.headers
-    assert config.headers["Authorization"].source == StorageSource.local_storage
-    assert config.headers["Authorization"].key == "auth_token"
-    assert config.headers["Authorization"].auth_type == AuthType.bearer
+    assert config.auth.mode == "header"
+    assert config.auth.source == StorageSource.local_storage
+    assert config.auth.key == "auth_token"
+    assert config.auth.auth_type == AuthType.bearer
+    assert config.send_cookies_with_requests is False
+    assert config.headers == {}
+
+
+def test_get_widget_config_treats_authorization_cookies_as_request_credentials(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    header = SessionHeader(
+        user_id="user_1",
+        header_name="Authorization",
+        source=StorageSource.cookies,
+        key="",
+    )
+    db_session.add(header)
+    db_session.flush()
+
+    config = get_widget_config(db_session, agent)
+    assert config.auth.mode == "none"
+    assert config.send_cookies_with_requests is True
+    assert config.headers == {}
+
+
+def test_get_widget_config_preserves_legacy_cookie_backed_authorization_headers(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.flush()
+
+    header = SessionHeader(
+        user_id="user_1",
+        header_name="Authorization",
+        source=StorageSource.cookies,
+        key="legacy_cookie",
+        auth_type=AuthType.basic,
+    )
+    db_session.add(header)
+    db_session.flush()
+
+    config = get_widget_config(db_session, agent)
+    assert config.auth.mode == "header"
+    assert config.auth.source == StorageSource.cookies
+    assert config.auth.key == "legacy_cookie"
+    assert config.auth.auth_type == AuthType.basic
+    assert config.send_cookies_with_requests is False
+    assert config.headers == {}
 
 
 def test_create_widget_conversation(db_session: Session):

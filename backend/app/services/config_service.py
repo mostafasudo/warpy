@@ -3,8 +3,8 @@ from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session
 
 from ..core.logger import log_info
-from ..models import AuthType, Environment, SessionHeader
-from ..schemas.config import ConfigPayload, ConfigResponse, SessionHeaderPayload
+from ..models import AuthType, Environment, SessionHeader, StorageSource
+from ..schemas.config import AuthConfigPayload, ConfigPayload, ConfigResponse, SessionHeaderPayload
 
 
 REQUIRED_ENVIRONMENTS = {"local", "production"}
@@ -91,20 +91,96 @@ def _upsert_environments(session: Session, user_id: str, base_urls: dict[str, st
         session.execute(delete(Environment).where(Environment.user_id == user_id, Environment.name.in_(deletable)))
 
 
-def _replace_session_headers(session: Session, user_id: str, headers: dict[str, SessionHeaderPayload]) -> None:
+def _build_auth_from_legacy_header(header: SessionHeaderPayload) -> AuthConfigPayload:
+    return AuthConfigPayload(
+        mode="header",
+        source=header.source,
+        key=header.key,
+        authType=header.auth_type or AuthType.bearer,
+    )
+
+
+def _is_cookie_auth_request_credentials(source: StorageSource, key: str) -> bool:
+    return source == StorageSource.cookies and not key.strip()
+
+
+def _resolve_auth_payload(
+    payload: ConfigPayload,
+) -> tuple[AuthConfigPayload, bool, dict[str, SessionHeaderPayload]]:
+    authorization_headers: list[SessionHeaderPayload] = []
+    literal_headers: dict[str, SessionHeaderPayload] = {}
+    for name, header in payload.headers.items():
+        if name.strip().lower() == "authorization":
+            authorization_headers.append(header)
+            continue
+        literal_headers[name] = header
+    legacy_header_auth = next(
+        (
+            _build_auth_from_legacy_header(header)
+            for header in authorization_headers
+            if not _is_cookie_auth_request_credentials(header.source, header.key)
+        ),
+        AuthConfigPayload(),
+    )
+    send_cookies_with_requests = payload.send_cookies_with_requests or any(
+        _is_cookie_auth_request_credentials(header.source, header.key) for header in authorization_headers
+    )
+    auth = payload.auth if payload.auth.mode != "none" else legacy_header_auth
+    return auth, send_cookies_with_requests, literal_headers
+
+
+def _build_auth_rows(user_id: str, auth: AuthConfigPayload, send_cookies_with_requests: bool) -> list[dict]:
+    rows: list[dict] = []
+    if auth.mode == "header":
+        rows.append(
+            {
+                "user_id": user_id,
+                "header_name": "Authorization",
+                "source": auth.source,
+                "key": auth.key,
+                "auth_type": auth.auth_type or AuthType.bearer,
+            }
+        )
+    if send_cookies_with_requests:
+        rows.append(
+            {
+                "user_id": user_id,
+                "header_name": "Authorization",
+                "source": StorageSource.cookies,
+                "key": "",
+                "auth_type": None,
+            }
+        )
+    return rows
+
+
+def _replace_session_headers(
+    session: Session,
+    user_id: str,
+    headers: dict[str, SessionHeaderPayload],
+    auth: AuthConfigPayload,
+    send_cookies_with_requests: bool,
+) -> None:
     session.execute(delete(SessionHeader).where(SessionHeader.user_id == user_id))
-    if not headers:
+    values = []
+    for name, header in headers.items():
+        if name.strip().lower() == "authorization":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Configure Authorization in auth settings")
+        key = header.key.strip()
+        if not key:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Header key is required")
+        values.append(
+            {
+                "user_id": user_id,
+                "header_name": name,
+                "source": header.source,
+                "key": key,
+                "auth_type": None,
+            }
+        )
+    values.extend(_build_auth_rows(user_id, auth, send_cookies_with_requests))
+    if not values:
         return
-    values = [
-        {
-            "user_id": user_id,
-            "header_name": name,
-            "source": header.source,
-            "key": header.key,
-            "auth_type": header.auth_type or (AuthType.bearer if name.lower() == "authorization" else None)
-        }
-        for name, header in headers.items()
-    ]
     session.execute(insert(SessionHeader), values)
 
 
@@ -114,19 +190,32 @@ def get_config(session: Session, user_id: str) -> ConfigResponse:
     headers = session.scalars(select(SessionHeader).where(SessionHeader.user_id == user_id)).all()
     base_urls = {environment.name: environment.base_url for environment in environments}
     header_map = {}
+    auth = AuthConfigPayload()
+    send_cookies_with_requests = False
     for header in headers:
-        auth_type = header.auth_type
         if header.header_name.lower() == "authorization":
-            auth_type = auth_type or AuthType.bearer
-        entry = {"source": header.source, "key": header.key}
-        if auth_type:
-            entry["authType"] = auth_type
-        header_map[header.header_name] = entry
-    return ConfigResponse(baseUrl=base_urls, headers=header_map)
+            if _is_cookie_auth_request_credentials(header.source, header.key):
+                send_cookies_with_requests = True
+            else:
+                auth = AuthConfigPayload(
+                    mode="header",
+                    source=header.source,
+                    key=header.key,
+                    authType=header.auth_type or AuthType.bearer,
+                )
+            continue
+        header_map[header.header_name] = {"source": header.source, "key": header.key}
+    return ConfigResponse(
+        baseUrl=base_urls,
+        auth=auth,
+        sendCookiesWithRequests=send_cookies_with_requests,
+        headers=header_map,
+    )
 
 
 def upsert_config(session: Session, user_id: str, payload: ConfigPayload) -> ConfigResponse:
+    auth, send_cookies_with_requests, literal_headers = _resolve_auth_payload(payload)
     _upsert_environments(session, user_id, payload.baseUrl)
-    _replace_session_headers(session, user_id, payload.headers)
+    _replace_session_headers(session, user_id, literal_headers, auth, send_cookies_with_requests)
     log_info("ConfigService", "upsert_config", "Config updated", user_id=user_id)
     return get_config(session, user_id)

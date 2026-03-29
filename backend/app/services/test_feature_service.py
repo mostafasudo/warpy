@@ -39,18 +39,21 @@ def test_list_features_returns_enabled_state(configure_db):
 
     with session_scope() as session:
         feature = create_feature(session, "user-1", "Users")
-        other = create_feature(session, "user-1", "Billing")
+        create_feature(session, "user-1", "Billing")
         session.add_all([
             Tool(user_id="user-1", path="/users", method=HttpMethod.get, tool={"function": {"name": "list", "description": "list", "parameters": {}}}, agent_enabled=True, feature_id=feature.id),
-            Tool(user_id="user-1", path="/users/:id", method=HttpMethod.get, tool={"function": {"name": "get", "description": "get", "parameters": {}}}, agent_enabled=False, feature_id=feature.id)
+            Tool(user_id="user-1", tool_type="frontend", tool={"function": {"name": "open_drawer", "description": "open", "parameters": {}}}, agent_enabled=False, feature_id=feature.id)
         ])
         session.flush()
 
         results = list_features(session, "user-1")
         assert len(results) == 2
         states = {item.name: item.enabled_state for item in results}
+        backend_counts = {item.name: item.backend_tool_count for item in results}
         assert states["Users"] == "partial"
         assert states["Billing"] == "disabled"
+        assert backend_counts["Users"] == 1
+        assert backend_counts["Billing"] == 0
 
 
 def test_set_feature_enabled_updates_tools(configure_db, monkeypatch: pytest.MonkeyPatch):

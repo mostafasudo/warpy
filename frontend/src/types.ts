@@ -1,15 +1,22 @@
 export type StorageSource = "localStorage" | "sessionStorage" | "cookies";
+export type AuthStorageSource = StorageSource;
 
 export type AuthorizationType = "bearer" | "basic" | "none";
+export type AuthMode = "none" | "header";
 
 export type ConfigMap = Record<string, string>;
-export type HeaderConfig = Record<
-  string,
-  { source: StorageSource; key: string; authType?: AuthorizationType }
->;
+export type HeaderConfig = Record<string, { source: StorageSource; key: string }>;
+export type AuthConfig = {
+  mode: AuthMode;
+  source?: AuthStorageSource;
+  key?: string;
+  authType?: AuthorizationType;
+};
 
 export type ConfigResponse = {
   baseUrl: ConfigMap;
+  auth?: AuthConfig;
+  sendCookiesWithRequests?: boolean;
   headers: HeaderConfig;
 };
 
@@ -54,6 +61,7 @@ export type FeatureSummary = {
   name: string;
   enabledState: FeatureEnabledState;
   toolCount: number;
+  backendToolCount?: number;
 };
 
 export type ToolPagination = {

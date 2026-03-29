@@ -12,6 +12,7 @@ import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
+import type { AuthConfig, FeatureWithTools } from "@/types"
 
 type OverviewSection = "activity" | "api" | "features" | "knowledge-base" | "agent"
 type StepTone = "current" | "done" | "recommended" | "upcoming" | "optional"
@@ -28,6 +29,8 @@ type SnapshotCardProps = {
   value: string
   helper: string
   icon: ReactNode
+  valueStyle?: "metric" | "status"
+  tone?: "done" | "current" | "optional"
 }
 
 type InsightMetricProps = {
@@ -85,7 +88,14 @@ const stepToneClasses: Record<StepTone, string> = {
   optional: "border-dashed border-border/70 bg-muted/10",
 }
 
-const snapshotCard = ({ label, value, helper, icon }: SnapshotCardProps) => (
+const snapshotCard = ({
+  label,
+  value,
+  helper,
+  icon,
+  valueStyle = "metric",
+  tone = "done",
+}: SnapshotCardProps) => (
   <div className="rounded-xl border border-border/60 bg-card/60 p-4">
     <div className="flex items-start justify-between gap-3">
       <div className="space-y-1">
@@ -96,7 +106,18 @@ const snapshotCard = ({ label, value, helper, icon }: SnapshotCardProps) => (
         {icon}
       </div>
     </div>
-    <p className="mt-4 text-2xl font-semibold tabular-nums">{value}</p>
+    {valueStyle === "status" ? (
+      <div className="mt-4">
+        <Badge
+          variant={tone === "done" ? "default" : tone === "current" ? "outline" : "secondary"}
+          className="px-2.5 py-1 text-xs font-semibold"
+        >
+          {value}
+        </Badge>
+      </div>
+    ) : (
+      <p className="mt-4 text-2xl font-semibold tabular-nums">{value}</p>
+    )}
   </div>
 )
 
@@ -167,7 +188,8 @@ const OpportunityCard = ({ title, description, ctaLabel, onClick }: OpportunityC
 const getStatusHeader = ({
   hasAgent,
   environmentCount,
-  hasAuthorizationHeader,
+  authReady,
+  backendAuthRelevant,
   featureCount,
   configuredActionCount,
   conversationCount,
@@ -175,7 +197,8 @@ const getStatusHeader = ({
 }: {
   hasAgent: boolean
   environmentCount: number
-  hasAuthorizationHeader: boolean
+  authReady: boolean
+  backendAuthRelevant: boolean
   featureCount: number
   configuredActionCount: number
   conversationCount: number
@@ -199,12 +222,12 @@ const getStatusHeader = ({
     }
   }
 
-  if (!hasAuthorizationHeader) {
+  if (backendAuthRelevant && !authReady) {
     return {
       eyebrow: "Setup incomplete",
-      title: "Add an Authorization header next",
-      description: `${environmentCount} environment${environmentCount === 1 ? "" : "s"} ${environmentCount === 1 ? "is" : "are"} ready, but requests still need authorization for the agent to run backend tools.`,
-      primaryAction: { label: "Add authorization header", section: "api" },
+      title: "Add auth for backend tools next",
+      description: `${environmentCount} environment${environmentCount === 1 ? "" : "s"} ${environmentCount === 1 ? "is" : "are"} ready, but backend tool requests still need auth before the agent can run them.`,
+      primaryAction: { label: "Add auth", section: "api" },
     }
   }
 
@@ -212,7 +235,7 @@ const getStatusHeader = ({
     return {
       eyebrow: "Setup incomplete",
       title: "Add your first feature",
-      description: "The agent can connect and use authenticated backend tools now. Group the actions you want it to run into features next.",
+      description: "The agent can connect now. Group the actions you want it to run into features next.",
       primaryAction: { label: "Add features", section: "features" },
     }
   }
@@ -324,6 +347,16 @@ const getKnowledgeSummary = ({
 const getConfiguredEnvironmentCount = (baseUrls: Record<string, string> | undefined) =>
   Object.values(baseUrls ?? {}).filter((value) => value.trim().length > 0).length
 
+const isAuthorizationReady = (auth: AuthConfig | undefined, sendCookiesWithRequests: boolean) =>
+  sendCookiesWithRequests ||
+  Boolean(
+    auth?.mode === "header" &&
+    auth.key?.trim() &&
+    (auth.source === "localStorage" || auth.source === "sessionStorage" || auth.source === "cookies")
+  )
+
+const getBackendToolCount = (feature: FeatureWithTools) => feature.backendToolCount ?? feature.toolCount
+
 export const DashboardPanel = () => {
   const configQuery = useConfigQuery()
   const featuresQuery = useFeaturesQuery("")
@@ -344,9 +377,14 @@ export const DashboardPanel = () => {
   const environmentCount = getConfiguredEnvironmentCount(config?.baseUrl)
   const headerEntries = Object.entries(config?.headers ?? {})
   const headerCount = headerEntries.length
-  const hasAuthorizationHeader = headerEntries.some(([name]) => name.trim().toLowerCase() === "authorization")
+  const sendCookiesWithRequests = Boolean(
+    config?.sendCookiesWithRequests || (config?.auth as { mode?: string } | undefined)?.mode === "browserCookies"
+  )
+  const authReady = isAuthorizationReady(config?.auth, sendCookiesWithRequests)
   const featureCount = features.length
   const configuredActionCount = features.reduce((total, feature) => total + feature.toolCount, 0)
+  const backendAuthRelevant = features.some((feature) => getBackendToolCount(feature) > 0)
+  const authSatisfied = authReady || !backendAuthRelevant
   const conversationCount = activity?.conversationCount ?? 0
   const actionCount = activity?.actionCount ?? 0
   const topActions = activity?.topActions ?? []
@@ -355,19 +393,20 @@ export const DashboardPanel = () => {
   const completedCoreSteps =
     Number(hasAgent) +
     Number(environmentCount > 0) +
-    Number(hasAuthorizationHeader) +
+    Number(authSatisfied) +
     Number(featureCount > 0 && configuredActionCount > 0)
   const coreReady =
     hasAgent &&
     environmentCount > 0 &&
-    hasAuthorizationHeader &&
+    authSatisfied &&
     featureCount > 0 &&
     configuredActionCount > 0
 
   const statusHeader = getStatusHeader({
     hasAgent,
     environmentCount,
-    hasAuthorizationHeader,
+    authReady,
+    backendAuthRelevant,
     featureCount,
     configuredActionCount,
     conversationCount,
@@ -404,13 +443,19 @@ export const DashboardPanel = () => {
       icon: <Link2 className="h-5 w-5" />,
     },
     {
-      title: "Add headers",
-      description: headerCount === 0
-        ? "No headers yet. Add Authorization so the agent can run backend tools."
-        : hasAuthorizationHeader
-          ? `${headerCount} header${headerCount === 1 ? "" : "s"} configured, including Authorization.`
-          : `${headerCount} header${headerCount === 1 ? "" : "s"} configured, but Authorization is still missing for backend tools.`,
-      tone: hasAuthorizationHeader ? "done" : hasAgent && environmentCount > 0 ? "current" : "upcoming",
+      title: "Set up auth",
+      description: !authReady && headerCount === 0
+        ? backendAuthRelevant
+          ? "Add auth so backend tools can run."
+          : "Optional until you add backend tools."
+        : authReady
+          ? headerCount > 0
+            ? `Auth is ready. ${headerCount} extra header${headerCount === 1 ? "" : "s"} ${headerCount === 1 ? "is" : "are"} set.`
+            : "Auth is ready."
+          : backendAuthRelevant
+            ? `${headerCount} extra header${headerCount === 1 ? "" : "s"} set, but auth is still missing.`
+            : `${headerCount} extra header${headerCount === 1 ? "" : "s"} set. Auth stays optional for now.`,
+      tone: authReady ? "done" : backendAuthRelevant && hasAgent && environmentCount > 0 ? "current" : hasAgent && environmentCount > 0 ? "optional" : "upcoming",
       icon: <Braces className="h-5 w-5" />,
     },
     {
@@ -422,7 +467,7 @@ export const DashboardPanel = () => {
           : `${featureCount} feature${featureCount === 1 ? "" : "s"} with ${configuredActionCount} mapped action${configuredActionCount === 1 ? "" : "s"}.`,
       tone: featureCount > 0 && configuredActionCount > 0
         ? "done"
-        : hasAgent && environmentCount > 0 && hasAuthorizationHeader
+        : hasAgent && environmentCount > 0 && authSatisfied
           ? "current"
           : "upcoming",
       icon: <Network className="h-5 w-5" />,
@@ -453,13 +498,21 @@ export const DashboardPanel = () => {
       icon: <Link2 className="h-5 w-5" />,
     },
     {
-      label: "Headers",
-      value: headerCount.toLocaleString(),
-      helper: hasAuthorizationHeader
-        ? "Authorization is in place for backend tools."
-        : headerCount > 0
-          ? "Authorization is still missing for backend tools."
-          : "No headers configured yet.",
+      label: "Auth",
+      value: authReady ? "Ready" : backendAuthRelevant ? "Needed" : "Optional",
+      valueStyle: "status",
+      tone: authReady ? "done" : backendAuthRelevant ? "current" : "optional",
+      helper: authReady
+        ? headerCount > 0
+          ? `${headerCount} extra header${headerCount === 1 ? "" : "s"} set.`
+          : sendCookiesWithRequests
+            ? "Cookies will be sent."
+            : "Authorization is set."
+        : backendAuthRelevant
+          ? "Needed for backend tools."
+          : headerCount > 0
+            ? `${headerCount} extra header${headerCount === 1 ? "" : "s"} set.`
+            : "Optional for now.",
       icon: <Braces className="h-5 w-5" />,
     },
     {

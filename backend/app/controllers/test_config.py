@@ -51,6 +51,8 @@ def test_get_config_bootstraps_required_environments(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert set(data["baseUrl"].keys()) == {"local", "production"}
+    assert data["auth"] == {"mode": "none"}
+    assert data["sendCookiesWithRequests"] is False
     assert data["headers"] == {}
 
 
@@ -61,6 +63,7 @@ def test_put_config_upserts_and_replaces_headers(client: TestClient):
             "production": "https://api.example.com",
             "staging": "https://staging.example.com"
         },
+        "auth": {"mode": "none"},
         "headers": {
             "authToken": {"source": "localStorage", "key": "authorization"},
             "csrf": {"source": "cookies", "key": "csrfToken"}
@@ -70,6 +73,8 @@ def test_put_config_upserts_and_replaces_headers(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert data["baseUrl"]["staging"] == "https://staging.example.com"
+    assert data["auth"] == {"mode": "none"}
+    assert data["sendCookiesWithRequests"] is False
     assert set(data["headers"].keys()) == {"authToken", "csrf"}
 
     second_payload = {
@@ -77,6 +82,7 @@ def test_put_config_upserts_and_replaces_headers(client: TestClient):
             "local": "http://localhost:4000",
             "production": "https://api.example.com"
         },
+        "auth": {"mode": "none"},
         "headers": {
             "session": {"source": "sessionStorage", "key": "sid"}
         }
@@ -86,18 +92,23 @@ def test_put_config_upserts_and_replaces_headers(client: TestClient):
     data = response.json()
     assert set(data["baseUrl"].keys()) == {"local", "production"}
     assert data["baseUrl"]["local"] == "http://localhost:4000"
+    assert data["auth"] == {"mode": "none"}
+    assert data["sendCookiesWithRequests"] is False
     assert data["headers"] == {"session": {"source": "sessionStorage", "key": "sid"}}
 
     response = client.get("/config", headers=auth_headers())
     assert response.status_code == 200
     data = response.json()
     assert "staging" not in data["baseUrl"]
+    assert data["auth"] == {"mode": "none"}
+    assert data["sendCookiesWithRequests"] is False
     assert data["headers"] == {"session": {"source": "sessionStorage", "key": "sid"}}
 
 
 def test_put_config_requires_local_and_production(client: TestClient):
     payload = {
         "baseUrl": {"local": "http://localhost:3000"},
+        "auth": {"mode": "none"},
         "headers": {}
     }
     response = client.put("/config", json=payload, headers=auth_headers())
@@ -105,25 +116,134 @@ def test_put_config_requires_local_and_production(client: TestClient):
     assert response.json()["detail"] == "Missing required environments: production"
 
 
-def test_authorization_header_auth_type(client: TestClient):
+def test_header_auth_round_trips_separately_from_headers(client: TestClient):
+    payload = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "auth": {"mode": "header", "source": "localStorage", "key": "token"},
+        "headers": {}
+    }
+
+    first = client.put("/config", json=payload, headers=auth_headers())
+    assert first.status_code == 200
+    assert first.json()["auth"] == {
+        "mode": "header",
+        "source": "localStorage",
+        "key": "token",
+        "authType": "bearer",
+    }
+    assert first.json()["sendCookiesWithRequests"] is False
+    assert first.json()["headers"] == {}
+
+    payload["auth"]["authType"] = "basic"
+    second = client.put("/config", json=payload, headers=auth_headers())
+    assert second.status_code == 200
+    assert second.json()["auth"] == {
+        "mode": "header",
+        "source": "localStorage",
+        "key": "token",
+        "authType": "basic",
+    }
+
+def test_send_cookies_with_requests_round_trips_as_request_behavior(client: TestClient):
+    payload = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "auth": {"mode": "none"},
+        "sendCookiesWithRequests": True,
+        "headers": {}
+    }
+
+    response = client.put("/config", json=payload, headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["auth"] == {"mode": "none"}
+    assert response.json()["sendCookiesWithRequests"] is True
+    assert response.json()["headers"] == {}
+
+
+def test_header_auth_and_cookie_sending_can_both_round_trip(client: TestClient):
+    payload = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "auth": {"mode": "header", "source": "localStorage", "key": "token"},
+        "sendCookiesWithRequests": True,
+        "headers": {}
+    }
+
+    response = client.put("/config", json=payload, headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["auth"] == {
+        "mode": "header",
+        "source": "localStorage",
+        "key": "token",
+        "authType": "bearer",
+    }
+    assert response.json()["sendCookiesWithRequests"] is True
+    assert response.json()["headers"] == {}
+
+
+def test_header_auth_requires_a_key_without_crashing_request_validation(client: TestClient):
+    payload = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "auth": {"mode": "header", "source": "localStorage"},
+        "headers": {}
+    }
+
+    response = client.put("/config", json=payload, headers=auth_headers())
+    assert response.status_code == 422
+    assert "Header auth key is required" in response.text
+
+
+def test_legacy_authorization_header_payload_is_still_accepted(client: TestClient):
     payload = {
         "baseUrl": {
             "local": "http://localhost:3000",
             "production": "https://api.example.com"
         },
         "headers": {
-            "Authorization": {"source": "cookies", "key": "token"}
+            "Authorization": {"source": "cookies", "key": "legacy_cookie", "authType": "bearer"},
+            "x-user-id": {"source": "cookies", "key": "user_id"}
         }
     }
 
-    first = client.put("/config", json=payload, headers=auth_headers())
-    assert first.status_code == 200
-    assert first.json()["headers"]["Authorization"]["authType"] == "bearer"
+    response = client.put("/config", json=payload, headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["auth"] == {
+        "mode": "header",
+        "source": "cookies",
+        "key": "legacy_cookie",
+        "authType": "bearer",
+    }
+    assert response.json()["sendCookiesWithRequests"] is False
+    assert response.json()["headers"] == {"x-user-id": {"source": "cookies", "key": "user_id"}}
 
-    payload["headers"]["Authorization"]["authType"] = "basic"
-    second = client.put("/config", json=payload, headers=auth_headers())
-    assert second.status_code == 200
-    assert second.json()["headers"]["Authorization"]["authType"] == "basic"
+
+def test_legacy_authorization_cookie_payload_without_key_enables_request_credentials(client: TestClient):
+    payload = {
+        "baseUrl": {
+            "local": "http://localhost:3000",
+            "production": "https://api.example.com"
+        },
+        "headers": {
+            "Authorization": {"source": "cookies"},
+            "x-user-id": {"source": "cookies", "key": "user_id"}
+        }
+    }
+
+    response = client.put("/config", json=payload, headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["auth"] == {"mode": "none"}
+    assert response.json()["sendCookiesWithRequests"] is True
+    assert response.json()["headers"] == {"x-user-id": {"source": "cookies", "key": "user_id"}}
 
 
 def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -132,6 +252,7 @@ def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPat
             "local": "http://localhost:3000",
             "production": "https://api.example.com"
         },
+        "auth": {"mode": "none"},
         "headers": {
             "authToken": {"source": "localStorage", "key": "authorization"}
         }
@@ -148,6 +269,8 @@ def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPat
     second_data = second_get.json()
     assert second_data["baseUrl"]["local"] == ""
     assert second_data["baseUrl"]["production"] == ""
+    assert second_data["auth"] == {"mode": "none"}
+    assert second_data["sendCookiesWithRequests"] is False
     assert second_data["headers"] == {}
 
     payload_user2 = {
@@ -155,6 +278,7 @@ def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPat
             "local": "http://localhost:4000",
             "production": "https://api.user2.com"
         },
+        "auth": {"mode": "none"},
         "headers": {
             "session": {"source": "sessionStorage", "key": "sid"}
         }
@@ -170,4 +294,6 @@ def test_config_is_user_scoped(client: TestClient, monkeypatch: pytest.MonkeyPat
     assert first_get.status_code == 200
     first_data = first_get.json()
     assert first_data["baseUrl"]["local"] == "http://localhost:3000"
+    assert first_data["auth"] == {"mode": "none"}
+    assert first_data["sendCookiesWithRequests"] is False
     assert first_data["headers"] == {"authToken": {"source": "localStorage", "key": "authorization"}}

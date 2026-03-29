@@ -15,7 +15,15 @@ const widgetSource = fs.readFileSync(path.resolve(process.cwd(), "public/widget/
 
 type WidgetConfig = {
   actionsRemaining?: number
+  auth?: {
+    mode?: "none" | "header"
+    source?: "localStorage" | "sessionStorage" | "cookies"
+    key?: string
+    authType?: "bearer" | "basic" | "none"
+  }
+  headers?: Record<string, { source: "localStorage" | "sessionStorage" | "cookies"; key: string }>
   isWidgetHidden?: boolean
+  sendCookiesWithRequests?: boolean
   widgetStarterSuggestions?: string[]
   widgetSuggestionsEnabled?: boolean
   widgetBehavior?: "overlay" | "push"
@@ -92,7 +100,10 @@ class MockWebSocket {
 function createConfig(overrides: WidgetConfig = {}): Required<WidgetConfig> {
   return {
     actionsRemaining: 5,
+    auth: { mode: "none" },
+    headers: {},
     isWidgetHidden: false,
+    sendCookiesWithRequests: false,
     securityDisclosureEnabled: true,
     widgetBehavior: "overlay",
     widgetInputPlaceholder: "Ask Warpy…",
@@ -117,10 +128,13 @@ function setViewport(width: number, height = 900) {
 }
 
 function createJsonResponse(body: unknown) {
+  const raw = JSON.stringify(body)
   return {
+    headers: new Headers({ "content-type": "application/json" }),
     json: async () => body,
     ok: true,
     status: 200,
+    text: async () => raw,
   }
 }
 
@@ -484,6 +498,209 @@ describe("widget desktop resize", () => {
       expect(MockWebSocket.instances).toHaveLength(1)
       expect(MockWebSocket.instances[0]?.sent).toHaveLength(2)
       expect(shadowRoot.textContent).toContain("Finished.")
+    })
+  })
+
+  it("uses request credentials when browser cookie sending is enabled", async () => {
+    ;(global.fetch as jest.Mock).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig({ sendCookiesWithRequests: true }))
+      }
+      if (url === "https://customer.example/me") {
+        expect(init).toEqual(expect.objectContaining({ credentials: "include", method: "GET" }))
+        expect(new Headers(init?.headers).get("Authorization")).toBeNull()
+        return createJsonResponse({ ok: true })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-cookie-auth",
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "backend", name: "get_profile", method: "GET", path: "/me" }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.toolResults).toEqual([{ id: "tc_1", statusCode: 200, body: { ok: true } }])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-cookie-auth",
+          messages: [{ role: "assistant", content: "Cookie auth finished." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget({ sendCookiesWithRequests: true }, { baseUrl: "https://customer.example", mockConfigFetch: false })
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Use cookies" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Cookie auth finished.")
+    })
+  })
+
+  it("adds the configured Authorization header when header auth is enabled", async () => {
+    localStorage.setItem("session_token", "abc123")
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(
+          createConfig({
+            auth: { mode: "header", source: "localStorage", key: "session_token", authType: "basic" }
+          })
+        )
+      }
+      if (url === "https://customer.example/me") {
+        const headers = new Headers(init?.headers)
+        expect(headers.get("Authorization")).toBe("Basic abc123")
+        expect(init?.credentials).toBeUndefined()
+        return createJsonResponse({ ok: true })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-header-auth",
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "backend", name: "get_profile", method: "GET", path: "/me" }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.toolResults).toEqual([{ id: "tc_1", statusCode: 200, body: { ok: true } }])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-header-auth",
+          messages: [{ role: "assistant", content: "Header auth finished." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget(
+      { auth: { mode: "header", source: "localStorage", key: "session_token", authType: "basic" } },
+      { baseUrl: "https://customer.example", mockConfigFetch: false }
+    )
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Use header auth" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Header auth finished.")
+    })
+  })
+
+  it("preserves legacy cookie-backed Authorization headers when provided by widget config", async () => {
+    document.cookie = "legacy_cookie=abc123"
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(
+          createConfig({
+            auth: { mode: "header", source: "cookies", key: "legacy_cookie", authType: "bearer" }
+          })
+        )
+      }
+      if (url === "https://customer.example/me") {
+        const headers = new Headers(init?.headers)
+        expect(headers.get("Authorization")).toBe("Bearer abc123")
+        expect(init?.credentials).toBeUndefined()
+        return createJsonResponse({ ok: true })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-cookie-header-auth",
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "backend", name: "get_profile", method: "GET", path: "/me" }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.toolResults).toEqual([{ id: "tc_1", statusCode: 200, body: { ok: true } }])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-cookie-header-auth",
+          messages: [{ role: "assistant", content: "Legacy cookie header auth finished." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget(
+      { auth: { mode: "header", source: "cookies", key: "legacy_cookie", authType: "bearer" } },
+      { baseUrl: "https://customer.example", mockConfigFetch: false }
+    )
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Use legacy cookie header auth" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Legacy cookie header auth finished.")
     })
   })
 

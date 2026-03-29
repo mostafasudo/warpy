@@ -614,15 +614,21 @@
     return lower.startsWith("bearer ") ? trimmed : "Bearer " + trimmed;
   }
 
-  function buildHeaders(headerConfig) {
+  function buildRequestConfig(authConfig, headerConfig, sendCookiesWithRequests) {
     const headers = {};
+    let credentials = sendCookiesWithRequests ? "include" : undefined;
     for (const [headerName, config] of Object.entries(headerConfig)) {
       const value = extractHeaderValue(config.source, config.key);
       if (!value) continue;
-      const isAuth = headerName.toLowerCase() === "authorization";
-      headers[headerName] = isAuth ? formatAuthHeaderValue(value, config.authType) : value;
+      headers[headerName] = value;
     }
-    return headers;
+    if (authConfig && authConfig.mode === "header") {
+      const value = extractHeaderValue(authConfig.source, authConfig.key);
+      if (value) {
+        headers.Authorization = formatAuthHeaderValue(value, authConfig.authType);
+      }
+    }
+    return credentials ? { headers, credentials } : { headers };
   }
 
   function substitutePath(path, params) {
@@ -2667,10 +2673,10 @@
   // Tool Call Execution (Endpoint, Frontend Context, Frontend Actions)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async function executeEndpointToolCall(toolCall, baseUrl, headerConfig, signal) {
+  async function executeEndpointToolCall(toolCall, baseUrl, authConfig, headerConfig, sendCookiesWithRequests, signal) {
     throwIfAborted(signal);
     // Backend tools execute against the customer-configured base URL, not Warpy's API.
-    const sessionHeaders = buildHeaders(headerConfig);
+    const sessionRequestConfig = buildRequestConfig(authConfig, headerConfig, sendCookiesWithRequests);
     const path = substitutePath(toolCall.path, toolCall.params || {});
     const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
 
@@ -2682,13 +2688,14 @@
 
     const requestHeaders = {
       "Content-Type": "application/json",
-      ...sessionHeaders,
+      ...sessionRequestConfig.headers,
       ...(toolCall.headers || {}),
     };
 
     const fetchOptions = {
       method: toolCall.method,
       headers: requestHeaders,
+      credentials: sessionRequestConfig.credentials,
     };
 
     if (toolCall.body && Object.keys(toolCall.body).length > 0) {
@@ -2958,11 +2965,11 @@
     };
   }
 
-  async function executeToolCall(toolCall, baseUrl, headerConfig, ui, signal) {
+  async function executeToolCall(toolCall, baseUrl, authConfig, headerConfig, sendCookiesWithRequests, ui, signal) {
     throwIfAborted(signal);
     const type = resolveToolType(toolCall);
     if (type === "backend") {
-      return executeEndpointToolCall(toolCall, baseUrl, headerConfig, signal);
+      return executeEndpointToolCall(toolCall, baseUrl, authConfig, headerConfig, sendCookiesWithRequests, signal);
     }
     if (type === "read_page") {
       return executeReadPage(toolCall, ui, signal);
@@ -4505,7 +4512,9 @@
         isNavigatingAway = false;
       }
     });
+    let authConfig = { mode: "none" };
     let headerConfig = {};
+    let sendCookiesWithRequests = false;
     let widgetAuthToken = state.auth.token || null;
     let widgetRefreshEndpointPath = "/widget-token";
     let configPromise = null;
@@ -5760,6 +5769,11 @@
         hideWidget();
         return;
       }
+      authConfig = data.auth && typeof data.auth === "object" ? data.auth : { mode: "none" };
+      sendCookiesWithRequests = Boolean(data.sendCookiesWithRequests || authConfig.mode === "browserCookies");
+      if (authConfig.mode === "browserCookies") {
+        authConfig = { mode: "none" };
+      }
       headerConfig = data.headers || {};
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
       widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
@@ -5806,8 +5820,12 @@
       }
       // The refresh endpoint is customer-owned and proxies to Warpy server-to-server.
       const url = new URL(widgetRefreshEndpointPath, config.baseUrl.endsWith("/") ? config.baseUrl : config.baseUrl + "/");
-      const sessionHeaders = buildHeaders(headerConfig);
-      const res = await fetchWithTimeout(url.toString(), { method: "POST", headers: sessionHeaders });
+      const sessionRequestConfig = buildRequestConfig(authConfig, headerConfig, sendCookiesWithRequests);
+      const res = await fetchWithTimeout(url.toString(), {
+        method: "POST",
+        headers: sessionRequestConfig.headers,
+        credentials: sessionRequestConfig.credentials,
+      });
       if (!res.ok) {
         throw new Error("Token refresh failed");
       }
@@ -6043,7 +6061,7 @@
           return t === "backend" || t === "read_page" || t === "find_elements";
         });
         if (hasOnlyNonFrontend) {
-          return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, headerConfig, frontendUi, signal)));
+          return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, authConfig, headerConfig, sendCookiesWithRequests, frontendUi, signal)));
         }
         const results = [];
         for (const call of toolCalls) {
@@ -6051,7 +6069,7 @@
             await frontendUi.primeWarning(signal);
             didPrimeWarning = true;
           }
-          results.push(await executeToolCall(call, config.baseUrl, headerConfig, frontendUi, signal));
+          results.push(await executeToolCall(call, config.baseUrl, authConfig, headerConfig, sendCookiesWithRequests, frontendUi, signal));
         }
         return results;
       } finally {

@@ -80,6 +80,17 @@ def _get_feature_tool_counts(session: Session, feature_ids: list[UUID]) -> dict[
     return {row[0]: row[1] for row in rows}
 
 
+def _get_feature_backend_tool_counts(session: Session, feature_ids: list[UUID]) -> dict[UUID, int]:
+    if not feature_ids:
+        return {}
+    rows = session.execute(
+        select(Tool.feature_id, func.count(Tool.id))
+        .where(Tool.feature_id.in_(feature_ids), Tool.tool_type == "backend")
+        .group_by(Tool.feature_id)
+    ).all()
+    return {row[0]: row[1] for row in rows}
+
+
 def _get_feature_enabled_states(session: Session, feature_ids: list[UUID]) -> dict[UUID, tuple[int, int]]:
     if not feature_ids:
         return {}
@@ -114,12 +125,14 @@ class FeatureWithPagination:
         feature: Feature,
         tools: list[Tool],
         tool_count: int,
+        backend_tool_count: int,
         enabled_state: str,
         pagination: ToolPagination
     ):
         self.id = feature.id
         self.name = feature.name
         self.tool_count = tool_count
+        self.backend_tool_count = backend_tool_count
         self.enabled_state = enabled_state
         self.tools = tools
         self.pagination = pagination
@@ -175,11 +188,13 @@ def list_features(
         return []
     feature_ids = [f.id for f in features]
     counts = _get_feature_tool_counts(session, feature_ids)
+    backend_counts = _get_feature_backend_tool_counts(session, feature_ids)
     states = _get_feature_enabled_states(session, feature_ids)
     tools_by_feature = _get_paginated_tools_by_feature(session, feature_ids, tool_page)
     result = []
     for feature in features:
         total = counts.get(feature.id, 0)
+        backend_total = backend_counts.get(feature.id, 0)
         state_info = states.get(feature.id, (0, 0))
         enabled_state = _compute_enabled_state(state_info[0], state_info[1])
         paged_tools = tools_by_feature.get(feature.id, [])
@@ -190,7 +205,7 @@ def list_features(
             total=total,
             total_pages=total_pages
         )
-        result.append(FeatureWithPagination(feature, paged_tools, total, enabled_state, pagination))
+        result.append(FeatureWithPagination(feature, paged_tools, total, backend_total, enabled_state, pagination))
     return result
 
 
@@ -230,6 +245,11 @@ def _build_feature_with_pagination(
     total = session.scalar(
         select(func.count(Tool.id)).where(Tool.feature_id == feature.id)
     ) or 0
+    backend_total = session.scalar(
+        select(func.count(Tool.id)).where(
+            and_(Tool.feature_id == feature.id, Tool.tool_type == "backend")
+        )
+    ) or 0
     enabled_count = session.scalar(
         select(func.count(Tool.id)).where(
             and_(Tool.feature_id == feature.id, Tool.agent_enabled == True)
@@ -251,7 +271,7 @@ def _build_feature_with_pagination(
         total=total,
         total_pages=total_pages
     )
-    return FeatureWithPagination(feature, tools, total, enabled_state, pagination)
+    return FeatureWithPagination(feature, tools, total, backend_total, enabled_state, pagination)
 
 
 def _create_feature_record(session: Session, user_id: str, name: str) -> Feature:

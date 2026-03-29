@@ -36,13 +36,15 @@ describe("SignedInApp", () => {
     mockedUseOnboardingStateQuery.mockReset()
   })
 
-  it("shows a loading gate before the shell while onboarding state is pending", () => {
+  it("renders the shell with a light loading overlay while onboarding state is pending", () => {
     mockedUseOnboardingStateQuery.mockReturnValue({ isPending: true, isError: false, data: null })
 
     render(<SignedInApp />)
 
-    expect(screen.getByTestId("signed-in-loading")).not.toBeNull()
-    expect(screen.queryByTestId("shell")).toBeNull()
+    expect(screen.getByTestId("shell")).not.toBeNull()
+    expect(screen.getByTestId("signed-in-shell-loading").className).toContain("cursor-progress")
+    expect(screen.getByTestId("signed-in-shell-loading").className).not.toContain("pointer-events-none")
+    expect(screen.queryByTestId("onboarding-gate")).toBeNull()
   })
 
   it("renders onboarding instead of the shell", async () => {

@@ -4,9 +4,12 @@ import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { useConfigQuery } from "@/queries/use-config"
+import { useSaveConfig } from "@/queries/use-save-config"
 import { SessionHeadersPanel } from "./session-headers-panel"
 import { useConfigUiStore } from "@/stores/config-ui"
-import { useToastStore } from "@/stores/toast"
+
+const addToastMock = jest.fn()
 
 jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
@@ -17,17 +20,18 @@ jest.mock("@/queries/use-save-config", () => ({
 }))
 
 jest.mock("@/stores/toast", () => {
-  const addToast = jest.fn()
+  type ToastState = { addToast: jest.Mock; toasts: unknown[]; removeToast: jest.Mock }
   return {
-    useToastStore: (selector: any) => selector({ addToast, toasts: [], removeToast: jest.fn() }),
+    useToastStore: <T,>(selector: (state: ToastState) => T) =>
+      selector({ addToast: addToastMock, toasts: [], removeToast: jest.fn() }),
     toastSelectors: {
-      addToast: (state: any) => state.addToast
+      addToast: (state: ToastState) => state.addToast
     }
   }
 })
 
-const mockedUseConfigQuery = require("@/queries/use-config").useConfigQuery as jest.Mock
-const mockedUseSaveConfig = require("@/queries/use-save-config").useSaveConfig as jest.Mock
+const mockedUseConfigQuery = useConfigQuery as unknown as jest.Mock
+const mockedUseSaveConfig = useSaveConfig as unknown as jest.Mock
 
 const renderPanel = () =>
   render(
@@ -38,10 +42,13 @@ const renderPanel = () =>
 
 describe("SessionHeadersPanel", () => {
   beforeAll(() => {
-    ;(HTMLElement.prototype as any).hasPointerCapture = () => false
-    ;(HTMLElement.prototype as any).releasePointerCapture = () => {}
-    ;(HTMLElement.prototype as any).scrollIntoView = () => {}
+    Object.assign(HTMLElement.prototype, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: () => undefined,
+      scrollIntoView: () => undefined
+    })
   })
+
   beforeEach(() => {
     useConfigUiStore.getState().resetHeaderForm()
     useConfigUiStore.getState().resetBaseForm()
@@ -65,13 +72,145 @@ describe("SessionHeadersPanel", () => {
     expect(screen.getAllByRole("row")).toHaveLength(4)
   })
 
-  it("adds, edits, and deletes headers", async () => {
+  it("tracks dirty auth state before enabling save", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: { local: "http://localhost", production: "https://api.example.com" },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: {}
+      },
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderPanel()
+
+    expect(screen.queryByTestId("auth-dirty-badge")).toBeNull()
+    expect(screen.getByTestId("save-auth-settings").getAttribute("disabled")).not.toBeNull()
+
+    await user.click(screen.getByTestId("send-cookies-switch"))
+
+    expect(screen.getByTestId("auth-dirty-badge")).not.toBeNull()
+    expect(screen.getByTestId("save-auth-settings").getAttribute("disabled")).toBeNull()
+  })
+
+  it("discards auth changes back to the saved config", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: { local: "http://localhost" },
+        auth: { mode: "header", source: "localStorage", key: "token", authType: "bearer" },
+        sendCookiesWithRequests: false,
+        headers: {}
+      },
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderPanel()
+
+    expect((screen.getByTestId("auth-key-input") as HTMLInputElement).value).toBe("token")
+    expect((screen.getByTestId("send-cookies-switch") as HTMLButtonElement).getAttribute("data-state")).toBe(
+      "unchecked"
+    )
+
+    await user.clear(screen.getByTestId("auth-key-input"))
+    await user.type(screen.getByTestId("auth-key-input"), "next_token")
+    await user.click(screen.getByTestId("send-cookies-switch"))
+
+    expect(screen.getByTestId("auth-dirty-badge")).not.toBeNull()
+
+    await user.click(screen.getByTestId("discard-auth-settings"))
+
+    expect(screen.queryByTestId("auth-dirty-badge")).toBeNull()
+    expect((screen.getByTestId("auth-key-input") as HTMLInputElement).value).toBe("token")
+    expect((screen.getByTestId("send-cookies-switch") as HTMLButtonElement).getAttribute("data-state")).toBe(
+      "unchecked"
+    )
+    expect(screen.getByTestId("save-auth-settings").getAttribute("disabled")).not.toBeNull()
+  })
+
+  it("saves header auth settings and the cookie toggle separately from custom headers", async () => {
+    const mutateAsync = jest.fn(async (payload) => payload)
+    mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: { local: "http://localhost", production: "https://api.example.com" },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: { "x-user-id": { source: "cookies", key: "user_id" } }
+      },
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderPanel()
+
+    await user.click(screen.getByTestId("auth-header-switch"))
+    await user.click(screen.getByTestId("auth-type-trigger"))
+    await user.click(await screen.findByRole("option", { name: "Basic" }))
+    await user.click(screen.getByTestId("auth-source-trigger"))
+    await user.click(await screen.findByRole("option", { name: "Session storage" }))
+    await user.type(screen.getByTestId("auth-key-input"), "session_token")
+    await user.click(screen.getByTestId("save-auth-settings"))
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      baseUrl: { local: "http://localhost", production: "https://api.example.com" },
+      auth: { mode: "header", source: "sessionStorage", key: "session_token", authType: "basic" },
+      sendCookiesWithRequests: false,
+      headers: { "x-user-id": { source: "cookies", key: "user_id" } }
+    })
+
+    await user.click(screen.getByTestId("send-cookies-switch"))
+    await user.click(screen.getByTestId("save-auth-settings"))
+
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      baseUrl: { local: "http://localhost", production: "https://api.example.com" },
+      auth: { mode: "header", source: "sessionStorage", key: "session_token", authType: "basic" },
+      sendCookiesWithRequests: true,
+      headers: { "x-user-id": { source: "cookies", key: "user_id" } }
+    })
+  })
+
+  it("allows Authorization headers to read from cookies when a cookie key is provided", async () => {
+    const mutateAsync = jest.fn(async (payload) => payload)
+    mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
+    mockedUseConfigQuery.mockReturnValue({
+      data: {
+        baseUrl: { local: "http://localhost", production: "https://api.example.com" },
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: {}
+      },
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderPanel()
+
+    await user.click(screen.getByTestId("auth-header-switch"))
+    await user.click(screen.getByTestId("auth-source-trigger"))
+    await user.click(await screen.findByRole("option", { name: "Cookies" }))
+    await user.type(screen.getByTestId("auth-key-input"), "auth_token")
+    await user.click(screen.getByTestId("save-auth-settings"))
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      baseUrl: { local: "http://localhost", production: "https://api.example.com" },
+      auth: { mode: "header", source: "cookies", key: "auth_token", authType: "bearer" },
+      sendCookiesWithRequests: false,
+      headers: {}
+    })
+  })
+
+  it("adds, edits, and deletes custom headers while preserving auth settings", async () => {
     const mutateAsync = jest.fn(async (payload) => payload)
     mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
     mockedUseConfigQuery.mockReturnValue({
       data: {
         baseUrl: { local: "http://localhost" },
-        headers: { auth: { source: "cookies", key: "authorization" } }
+        auth: { mode: "header", source: "localStorage", key: "token", authType: "bearer" },
+        sendCookiesWithRequests: true,
+        headers: { "x-user-id": { source: "cookies", key: "user_id" } }
       },
       isPending: false
     })
@@ -79,51 +218,55 @@ describe("SessionHeadersPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     renderPanel()
 
-    await screen.findByText("auth")
+    await screen.findByText("x-user-id")
 
     await user.click(screen.getByTestId("open-header-dialog"))
-    await user.clear(screen.getByTestId("header-name-input"))
-    await user.type(screen.getByTestId("header-name-input"), "x-user")
-    await user.clear(screen.getByTestId("header-key-input"))
-    await user.type(screen.getByTestId("header-key-input"), "x-user-id")
+    await user.type(screen.getByTestId("header-name-input"), "x-tenant-id")
+    await user.type(screen.getByTestId("header-key-input"), "tenant_id")
     await user.click(screen.getByTestId("save-header"))
 
     expect(mutateAsync).toHaveBeenCalledWith({
       baseUrl: { local: "http://localhost" },
+      auth: { mode: "header", source: "localStorage", key: "token", authType: "bearer" },
+      sendCookiesWithRequests: true,
       headers: {
-        auth: { source: "cookies", key: "authorization" },
-        "x-user": { source: "localStorage", key: "x-user-id" }
+        "x-user-id": { source: "cookies", key: "user_id" },
+        "x-tenant-id": { source: "localStorage", key: "tenant_id" }
       }
     })
 
-    await user.click(screen.getByTestId("edit-header-auth"))
+    await user.click(screen.getByTestId("edit-header-x-user-id"))
     await user.clear(screen.getByTestId("header-key-input"))
-    await user.type(screen.getByTestId("header-key-input"), "auth-cookie")
+    await user.type(screen.getByTestId("header-key-input"), "current_user_id")
     await user.click(screen.getByTestId("save-header"))
 
     expect(mutateAsync).toHaveBeenCalledWith({
       baseUrl: { local: "http://localhost" },
-      headers: { auth: { source: "cookies", key: "auth-cookie" } }
+      auth: { mode: "header", source: "localStorage", key: "token", authType: "bearer" },
+      sendCookiesWithRequests: true,
+      headers: {
+        "x-user-id": { source: "cookies", key: "current_user_id" }
+      }
     })
 
-    const deleteButton = screen.getByTestId("delete-header-auth")
-    expect(deleteButton.className).toContain("hover:text-destructive")
-    await user.click(deleteButton)
+    await user.click(screen.getByTestId("delete-header-x-user-id"))
     await user.click(await screen.findByRole("button", { name: "Delete" }))
 
-    expect(mutateAsync).toHaveBeenCalledWith({
+    expect(mutateAsync).toHaveBeenLastCalledWith({
       baseUrl: { local: "http://localhost" },
+      auth: { mode: "header", source: "localStorage", key: "token", authType: "bearer" },
+      sendCookiesWithRequests: true,
       headers: {}
     })
   })
 
-  it("shows auth type selector for authorization headers", async () => {
-    const mutateAsync = jest.fn(async (payload) => payload)
-    mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
+  it("blocks Authorization from being added as a custom header", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: {
         baseUrl: {},
-        headers: { Authorization: { source: "cookies", key: "auth", authType: "basic" } }
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: {}
       },
       isPending: false
     })
@@ -131,90 +274,67 @@ describe("SessionHeadersPanel", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     renderPanel()
 
-    await screen.findByText("Authorization")
-
-    await user.click(screen.getByTestId("edit-header-Authorization"))
-    await user.click(screen.getByTestId("auth-type-trigger"))
-    await user.click(await screen.findByRole("option", { name: "Bearer" }))
-    await user.click(screen.getByTestId("save-header"))
-
-    expect(mutateAsync).toHaveBeenCalledWith({
-      baseUrl: {},
-      headers: { Authorization: { source: "cookies", key: "auth", authType: "bearer" } }
-    })
-  })
-
-  it("prevents duplicate header names", async () => {
-    mockedUseConfigQuery.mockReturnValue({
-      data: { baseUrl: {}, headers: { auth: { source: "cookies", key: "token" } } },
-      isPending: false
-    })
-    const user = userEvent.setup({ pointerEventsCheck: 0 })
-
-    renderPanel()
-
     await user.click(screen.getByTestId("open-header-dialog"))
-    await user.type(screen.getByTestId("header-name-input"), "auth-new")
+    await user.type(screen.getByTestId("header-name-input"), "Authorization")
 
+    expect(screen.getByText("Configure Authorization in the authentication section above.")).not.toBeNull()
     expect(screen.getByTestId("save-header").getAttribute("disabled")).not.toBeNull()
   })
 
-  it("handles rename and submit failures", async () => {
+  it("surfaces save and delete failures", async () => {
     const mutateAsync = jest.fn(async () => {
       throw new Error("boom")
     }) as jest.Mock
     mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
     mockedUseConfigQuery.mockReturnValue({
-      data: { baseUrl: {}, headers: { auth: { source: "cookies", key: "token" } } },
+      data: {
+        baseUrl: {},
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: { "x-user-id": { source: "cookies", key: "user_id" } }
+      },
       isPending: false
     })
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    const addToast = useToastStore((state: any) => state.addToast)
 
     renderPanel()
 
-    await user.click(screen.getByTestId("edit-header-auth"))
-    await user.clear(screen.getByTestId("header-name-input"))
-    await user.type(screen.getByTestId("header-name-input"), "auth-2")
-    await user.click(screen.getByTestId("save-header"))
-    expect(mutateAsync).toHaveBeenCalledWith({
-      baseUrl: {},
-      headers: { "auth-2": { source: "cookies", key: "token" } }
+    await user.click(screen.getByTestId("send-cookies-switch"))
+    await user.click(screen.getByTestId("save-auth-settings"))
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }))
+
+    await user.click(screen.getByTestId("delete-header-x-user-id"))
+    await user.click(await screen.findByRole("button", { name: "Delete" }))
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }))
     })
-    expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }))
   })
 
-  it("respects submitting guard and surfaces delete errors", async () => {
-    const mutateAsync = jest.fn(async () => {
-      throw new Error("delete")
-    }) as jest.Mock
+  it("respects the submitting guard", async () => {
+    const mutateAsync = jest.fn(async (payload) => payload)
     mockedUseSaveConfig.mockReturnValue({ mutateAsync, isPending: false })
     mockedUseConfigQuery.mockReturnValue({
-      data: { baseUrl: {}, headers: { auth: { source: "cookies", key: "token" } } },
+      data: {
+        baseUrl: {},
+        auth: { mode: "none" },
+        sendCookiesWithRequests: false,
+        headers: {}
+      },
       isPending: false
     })
-    const user = userEvent.setup({ pointerEventsCheck: 0 })
-    const addToast = useToastStore((state: any) => state.addToast)
 
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
     renderPanel()
 
     await user.click(screen.getByTestId("open-header-dialog"))
-    await user.type(screen.getByTestId("header-name-input"), "auth-new")
-    await user.type(screen.getByTestId("header-key-input"), "token")
+    await user.type(screen.getByTestId("header-name-input"), "x-user")
+    await user.type(screen.getByTestId("header-key-input"), "user_id")
+
     await act(async () => {
       useConfigUiStore.getState().setHeaderSubmitting(true)
     })
+
     await user.click(screen.getByTestId("save-header"))
     expect(mutateAsync).not.toHaveBeenCalled()
-    await act(async () => {
-      useConfigUiStore.getState().setHeaderSubmitting(false)
-    })
-    await user.click(screen.getByTestId("save-header"))
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalled())
-
-    expect(screen.getByTestId("delete-header-auth").className).toContain("hover:text-destructive")
-    await user.click(screen.getByTestId("delete-header-auth"))
-    await user.click(await screen.findByRole("button", { name: "Delete" }))
-    expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }))
   })
 })

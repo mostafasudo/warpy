@@ -309,10 +309,10 @@ const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
       ? "destructive"
       : isPartialSuccess
         ? "outline"
-        : "secondary"
-    : action.statusCode && action.statusCode >= 400
+        : "success"
+    : hasError
       ? "destructive"
-      : "secondary"
+      : "success"
   const statusLabel = usesStatusTag
     ? hasError
       ? "Failed"
@@ -373,7 +373,7 @@ const ActionEventCard = ({ action }: { action: ActivityActionEvent }) => {
           <CollapsibleContent className="space-y-2 pt-2">
             {action.frontendActions?.map((fa, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <Badge variant={fa.status === "ok" ? "secondary" : "destructive"} className="text-xs">
+                <Badge variant={fa.status === "ok" ? "success" : "destructive"} className="text-xs">
                   {fa.action}
                 </Badge>
                 {fa.selector ? (

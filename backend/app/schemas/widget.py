@@ -15,12 +15,22 @@ class SessionHeaderConfig(BaseModel):
 
     source: StorageSource
     key: str
+
+
+class WidgetAuthConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, exclude_none=True)
+
+    mode: Literal["none", "header"] = "none"
+    source: StorageSource | None = None
+    key: str | None = None
     auth_type: AuthType | None = Field(default=None, alias="authType")
 
 
 class WidgetConfigResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+    auth: WidgetAuthConfig = Field(default_factory=WidgetAuthConfig)
+    send_cookies_with_requests: bool = Field(default=False, alias="sendCookiesWithRequests")
     headers: dict[str, SessionHeaderConfig] = {}
     is_widget_hidden: bool = Field(default=False, alias="isWidgetHidden")
     actions_remaining: int = Field(default=0, alias="actionsRemaining")

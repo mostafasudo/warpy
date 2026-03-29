@@ -8,7 +8,7 @@ The flow is intentionally short:
 
 1. website
 2. API base URL
-3. auth mapping
+3. auth setup
 4. agent script reveal
 
 The first three setup steps are skippable. If onboarding is still incomplete, it appears again on a future sign-in and resumes at the first incomplete step.
@@ -29,7 +29,7 @@ Onboarding is not shown when either:
 
 - existing agent
 - non-empty saved base URL
-- session headers
+- saved auth settings or custom headers
 - features
 - knowledge base sources
 
@@ -41,7 +41,7 @@ Onboarding does not introduce parallel config stores.
 
 - Website entry creates a normal `knowledge_websites` record and enqueues the standard website ingest worker.
 - API base URL writes through the existing config flow and saves to the `production` environment.
-- Auth mapping writes through the existing config flow and saves a lowercase `authorization` session header.
+- Auth setup writes through the existing config flow, storing header-based auth separately from the request-level cookie toggle.
 - Finalization reuses normal agent creation and returns the same agent shape the Agent page uses.
 
 The only new persistence is `user_onboarding_states`, keyed by `user_id`, with:
@@ -84,12 +84,13 @@ The signed-in frontend fetches this state before rendering `Shell`. If the query
 - Normalizes to absolute URLs with `https://` before saving
 - Preserves the existing `local` base URL and any other environments
 
-### Auth mapping
+### Auth setup
 
-- Auth type: `bearer | basic | none`
-- Token source: `localStorage | sessionStorage | cookies`
-- Token key is stored in the session header config as lowercase `authorization`
-- Existing non-authorization headers are preserved
+- Header auth supports `bearer | basic | none`
+- Header auth sources are `localStorage | sessionStorage`
+- Cookie auth is expressed as `send browser cookies with requests`, not as a fake `authorization + cookies` header mapping
+- When cookie sending is enabled, the widget uses `fetch(..., { credentials: "include" })` on customer-owned requests
+- Existing custom headers are preserved and stay literal header mappings only
 
 ### Agent
 
@@ -117,5 +118,5 @@ Covered scenarios include:
 - finalize get-or-create behavior
 - shell gating behavior
 - base URL normalization
-- lowercase authorization header writes
+- explicit auth object and cookie-toggle writes
 - shared script snippet rendering
