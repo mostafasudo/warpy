@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -42,6 +42,59 @@ test('normalizeCommandArgs preserves the existing CLI behavior', () => {
   assert.throws(() => __test__.normalizeCommandArgs('type', []), /Error: text required/);
   assert.throws(() => __test__.normalizeCommandArgs('evalraw', []), /Error: CDP method required/);
   assert.throws(() => __test__.normalizeCommandArgs('nav', []), /Error: URL required/);
+});
+
+test('getRuntimeDir follows platform-specific runtime conventions', () => {
+  assert.equal(
+    __test__.getRuntimeDir({ platform: 'darwin', env: {}, home: '/Users/tester' }),
+    '/Users/tester/.cache/cdp',
+  );
+
+  assert.equal(
+    __test__.getRuntimeDir({ platform: 'linux', env: { XDG_RUNTIME_DIR: '/run/user/501' }, home: '/home/tester' }),
+    '/run/user/501/cdp',
+  );
+
+  assert.equal(
+    __test__.getRuntimeDir({ platform: 'win32', env: { LOCALAPPDATA: 'C:/Users/tester/AppData/Local' }, home: 'C:/Users/tester' }),
+    'C:\\Users\\tester\\AppData\\Local\\cdp',
+  );
+});
+
+test('getPortFileCandidates prioritizes overrides and known browser locations', () => {
+  const candidates = __test__.getPortFileCandidates({
+    platform: 'darwin',
+    env: { CDP_PORT_FILE: '/tmp/override-port' },
+    home: '/Users/tester',
+  });
+
+  assert.equal(candidates[0], '/tmp/override-port');
+  assert.ok(candidates.includes('/Users/tester/Library/Application Support/Google/Chrome/DevToolsActivePort'));
+  assert.ok(candidates.includes('/Users/tester/Library/Application Support/BraveSoftware/Brave-Browser/Default/DevToolsActivePort'));
+});
+
+test('readWsUrlFromPortFile parses Chrome DevToolsActivePort files', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'cdp-portfile-'));
+  const portFile = join(directory, 'DevToolsActivePort');
+
+  try {
+    writeFileSync(portFile, '9222\n/devtools/browser/test-id\n');
+    assert.equal(
+      __test__.readWsUrlFromPortFile(portFile, '127.0.0.2'),
+      'ws://127.0.0.2:9222/devtools/browser/test-id',
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('URL validation keeps navigation strict and open flexible', () => {
+  assert.doesNotThrow(() => __test__.validateNavigationUrl('https://example.com'));
+  assert.throws(() => __test__.validateNavigationUrl('about:blank'), /Only http\/https URLs allowed/);
+
+  assert.doesNotThrow(() => __test__.validateOpenUrl('about:blank'));
+  assert.doesNotThrow(() => __test__.validateOpenUrl('http://example.com'));
+  assert.throws(() => __test__.validateOpenUrl('file:///tmp/test.html'), /Only about\/http\/https URLs allowed/);
 });
 
 test('sendCommand reads newline-delimited JSON responses over a unix socket', async () => {

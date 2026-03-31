@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
-import { resolve } from 'path';
+import { resolve, win32 } from 'path';
 import { spawn } from 'child_process';
 import net from 'net';
 import { pathToFileURL } from 'url';
@@ -14,24 +14,110 @@ const DAEMON_CONNECT_DELAY = 300;
 const DAEMON_CONNECT_RETRIES = Math.ceil(CONNECT_TIMEOUT / DAEMON_CONNECT_DELAY);
 const WAITING_MESSAGE_DELAY = 1000;
 const MIN_TARGET_PREFIX_LEN = 8;
-const SOCKET_PATH = '/tmp/cdp-browser.sock';
-const LAUNCH_LOCK_PATH = '/tmp/cdp-browser.lock';
-const PAGES_CACHE = '/tmp/cdp-pages.json';
+const IS_WINDOWS = process.platform === 'win32';
+
+if (!IS_WINDOWS) process.umask(0o077);
+
+function getRuntimeDir({ platform = process.platform, env = process.env, home = homedir() } = {}) {
+  if (platform === 'win32') {
+    return win32.resolve(env.LOCALAPPDATA || win32.resolve(home, 'AppData', 'Local'), 'cdp');
+  }
+
+  if (env.XDG_RUNTIME_DIR) {
+    return resolve(env.XDG_RUNTIME_DIR, 'cdp');
+  }
+
+  return resolve(home, '.cache', 'cdp');
+}
+
+const RUNTIME_DIR = getRuntimeDir();
+const SOCKET_PATH = IS_WINDOWS ? '\\\\.\\pipe\\cdp-browser' : resolve(RUNTIME_DIR, 'browser.sock');
+const LAUNCH_LOCK_PATH = resolve(RUNTIME_DIR, 'browser.lock');
+const PAGES_CACHE = resolve(RUNTIME_DIR, 'pages.json');
+
+try {
+  mkdirSync(RUNTIME_DIR, { recursive: true, mode: 0o700 });
+} catch {}
 
 const NEEDS_TARGET = new Set([
   'snap', 'snapshot', 'eval', 'shot', 'screenshot', 'html', 'nav', 'navigate',
   'net', 'network', 'click', 'clickxy', 'type', 'loadall', 'evalraw',
 ]);
 
+function getPortFileCandidates({ platform = process.platform, env = process.env, home = homedir() } = {}) {
+  const candidates = [env.CDP_PORT_FILE];
+
+  if (platform === 'darwin') {
+    for (const browser of [
+      'Google/Chrome',
+      'Google/Chrome Beta',
+      'Google/Chrome for Testing',
+      'Chromium',
+      'BraveSoftware/Brave-Browser',
+      'Microsoft Edge',
+    ]) {
+      candidates.push(resolve(home, 'Library/Application Support', browser, 'DevToolsActivePort'));
+      candidates.push(resolve(home, 'Library/Application Support', browser, 'Default', 'DevToolsActivePort'));
+    }
+  }
+
+  if (platform === 'linux') {
+    for (const browser of [
+      'google-chrome',
+      'google-chrome-beta',
+      'chromium',
+      'vivaldi',
+      'vivaldi-snapshot',
+      'BraveSoftware/Brave-Browser',
+      'microsoft-edge',
+    ]) {
+      candidates.push(resolve(home, '.config', browser, 'DevToolsActivePort'));
+      candidates.push(resolve(home, '.config', browser, 'Default', 'DevToolsActivePort'));
+    }
+
+    for (const [appId, browser] of [
+      ['org.chromium.Chromium', 'chromium'],
+      ['com.google.Chrome', 'google-chrome'],
+      ['com.brave.Browser', 'BraveSoftware/Brave-Browser'],
+      ['com.microsoft.Edge', 'microsoft-edge'],
+      ['com.vivaldi.Vivaldi', 'vivaldi'],
+    ]) {
+      candidates.push(resolve(home, '.var', 'app', appId, 'config', browser, 'DevToolsActivePort'));
+      candidates.push(resolve(home, '.var', 'app', appId, 'config', browser, 'Default', 'DevToolsActivePort'));
+    }
+  }
+
+  if (platform === 'win32') {
+    const base = env.LOCALAPPDATA || win32.resolve(home, 'AppData', 'Local');
+    for (const browser of ['Google/Chrome', 'BraveSoftware/Brave-Browser', 'Microsoft/Edge']) {
+      candidates.push(win32.resolve(base, browser, 'User Data', 'DevToolsActivePort'));
+      candidates.push(win32.resolve(base, browser, 'User Data', 'Default', 'DevToolsActivePort'));
+    }
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function readWsUrlFromPortFile(portFile, host = process.env.CDP_HOST || '127.0.0.1') {
+  const lines = readFileSync(portFile, 'utf8').trim().split(/\r?\n/);
+  if (lines.length < 2 || !lines[0] || !lines[1]) {
+    throw new Error(`Invalid DevToolsActivePort file: ${portFile}`);
+  }
+  return `ws://${host}:${lines[0]}${lines[1]}`;
+}
+
 function getWsUrl() {
-  const portFile = resolve(homedir(), 'Library/Application Support/Google/Chrome/DevToolsActivePort');
-  const lines = readFileSync(portFile, 'utf8').trim().split('\n');
-  return `ws://127.0.0.1:${lines[0]}${lines[1]}`;
+  const portFile = getPortFileCandidates().find((candidate) => existsSync(candidate));
+  if (!portFile) {
+    throw new Error('No DevToolsActivePort found. Enable remote debugging at chrome://inspect/#remote-debugging or set CDP_PORT_FILE.');
+  }
+  return readWsUrlFromPortFile(portFile);
 }
 
 const sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 
 function removePath(path) {
+  if (IS_WINDOWS && path.startsWith('\\\\.\\pipe\\')) return;
   try { rmSync(path, { force: true, recursive: true }); } catch {}
 }
 
@@ -59,6 +145,28 @@ function resolvePrefix(prefix, candidates, noun = 'target', missingHint = '') {
     throw new Error(`Ambiguous prefix "${prefix}" — matches ${matches.length} ${noun}s. Use more characters.`);
   }
   return matches[0];
+}
+
+function validateUrl(url, allowedProtocols, errorPrefix) {
+  let parsed;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+
+  if (!allowedProtocols.includes(parsed.protocol)) {
+    throw new Error(`${errorPrefix}, got: ${url}`);
+  }
+}
+
+function validateNavigationUrl(url) {
+  validateUrl(url, ['http:', 'https:'], 'Only http/https URLs allowed');
+}
+
+function validateOpenUrl(url) {
+  validateUrl(url, ['about:', 'http:', 'https:'], 'Only about/http/https URLs allowed');
 }
 
 function getDisplayPrefixLength(targetIds) {
@@ -323,7 +431,7 @@ async function evalStr(cdp, sessionId, expression) {
   return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '');
 }
 
-async function shotStr(cdp, sessionId, filePath) {
+async function shotStr(cdp, sessionId, filePath, targetId) {
   let dpr = 1;
 
   try {
@@ -347,7 +455,7 @@ async function shotStr(cdp, sessionId, filePath) {
   }
 
   const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
-  const out = filePath || '/tmp/screenshot.png';
+  const out = filePath || resolve(RUNTIME_DIR, `screenshot-${(targetId || 'unknown').slice(0, 8)}.png`);
   writeFileSync(out, Buffer.from(data, 'base64'));
 
   const lines = [out];
@@ -394,6 +502,7 @@ async function waitForDocumentReady(cdp, sessionId, timeoutMs = NAVIGATION_TIMEO
 }
 
 async function navStr(cdp, sessionId, url) {
+  validateNavigationUrl(url);
   await cdp.send('Page.enable', {}, sessionId);
   const loadEvent = cdp.waitForEvent('Page.loadEventFired', NAVIGATION_TIMEOUT, sessionId);
   const result = await cdp.send('Page.navigate', { url }, sessionId);
@@ -503,12 +612,17 @@ async function evalRawStr(cdp, sessionId, method, paramsJson) {
   return JSON.stringify(result, null, 2);
 }
 
+async function openStr(cdp, url = 'about:blank') {
+  validateOpenUrl(url);
+  const { targetId } = await cdp.send('Target.createTarget', { url });
+  return JSON.stringify({ targetId, url });
+}
+
 async function runDaemon() {
   removePath(SOCKET_PATH);
 
   let alive = true;
   let cdp = null;
-  let idleTimer = null;
   let browserReady = false;
   const sessionsByTarget = new Map();
   const targetsBySession = new Map();
@@ -550,10 +664,6 @@ async function runDaemon() {
     });
   });
 
-  function resetIdle() {
-    if (!alive) return;
-  }
-
   function trackSession(targetId, sessionId) {
     sessionsByTarget.set(targetId, sessionId);
     targetsBySession.set(sessionId, targetId);
@@ -576,7 +686,6 @@ async function runDaemon() {
   function shutdown() {
     if (!alive) return;
     alive = false;
-    clearTimeout(idleTimer);
     releaseLaunchLock();
     try { server.close(); } catch {}
     removePath(SOCKET_PATH);
@@ -627,7 +736,6 @@ async function runDaemon() {
 
   async function handleCommand(request) {
     const { cmd, args = [], targetId } = request;
-    resetIdle();
 
     try {
       if (cmd === 'status') {
@@ -652,6 +760,10 @@ async function runDaemon() {
         return { ok: true, result: JSON.stringify(pages) };
       }
 
+      if (cmd === 'open') {
+        return { ok: true, result: await openStr(cdp, args[0]) };
+      }
+
       if (!targetId) {
         return { ok: false, error: 'targetId required' };
       }
@@ -665,7 +777,7 @@ async function runDaemon() {
             return evalStr(cdp, sessionId, args[0]);
           case 'shot':
           case 'screenshot':
-            return shotStr(cdp, sessionId, args[0]);
+            return shotStr(cdp, sessionId, args[0], targetId);
           case 'html':
             return htmlStr(cdp, sessionId, args[0]);
           case 'nav':
@@ -748,20 +860,33 @@ function releaseLaunchLock() {
   removePath(LAUNCH_LOCK_PATH);
 }
 
+async function isDaemonSocketReachable() {
+  try {
+    const connection = await connectToSocket(SOCKET_PATH);
+    connection.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function getOrStartBrowserDaemon() {
   try {
     return await connectToReadyDaemon();
   } catch {}
 
-  removePath(SOCKET_PATH);
-
   const ownsLaunchLock = acquireLaunchLock();
   if (ownsLaunchLock) {
-    const child = spawn(process.execPath, [process.argv[1], '_daemon'], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
+    const daemonExists = await isDaemonSocketReachable();
+    if (!daemonExists) {
+      removePath(SOCKET_PATH);
+
+      const child = spawn(process.execPath, [process.argv[1], '_daemon'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+    }
   }
 
   let waitingNoticeShown = false;
@@ -866,6 +991,21 @@ async function fetchPagesFromDaemon() {
   return pages;
 }
 
+async function openTarget(url) {
+  const connection = await getOrStartBrowserDaemon();
+  const response = await sendCommand(connection, { cmd: 'open', args: [url || 'about:blank'] });
+
+  if (!response.ok) throw new Error(response.error);
+
+  const opened = JSON.parse(response.result);
+  const pages = readPagesCache() || [];
+  writePagesCache([
+    ...pages.filter((page) => page.targetId !== opened.targetId),
+    { targetId: opened.targetId, title: opened.url, url: opened.url },
+  ]);
+  return `Opened new tab: ${opened.targetId.slice(0, 8)}  ${opened.url}`;
+}
+
 function tryResolveTargetId(targetPrefix, pages) {
   return resolvePrefix(targetPrefix, pages.map((page) => page.targetId), 'target', 'Run "cdp list".');
 }
@@ -914,7 +1054,7 @@ Usage: cdp <command> [args]
   list                              List open pages (shows unique target prefixes)
   snap  <target>                    Accessibility tree snapshot
   eval  <target> <expr>             Evaluate JS expression
-  shot  <target> [file]             Screenshot (default: /tmp/screenshot.png); prints coordinate mapping
+  shot  <target> [file]             Screenshot (default: screenshot-<target>.png in runtime dir); prints coordinate mapping
   html  <target> [selector]         Get HTML (full page or CSS selector)
   nav   <target> <url>              Navigate to URL and wait for load completion
   net   <target>                    Network performance entries
@@ -926,6 +1066,7 @@ Usage: cdp <command> [args]
                                     Optional interval in ms between clicks (default 1500)
   evalraw <target> <method> [json]  Send a raw CDP command; returns JSON result
                                     e.g. evalraw <t> "DOM.getDocument" '{}'
+  open  [url]                       Open a new tab in the shared browser session (default: about:blank)
   stop  [target]                    Stop the shared daemon or detach one target session
 
 <target> is a unique targetId prefix from "cdp list". If a prefix is ambiguous,
@@ -949,8 +1090,8 @@ EVAL SAFETY NOTE
   collect all data in a single eval.
 
 DAEMON IPC (for advanced use / scripting)
-  The browser session is shared through one daemon at Unix socket:
-    /tmp/cdp-browser.sock
+  The browser session is shared through one daemon at:
+    ${SOCKET_PATH}
   Protocol: newline-delimited JSON (one JSON object per line, UTF-8).
     Request:  {"id":<number>, "cmd":"<command>", "targetId":"<fullTargetId?>", "args":["arg1","arg2",...]}
     Response: {"id":<number>, "ok":true,  "result":"<string>"}
@@ -974,6 +1115,11 @@ async function main() {
 
   if (cmd === 'list' || cmd === 'ls') {
     console.log(formatPageList(await fetchPagesFromDaemon()));
+    return;
+  }
+
+  if (cmd === 'open') {
+    console.log(await openTarget(rawArgs[0]));
     return;
   }
 
@@ -1017,9 +1163,14 @@ function isEntrypoint() {
 export const __test__ = {
   connectToSocket,
   getDisplayPrefixLength,
+  getPortFileCandidates,
+  getRuntimeDir,
   normalizeCommandArgs,
+  readWsUrlFromPortFile,
   resolvePrefix,
   sendCommand,
+  validateNavigationUrl,
+  validateOpenUrl,
 };
 
 if (isEntrypoint()) {

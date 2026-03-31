@@ -42,6 +42,8 @@ If you change a feature/surface, update its equivalent doc file in `docs/` when 
 
 First-run onboarding now lives in [docs/onboarding.md](docs/onboarding.md). New accounts land in a standalone onboarding gate before the signed-in shell, where they can add their website, production API base URL, auth mapping, and get an installable agent script tag in one flow.
 
+Live Chrome-session validation and automation use [docs/chrome-cdp.md](docs/chrome-cdp.md). The direct `scripts/cdp.mjs` CLI keeps one shared Chrome debugging session alive so repeated browser actions do not keep forcing fresh approval prompts.
+
 ## Landing page
 
 The marketing/landing site lives in the `landing/` submodule ([LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing)).
