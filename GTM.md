@@ -8,7 +8,24 @@ For any sales, marketing, or GTM task, read this file first, then check the mark
 
 Warpy’s ideal customer is a growth-stage B2B SaaS startup with a highly complex, feature-rich, data-dense web dashboard where users regularly filter, segment, navigate, and take actions but typically only use a small fraction of the product’s capabilities. These companies often operate in vertical SaaS sectors such as fintech, healthcare, logistics, or HR, usually have around 10–200 employees (sometimes scaling to 500) and roughly $5M–$50M in ARR, and are experiencing classic scaling pains: high volumes of repetitive “how do I…” support tickets, low adoption of advanced features, and growing pressure to make the product AI-native. The primary buyers are tech-savvy founders, CTOs, heads of product, VPs of product, growth leads, or support leaders who care deeply about improving feature adoption, reducing onboarding friction, protecting net revenue retention, and lowering support costs while accelerating user time-to-value. Technically, these companies run modern frontends such as React, Vue, or Angular with well-documented REST APIs, making it easy to embed Warpy with a single snippet or lightweight widget while exposing approved endpoints and permission boundaries. Warpy is especially compelling when the dashboard is central to customer value but usability gaps limit engagement, and the company wants to turn more users into power users without building an internal AI agent stack—allowing an in-app AI guide to deflect support tickets, increase product engagement, and handle a significant portion of support queries directly inside the product.
 
+## Competitive context
+
+Warpy’s main direct competitor today is [Crow AI](https://usecrow.ai). Use Crow AI as the default reference point when doing competitive GTM work, objection handling, positioning, or sales enablement unless a task explicitly calls for a different competitor set.
+
 ## Default sequence strategy for SDR outreach work
+
+### Apollo implementation
+
+This GTM sequence is already built in Apollo as [`Warpy Founder-Led SDR Sequence`](https://app.apollo.io/#/sequences/69d153277282c2001550d75f).
+
+Use that Apollo sequence as the operational version for outbound execution. If this strategy changes here, update the Apollo sequence so the live workflow stays in sync with this document.
+
+Apollo notes:
+
+- The sequence includes the full GTM cadence below.
+- Manual steps in Apollo are written as detailed task notes so reps know exactly what to do.
+- X / Twitter, multithreading, and asset-send steps are represented as Apollo action items with explicit instructions because Apollo does not provide a native X task type in the sequence builder.
+- The sequence is configured to use the `Late Morning Local` schedule in Apollo.
 
 ### Lead definitions
 
