@@ -10,8 +10,8 @@ describe("ContactPanel", () => {
 
     expect(screen.getByRole("heading", { name: "Contact Us" })).not.toBeNull()
     expect(screen.getByText("Reach our team by email, in Discord, or book a call.")).not.toBeNull()
-    expect(screen.getByText("For all support inquiries, email us at support@warpy.ai or join our Discord or book a call.")).not.toBeNull()
-    expect(screen.getByRole("link", { name: "Email support" })).toHaveAttribute("href", "mailto:support@warpy.ai")
+    expect(screen.getByText("For all support inquiries, email us at abdel@warpy.ai or join our Discord or book a call.")).not.toBeNull()
+    expect(screen.getByRole("link", { name: "Email support" })).toHaveAttribute("href", "mailto:abdel@warpy.ai")
     expect(screen.getByRole("link", { name: "Join Discord" })).toHaveAttribute("href", "https://discord.gg/JPjYjPdGD2")
     expect(screen.getByRole("link", { name: "Book a call" })).toHaveAttribute("href", "https://cal.com/levwtech")
   })
