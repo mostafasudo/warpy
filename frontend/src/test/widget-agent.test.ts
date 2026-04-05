@@ -164,6 +164,7 @@ function readWidgetState() {
     activeRequestId?: string | null
     conversationId?: string | null
     interruptedByNavigation?: boolean
+    resumePanelOpen?: boolean | null
   }
 }
 
@@ -822,6 +823,91 @@ describe("widget desktop resize", () => {
         expect(MockWebSocket.instances[0]?.sent).toHaveLength(1)
         expect(shadowRoot.textContent).toContain("Resumed.")
       })
+      expect(readWidgetState().activeRequestId).toBeNull()
+      expect(readWidgetState().interruptedByNavigation).toBe(false)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it("keeps the panel closed when a pending request resumes after the user closes it", async () => {
+    jest.useFakeTimers()
+    try {
+      ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes("/widget/config/")) {
+          return createJsonResponse(createConfig())
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      })
+
+      let requestId = ""
+      let sendCount = 0
+      MockWebSocket.handler = (socket, message) => {
+        const request = message.request || {}
+        if (!request.message) return
+
+        sendCount += 1
+        if (sendCount === 1) return
+
+        expect(request.requestId).toBe(requestId)
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-resume-closed",
+            requestId,
+            messages: [{ role: "assistant", content: "Resumed while closed." }],
+            toolCalls: [],
+            suggestions: [],
+            done: true,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+      }
+
+      const widget = await loadWidget()
+      await openPanel(widget)
+      const shadowRoot = getShadowRoot(widget)
+      const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+      const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+      fireEvent.change(input, { target: { value: "Resume while keeping the widget closed" } })
+      fireEvent.click(send)
+
+      await waitFor(() => {
+        requestId = readWidgetState().activeRequestId || ""
+        expect(requestId).toBeTruthy()
+      })
+
+      fireEvent.click(widget.close)
+      await waitFor(() => {
+        expect(widget.panel.classList.contains("open")).toBe(false)
+      })
+
+      window.dispatchEvent(new Event("pagehide"))
+
+      expect(readWidgetState()).toMatchObject({
+        activeRequestId: requestId,
+        interruptedByNavigation: true,
+        resumePanelOpen: false,
+      })
+
+      document.body.innerHTML = ""
+
+      const reloaded = await loadWidget()
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500)
+      })
+
+      const reloadedShadowRoot = getShadowRoot(reloaded)
+      await waitFor(() => {
+        expect(reloaded.toggle.getAttribute("aria-expanded")).toBe("false")
+        expect(reloaded.toggle.classList.contains("has-unread")).toBe(true)
+        expect(reloadedShadowRoot.textContent).toContain("Resumed while closed.")
+      })
+
+      expect(reloaded.panel.classList.contains("open")).toBe(false)
       expect(readWidgetState().activeRequestId).toBeNull()
       expect(readWidgetState().interruptedByNavigation).toBe(false)
     } finally {

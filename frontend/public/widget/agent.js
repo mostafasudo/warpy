@@ -4477,6 +4477,7 @@
     if (!state.ui) state.ui = {};
     if (!Array.isArray(state.suggestions)) state.suggestions = [];
     if (typeof state.activeRequestId !== "string") state.activeRequestId = null;
+    if (typeof state.resumePanelOpen !== "boolean") state.resumePanelOpen = null;
     const savedUi = loadUiState();
     if (savedUi && typeof savedUi.launcherY === "number") {
       state.ui.launcherY = clamp(savedUi.launcherY, 0, 1);
@@ -4504,6 +4505,7 @@
       isNavigatingAway = true;
       if (isLoading && state.activeQuery && state.activeRequestId) {
         state.interruptedByNavigation = true;
+        state.resumePanelOpen = isOpen;
         saveState(state);
       }
     });
@@ -6344,16 +6346,21 @@
     applyWidgetUiConfig();
 
     if (state.interruptedByNavigation && state.activeQuery) {
+      const shouldOpenPanelOnResume = state.resumePanelOpen !== false;
       state.interruptedByNavigation = false;
+      state.resumePanelOpen = null;
       saveState(state);
       setTimeout(() => {
-        openPanel();
+        if (shouldOpenPanelOnResume) {
+          openPanel();
+        }
         sendMessage(state.activeQuery, { skipUserEcho: true, requestId: state.activeRequestId });
       }, 500);
     } else {
       state.interruptedByNavigation = false;
       state.activeQuery = null;
       state.activeRequestId = null;
+      state.resumePanelOpen = null;
       saveState(state);
     }
 
