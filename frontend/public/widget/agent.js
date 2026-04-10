@@ -32,6 +32,9 @@
   const PANEL_VIEWPORT_GUTTER = 56;
   const PANEL_MOBILE_BREAKPOINT = 640;
   const PANEL_RESIZE_STEP = 32;
+  const MESSAGE_STORAGE_VERSION = 2;
+  const MESSAGE_ID_PREFIX = "msg_";
+  const SCROLL_BOTTOM_THRESHOLD = 24;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Utilities
@@ -542,6 +545,109 @@
     try {
       localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(ui || {}));
     } catch { }
+  }
+
+  function createDefaultWidgetState() {
+    return {
+      version: MESSAGE_STORAGE_VERSION,
+      messageCursor: 1,
+      messages: [],
+      conversationId: null,
+      voice: {},
+      auth: {},
+      ui: {},
+      suggestions: [],
+      activeQuery: null,
+      activeRequestId: null,
+      interruptedByNavigation: false,
+      resumePanelOpen: null,
+      lastReadMessageId: null,
+      firstUnreadMessageId: null,
+    };
+  }
+
+  function createMessageId(counter) {
+    return `${MESSAGE_ID_PREFIX}${counter}`;
+  }
+
+  function parseMessageIdCounter(id) {
+    const match = String(id || "").match(/^msg_(\d+)$/);
+    if (!match) return null;
+    const value = Number(match[1]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function normalizeStoredMessage(raw, fallbackId) {
+    if (!raw || typeof raw !== "object") return null;
+    const role = raw.role === "assistant" ? "assistant" : "user";
+    const message = {
+      id: typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : fallbackId,
+      role,
+      content: typeof raw.content === "string" ? raw.content : String(raw.content || ""),
+    };
+    if (typeof raw.kind === "string" && raw.kind.trim()) {
+      message.kind = raw.kind.trim();
+    }
+    if (typeof raw.resumeQuery === "string" && raw.resumeQuery.trim()) {
+      message.resumeQuery = raw.resumeQuery.trim();
+    }
+    return message;
+  }
+
+  function normalizeWidgetState(rawState) {
+    const defaults = createDefaultWidgetState();
+    const source = rawState && typeof rawState === "object" ? rawState : {};
+    const state = { ...defaults, ...source };
+    state.voice = source.voice && typeof source.voice === "object" ? source.voice : {};
+    state.auth = source.auth && typeof source.auth === "object" ? source.auth : {};
+    state.ui = source.ui && typeof source.ui === "object" ? source.ui : {};
+    state.suggestions = Array.isArray(source.suggestions) ? source.suggestions : [];
+
+    const normalizedMessages = [];
+    let nextCursor = 1;
+    for (const rawMessage of Array.isArray(source.messages) ? source.messages : []) {
+      const fallbackId = createMessageId(nextCursor);
+      const message = normalizeStoredMessage(rawMessage, fallbackId);
+      if (!message) continue;
+      normalizedMessages.push(message);
+      const parsedCounter = parseMessageIdCounter(message.id);
+      nextCursor = Math.max(nextCursor + 1, (parsedCounter || nextCursor) + 1);
+    }
+
+    state.messages = normalizedMessages;
+    state.version = MESSAGE_STORAGE_VERSION;
+    state.messageCursor = Math.max(
+      nextCursor,
+      Number.isFinite(Number(source.messageCursor)) ? Math.round(Number(source.messageCursor)) : 1
+    );
+
+    const knownIds = new Set(normalizedMessages.map((message) => message.id));
+    const latestMessageId = normalizedMessages.length > 0 ? normalizedMessages[normalizedMessages.length - 1].id : null;
+    const isMigratedState = source.version !== MESSAGE_STORAGE_VERSION;
+
+    if (!isMigratedState && typeof source.lastReadMessageId === "string" && knownIds.has(source.lastReadMessageId)) {
+      state.lastReadMessageId = source.lastReadMessageId;
+    } else {
+      state.lastReadMessageId = latestMessageId;
+    }
+
+    if (!isMigratedState && typeof source.firstUnreadMessageId === "string" && knownIds.has(source.firstUnreadMessageId)) {
+      state.firstUnreadMessageId = source.firstUnreadMessageId;
+    } else {
+      state.firstUnreadMessageId = null;
+    }
+
+    if (state.firstUnreadMessageId && state.firstUnreadMessageId === latestMessageId && state.lastReadMessageId === latestMessageId) {
+      state.firstUnreadMessageId = null;
+    }
+    if (state.firstUnreadMessageId && !knownIds.has(state.firstUnreadMessageId)) {
+      state.firstUnreadMessageId = null;
+    }
+    if (state.lastReadMessageId && !knownIds.has(state.lastReadMessageId)) {
+      state.lastReadMessageId = latestMessageId;
+    }
+
+    return state;
   }
 
   async function fetchWithTimeout(url, options = {}, timeout = API_TIMEOUT) {
@@ -3665,21 +3771,102 @@
         flex-direction: column;
         gap: 10px;
         background: transparent;
-        scrollbar-width: thin;
+        position: relative;
+        scrollbar-width: auto;
         scrollbar-color: var(--cta-border) transparent;
+        scrollbar-gutter: stable both-edges;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
       }
 
       .cta-widget-messages::-webkit-scrollbar {
-        width: 10px;
+        width: 12px;
       }
 
       .cta-widget-messages::-webkit-scrollbar-thumb {
         background: var(--cta-border);
         border-radius: 999px;
-        border: 3px solid transparent;
+        border: 2px solid transparent;
         background-clip: content-box;
+      }
+
+      .cta-widget-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .cta-widget-unread-divider {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 2px 0;
+        font-size: 11px;
+        color: var(--cta-accent);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .cta-widget-unread-divider-line {
+        flex: 1;
+        min-width: 0;
+        height: 1px;
+        background: var(--cta-border);
+      }
+
+      .cta-widget-unread-divider-label {
+        flex-shrink: 0;
+        font-weight: 700;
+      }
+
+      .cta-widget-jump-wrap {
+        position: sticky;
+        bottom: 6px;
+        z-index: 3;
+        display: none;
+        justify-content: center;
+        margin-top: auto;
+        padding-top: 4px;
+        pointer-events: none;
+      }
+
+      .cta-widget-jump-wrap.visible {
+        display: flex;
+      }
+
+      .cta-widget-jump {
+        min-width: 48px;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background: var(--cta-bg);
+        color: var(--cta-fg-muted);
+        cursor: pointer;
+        box-shadow: 0 10px 22px var(--cta-shadow-color);
+        pointer-events: auto;
+        transition: transform 160ms ease, opacity 160ms ease, background 160ms ease, color 160ms ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .cta-widget-jump:hover {
+        transform: translateY(-1px);
+        background: var(--cta-bg);
+        color: var(--cta-fg);
+      }
+
+      .cta-widget-jump:focus-visible {
+        outline: none;
+        color: var(--cta-fg);
+        box-shadow: 0 0 0 4px var(--cta-focus), 0 10px 22px var(--cta-shadow-color);
+      }
+
+      .cta-widget-jump svg {
+        width: 14px;
+        height: 14px;
+        color: inherit;
       }
 
       .cta-widget-empty {
@@ -4471,7 +4658,7 @@
 
     // ─── State ───────────────────────────────────────────────────────────────
 
-    const state = loadState() || { messages: [], conversationId: null, voice: {}, auth: {}, ui: {} };
+    const state = normalizeWidgetState(loadState());
     if (!state.voice) state.voice = {};
     if (!state.auth) state.auth = {};
     if (!state.ui) state.ui = {};
@@ -4498,6 +4685,7 @@
       saveUiState(state.ui);
       saveState(state);
     }
+    saveState(state);
 
     // Auto-resume state tracking
     let isNavigatingAway = false;
@@ -4733,6 +4921,254 @@
     const securityPanelEl = panel.querySelector(".cta-security-panel");
     const securityBackEl = panel.querySelector(".cta-security-back");
     const renderMarkdown = createMarkdownRenderer(() => renderMessages());
+    const screenShareHostEl = document.createElement("div");
+    screenShareHostEl.className = "cta-widget-screen-prompt-host";
+    const timelineEl = document.createElement("div");
+    timelineEl.className = "cta-widget-timeline";
+    const activityHostEl = document.createElement("div");
+    activityHostEl.className = "cta-widget-activity-host";
+    const suggestionsHostEl = document.createElement("div");
+    suggestionsHostEl.className = "cta-widget-suggestions-host";
+    const loadingHostEl = document.createElement("div");
+    loadingHostEl.className = "cta-widget-loading-host";
+    const jumpToLatestWrapEl = document.createElement("div");
+    jumpToLatestWrapEl.className = "cta-widget-jump-wrap";
+    const jumpToLatestEl = document.createElement("button");
+    jumpToLatestEl.type = "button";
+    jumpToLatestEl.className = "cta-widget-jump";
+    jumpToLatestEl.setAttribute("aria-label", "Jump to latest");
+    jumpToLatestEl.setAttribute("title", "Jump to latest");
+    jumpToLatestEl.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 5v14"></path>
+        <path d="M6 13l6 6 6-6"></path>
+      </svg>
+    `;
+    jumpToLatestWrapEl.appendChild(jumpToLatestEl);
+    messagesEl.replaceChildren(
+      screenShareHostEl,
+      timelineEl,
+      activityHostEl,
+      suggestionsHostEl,
+      loadingHostEl,
+      jumpToLatestWrapEl
+    );
+    const messageNodes = new Map();
+    const unreadDividerEl = document.createElement("div");
+    unreadDividerEl.className = "cta-widget-unread-divider";
+    unreadDividerEl.innerHTML = `
+      <span class="cta-widget-unread-divider-line" aria-hidden="true"></span>
+      <span class="cta-widget-unread-divider-label">New</span>
+      <span class="cta-widget-unread-divider-line" aria-hidden="true"></span>
+    `;
+    let jumpToLatestVisible = false;
+    let pendingScrollIntent = null;
+    let suppressMessagesScroll = false;
+    let stickToBottomDuringRun = false;
+
+    function allocateMessageId() {
+      const counter = Math.max(1, Number(state.messageCursor) || 1);
+      state.messageCursor = counter + 1;
+      return createMessageId(counter);
+    }
+
+    function createStoredMessage(role, content, extras = {}) {
+      return {
+        id: allocateMessageId(),
+        role: role === "assistant" ? "assistant" : "user",
+        content: typeof content === "string" ? content : String(content || ""),
+        ...extras,
+      };
+    }
+
+    function appendStoredMessage(role, content, extras = {}) {
+      const message = createStoredMessage(role, content, extras);
+      state.messages.push(message);
+      return message;
+    }
+
+    function getLastMessageId() {
+      const latest = state.messages[state.messages.length - 1];
+      return latest ? latest.id : null;
+    }
+
+    function syncUnreadBadge() {
+      setUnread(Boolean(state.firstUnreadMessageId) && !isOpen);
+    }
+
+    function clearUnreadAnchor() {
+      state.firstUnreadMessageId = null;
+      state.lastReadMessageId = getLastMessageId();
+      jumpToLatestVisible = false;
+      syncUnreadBadge();
+    }
+
+    function rememberUnreadAnchor(messageId) {
+      if (!messageId) return;
+      if (!state.firstUnreadMessageId) {
+        state.firstUnreadMessageId = messageId;
+      }
+      syncUnreadBadge();
+    }
+
+    function advanceUnreadAnchorFromViewport() {
+      if (!state.firstUnreadMessageId) return false;
+      const viewportRect = typeof messagesEl.getBoundingClientRect === "function" ? messagesEl.getBoundingClientRect() : null;
+      if (!viewportRect) return false;
+      const topThreshold = viewportRect.top + 12;
+      const firstUnreadIndex = state.messages.findIndex((message) => message.id === state.firstUnreadMessageId);
+      if (firstUnreadIndex < 0) return false;
+
+      let nextUnreadMessageId = null;
+      let latestReadMessageId = state.lastReadMessageId;
+
+      for (let index = firstUnreadIndex; index < state.messages.length; index += 1) {
+        const message = state.messages[index];
+        const node = messageNodes.get(message.id);
+        if (!node || typeof node.getBoundingClientRect !== "function") {
+          nextUnreadMessageId = message.id;
+          break;
+        }
+        const rect = node.getBoundingClientRect();
+        if (rect.bottom <= topThreshold) {
+          latestReadMessageId = message.id;
+          continue;
+        }
+        nextUnreadMessageId = message.id;
+        break;
+      }
+
+      if (!nextUnreadMessageId && latestReadMessageId === state.lastReadMessageId) {
+        return false;
+      }
+
+      if (!nextUnreadMessageId) {
+        clearUnreadAnchor();
+        return true;
+      }
+
+      if (nextUnreadMessageId === state.firstUnreadMessageId && latestReadMessageId === state.lastReadMessageId) {
+        return false;
+      }
+
+      state.firstUnreadMessageId = nextUnreadMessageId;
+      state.lastReadMessageId = latestReadMessageId;
+      syncUnreadBadge();
+      return true;
+    }
+
+    function isNearBottom() {
+      const scrollHeight = Number(messagesEl.scrollHeight) || 0;
+      const clientHeight = Number(messagesEl.clientHeight) || 0;
+      const scrollTop = Number(messagesEl.scrollTop) || 0;
+      if (scrollHeight <= clientHeight) return true;
+      return scrollHeight - (scrollTop + clientHeight) <= SCROLL_BOTTOM_THRESHOLD;
+    }
+
+    function captureScrollSnapshot() {
+      return {
+        scrollHeight: Number(messagesEl.scrollHeight) || 0,
+        scrollTop: Number(messagesEl.scrollTop) || 0,
+      };
+    }
+
+    function restoreScrollSnapshot(snapshot) {
+      if (!snapshot) return;
+      const scrollDelta = (Number(messagesEl.scrollHeight) || 0) - snapshot.scrollHeight;
+      suppressMessagesScroll = true;
+      messagesEl.scrollTop = Math.max(0, snapshot.scrollTop + scrollDelta);
+      suppressMessagesScroll = false;
+    }
+
+    function scrollToBottom() {
+      suppressMessagesScroll = true;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      suppressMessagesScroll = false;
+    }
+
+    function scrollNodeIntoView(node) {
+      if (!node) return;
+      suppressMessagesScroll = true;
+      if (typeof node.scrollIntoView === "function") {
+        node.scrollIntoView({ block: "start", inline: "nearest" });
+      }
+      suppressMessagesScroll = false;
+    }
+
+    function setJumpToLatestVisible(visible) {
+      jumpToLatestVisible = Boolean(visible) && isOpen;
+      jumpToLatestWrapEl.classList.toggle("visible", jumpToLatestVisible);
+    }
+
+    function queueScrollIntent(type, options = {}) {
+      pendingScrollIntent = { type, ...options };
+    }
+
+    function flushScrollIntent() {
+      if (!isOpen) {
+        pendingScrollIntent = null;
+        setJumpToLatestVisible(false);
+        return;
+      }
+      const intent = pendingScrollIntent;
+      pendingScrollIntent = null;
+
+      if (intent && intent.type === "preserve") {
+        restoreScrollSnapshot(intent.snapshot);
+      } else if (intent && intent.type === "unread") {
+        const targetId = intent.messageId || state.firstUnreadMessageId;
+        const targetNode = unreadDividerEl.isConnected
+          ? unreadDividerEl
+          : targetId && messageNodes.has(targetId)
+            ? messageNodes.get(targetId)
+            : null;
+        scrollNodeIntoView(targetNode);
+      } else if (
+        (intent && intent.type === "bottom") ||
+        stickToBottomDuringRun ||
+        (!intent && isOpen && isNearBottom())
+      ) {
+        scrollToBottom();
+      }
+
+      if (isNearBottom() && state.firstUnreadMessageId) {
+        clearUnreadAnchor();
+        saveState(state);
+      }
+
+      setJumpToLatestVisible(jumpToLatestVisible && !isNearBottom());
+    }
+
+    jumpToLatestEl.addEventListener("click", () => {
+      clearUnreadAnchor();
+      queueScrollIntent("bottom");
+      saveState(state);
+      renderMessages();
+    });
+
+    messagesEl.addEventListener("scroll", () => {
+      if (suppressMessagesScroll || !isOpen) return;
+      const atBottom = isNearBottom();
+      if (atBottom) {
+        if (jumpToLatestVisible || state.firstUnreadMessageId) {
+          clearUnreadAnchor();
+          saveState(state);
+          renderMessages();
+          return;
+        }
+        setJumpToLatestVisible(false);
+        return;
+      }
+      const unreadAdvanced = advanceUnreadAnchorFromViewport();
+      if (unreadAdvanced) {
+        saveState(state);
+        renderMessages();
+        return;
+      }
+      if (!stickToBottomDuringRun && state.firstUnreadMessageId) {
+        setJumpToLatestVisible(true);
+      }
+    });
 
     // ─── UI Sync Helpers ────────────────────────────────────────────────────
 
@@ -4896,6 +5332,7 @@
       syncIcons();
       syncSecurityButton();
       applyPanelWidth();
+      syncUnreadBadge();
       syncToggleAriaLabel();
       syncSendButton();
       syncFrontendWarningUi();
@@ -5241,25 +5678,24 @@
 
     function upsertResumeErrorMessage(query, content) {
       const resumeQuery = String(query || "").trim();
-      if (!resumeQuery) return;
-      const message = {
-        role: "assistant",
+      if (!resumeQuery) return null;
+      const message = createStoredMessage("assistant", content || "Something interrupted execution before it finished. Resume to retry your previous request.", {
         kind: "resume_error",
         resumeQuery,
-        content: content || "Something interrupted execution before it finished. Resume to retry your previous request.",
-      };
+      });
       const latest = state.messages[state.messages.length - 1];
       if (isResumeErrorMessage(latest)) {
-        state.messages[state.messages.length - 1] = { ...latest, ...message };
-        return;
+        state.messages[state.messages.length - 1] = { ...latest, ...message, id: latest.id };
+        return state.messages[state.messages.length - 1];
       }
       state.messages.push(message);
+      return message;
     }
 
-    function renderScreenShareBar(container) {
+    function buildScreenShareBar() {
       const sharing = isScreenShareActive();
       const asking = Boolean(screenSharePromiseResolve);
-      if (!sharing && !asking) return;
+      if (!sharing && !asking) return null;
       const prompt = document.createElement("div");
       prompt.className = "cta-widget-screen-prompt" + (sharing ? " sharing" : "");
       const dot = document.createElement("span");
@@ -5321,97 +5757,222 @@
         });
         prompt.appendChild(skipBtn);
       }
-      container.appendChild(prompt);
+      return prompt;
+    }
+
+    function syncScreenShareBar() {
+      const prompt = buildScreenShareBar();
+      if (prompt) {
+        screenShareHostEl.replaceChildren(prompt);
+        return;
+      }
+      screenShareHostEl.replaceChildren();
+    }
+
+    function createMessageNode(message) {
+      const bubble = document.createElement("div");
+      bubble.dataset.messageId = message.id;
+      messageNodes.set(message.id, bubble);
+      return bubble;
+    }
+
+    function getMessageNode(message) {
+      return messageNodes.get(message.id) || createMessageNode(message);
+    }
+
+    function getMessageRenderKey(message, index) {
+      const canResume = index === state.messages.length - 1 && !isLoading && !widgetHidden;
+      return [
+        message.role,
+        message.kind || "",
+        message.content,
+        message.resumeQuery || "",
+        canResume ? "1" : "0",
+      ].join("::");
+    }
+
+    function updateMessageNode(node, message, index) {
+      const renderKey = getMessageRenderKey(message, index);
+      if (node._renderKey === renderKey) return;
+      node._renderKey = renderKey;
+      node.className = `cta-widget-message ${message.role}`;
+      node.dataset.messageId = message.id;
+      node.innerHTML = "";
+      if (message.role === "assistant") {
+        node.innerHTML = renderMarkdown(message.content);
+        if (isResumeErrorMessage(message)) {
+          const actions = document.createElement("div");
+          actions.className = "cta-widget-message-actions";
+          const resumeButton = document.createElement("button");
+          resumeButton.type = "button";
+          resumeButton.className = "cta-widget-resume";
+          resumeButton.textContent = "Resume";
+          const canResume = index === state.messages.length - 1 && !isLoading && !widgetHidden;
+          resumeButton.disabled = !canResume;
+          resumeButton.addEventListener("click", () => {
+            if (!canResume) return;
+            inputEl.value = "";
+            syncSendButton();
+            sendMessage(message.resumeQuery, { skipUserEcho: true });
+          });
+          actions.appendChild(resumeButton);
+          node.appendChild(actions);
+        }
+        return;
+      }
+      node.textContent = message.content;
+    }
+
+    function renderEmptyState() {
+      messageNodes.clear();
+      timelineEl.innerHTML = "";
+      if (unreadDividerEl.parentNode === timelineEl) {
+        timelineEl.removeChild(unreadDividerEl);
+      }
+      const emptyTitle = widgetEmptyTitle.trim();
+      const emptyDescription = widgetEmptyDescription.trim();
+      const empty = document.createElement("div");
+      empty.className = "cta-widget-empty";
+      empty.innerHTML = `
+        <div class="cta-widget-empty-icon">${getBrandIconMarkup()}</div>
+        ${emptyTitle ? `<h3>${escapeHtml(emptyTitle)}</h3>` : ""}
+        ${emptyDescription ? `<p>${escapeHtml(emptyDescription)}</p>` : ""}
+      `;
+      appendSuggestionButtons(empty, getVisibleSuggestions());
+      timelineEl.appendChild(empty);
+      suggestionsHostEl.replaceChildren();
+      setJumpToLatestVisible(false);
+    }
+
+    function syncTimelineMessages() {
+      const dividerMessageId = isOpen ? state.firstUnreadMessageId : null;
+      const activeMessageIds = new Set();
+      let cursor = timelineEl.firstChild;
+
+      for (let index = 0; index < state.messages.length; index += 1) {
+        const message = state.messages[index];
+        if (dividerMessageId && dividerMessageId === message.id) {
+          if (cursor !== unreadDividerEl) {
+            timelineEl.insertBefore(unreadDividerEl, cursor);
+          }
+          cursor = unreadDividerEl.nextSibling;
+        }
+
+        const node = getMessageNode(message);
+        updateMessageNode(node, message, index);
+        activeMessageIds.add(message.id);
+        if (node !== cursor) {
+          timelineEl.insertBefore(node, cursor);
+        }
+        cursor = node.nextSibling;
+      }
+
+      if (!dividerMessageId && unreadDividerEl.parentNode === timelineEl) {
+        if (cursor === unreadDividerEl) {
+          cursor = unreadDividerEl.nextSibling;
+        }
+        timelineEl.removeChild(unreadDividerEl);
+      }
+
+      while (cursor) {
+        const next = cursor.nextSibling;
+        if (cursor === unreadDividerEl) {
+          timelineEl.removeChild(cursor);
+        } else {
+          const messageId = cursor.dataset ? cursor.dataset.messageId : "";
+          if (messageId) {
+            messageNodes.delete(messageId);
+          }
+          timelineEl.removeChild(cursor);
+        }
+        cursor = next;
+      }
+
+      for (const [messageId, node] of Array.from(messageNodes.entries())) {
+        if (!activeMessageIds.has(messageId)) {
+          if (node.parentNode) {
+            node.parentNode.removeChild(node);
+          }
+          messageNodes.delete(messageId);
+        }
+      }
+    }
+
+    function renderActivity() {
+      if (!frontendActivity) {
+        activityHostEl.replaceChildren();
+        return;
+      }
+      const activity = document.createElement("div");
+      activity.className = "cta-widget-activity";
+      const header = document.createElement("div");
+      header.className = "cta-widget-activity-header";
+      const title = document.createElement("span");
+      title.textContent = frontendActivity.title || "Applying changes";
+      const status = document.createElement("span");
+      status.className = "cta-widget-activity-status";
+      status.textContent =
+        frontendActivity.status === "done" ? "Done" : frontendActivity.status === "error" ? "Needs attention" : "Working";
+      header.appendChild(title);
+      header.appendChild(status);
+      activity.appendChild(header);
+      if (frontendActivity.steps && frontendActivity.steps.length > 0) {
+        const list = document.createElement("div");
+        list.className = "cta-widget-activity-list";
+        frontendActivity.steps.forEach((step) => {
+          const row = document.createElement("div");
+          row.className = "cta-widget-activity-step";
+          row.dataset.status = step.status || "pending";
+          row.textContent = step.label || `Step ${step.index + 1}`;
+          list.appendChild(row);
+        });
+        activity.appendChild(list);
+      }
+      activityHostEl.replaceChildren(activity);
+    }
+
+    function renderSuggestions() {
+      suggestionsHostEl.replaceChildren();
+      if (state.messages.length === 0) return;
+      appendSuggestionButtons(suggestionsHostEl, getVisibleSuggestions());
+    }
+
+    function renderLoading() {
+      if (!isLoading) {
+        loadingHostEl.replaceChildren();
+        return;
+      }
+      const loading = document.createElement("div");
+      loading.className = "cta-widget-loading";
+      loading.innerHTML = "<span></span><span></span><span></span>";
+      loadingHostEl.replaceChildren(loading);
     }
 
     function renderMessages() {
+      const shouldPreserveScroll =
+        isOpen &&
+        !pendingScrollIntent &&
+        !stickToBottomDuringRun &&
+        !isNearBottom();
+      const snapshot = shouldPreserveScroll ? captureScrollSnapshot() : null;
+
+      syncScreenShareBar();
+
       if (state.messages.length === 0 && !frontendActivity) {
-        messagesEl.innerHTML = "";
-        renderScreenShareBar(messagesEl);
-        const emptyTitle = widgetEmptyTitle.trim();
-        const emptyDescription = widgetEmptyDescription.trim();
-        const empty = document.createElement("div");
-        empty.className = "cta-widget-empty";
-        empty.innerHTML = `
-          <div class="cta-widget-empty-icon">${getBrandIconMarkup()}</div>
-          ${emptyTitle ? `<h3>${escapeHtml(emptyTitle)}</h3>` : ""}
-          ${emptyDescription ? `<p>${escapeHtml(emptyDescription)}</p>` : ""}
-        `;
-        appendSuggestionButtons(empty, getVisibleSuggestions());
-        messagesEl.appendChild(empty);
-        return;
+        renderEmptyState();
+      } else {
+        syncTimelineMessages();
+        renderSuggestions();
       }
 
-      messagesEl.innerHTML = "";
+      renderActivity();
+      renderLoading();
 
-      renderScreenShareBar(messagesEl);
-
-      state.messages.forEach((msg, index) => {
-        const bubble = document.createElement("div");
-        bubble.className = `cta-widget-message ${msg.role}`;
-        if (msg.role === "assistant") {
-          bubble.innerHTML = renderMarkdown(msg.content);
-          if (isResumeErrorMessage(msg)) {
-            const actions = document.createElement("div");
-            actions.className = "cta-widget-message-actions";
-            const resumeButton = document.createElement("button");
-            resumeButton.type = "button";
-            resumeButton.className = "cta-widget-resume";
-            resumeButton.textContent = "Resume";
-            const canResume = index === state.messages.length - 1 && !isLoading && !widgetHidden;
-            resumeButton.disabled = !canResume;
-            resumeButton.addEventListener("click", () => {
-              if (!canResume) return;
-              sendMessage(msg.resumeQuery, { skipUserEcho: true });
-            });
-            actions.appendChild(resumeButton);
-            bubble.appendChild(actions);
-          }
-        } else {
-          bubble.textContent = msg.content;
-        }
-        messagesEl.appendChild(bubble);
-      });
-
-      if (frontendActivity) {
-        const activity = document.createElement("div");
-        activity.className = "cta-widget-activity";
-        const header = document.createElement("div");
-        header.className = "cta-widget-activity-header";
-        const title = document.createElement("span");
-        title.textContent = frontendActivity.title || "Applying changes";
-        const status = document.createElement("span");
-        status.className = "cta-widget-activity-status";
-        status.textContent =
-          frontendActivity.status === "done" ? "Done" : frontendActivity.status === "error" ? "Needs attention" : "Working";
-        header.appendChild(title);
-        header.appendChild(status);
-        activity.appendChild(header);
-        if (frontendActivity.steps && frontendActivity.steps.length > 0) {
-          const list = document.createElement("div");
-          list.className = "cta-widget-activity-list";
-          frontendActivity.steps.forEach((step) => {
-            const row = document.createElement("div");
-            row.className = "cta-widget-activity-step";
-            row.dataset.status = step.status || "pending";
-            row.textContent = step.label || `Step ${step.index + 1}`;
-            list.appendChild(row);
-          });
-          activity.appendChild(list);
-        }
-        messagesEl.appendChild(activity);
+      if (!pendingScrollIntent && snapshot) {
+        queueScrollIntent("preserve", { snapshot });
       }
 
-      appendSuggestionButtons(messagesEl, getVisibleSuggestions());
-
-      if (isLoading) {
-        const loading = document.createElement("div");
-        loading.className = "cta-widget-loading";
-        loading.innerHTML = "<span></span><span></span><span></span>";
-        messagesEl.appendChild(loading);
-      }
-
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      flushScrollIntent();
     }
 
     function clearScreenShareCountdown() {
@@ -6092,8 +6653,11 @@
         : createRequestId();
 
       const skipUserEcho = options && options.skipUserEcho === true;
+      clearUnreadAnchor();
+      queueScrollIntent("bottom");
+      stickToBottomDuringRun = true;
       if (!skipUserEcho) {
-        state.messages.push({ role: "user", content: messageText });
+        appendStoredMessage("user", messageText);
       }
       state.suggestions = [];
       saveState(state);
@@ -6121,11 +6685,31 @@
         shouldHide = shouldHideWidget(data);
 
         if (!shouldHide && data.messages && data.messages.length > 0) {
+          const shouldPreserveScroll = isOpen && !stickToBottomDuringRun && !isNearBottom();
+          const preserveSnapshot = shouldPreserveScroll ? captureScrollSnapshot() : null;
+          let firstAssistantMessageId = null;
           if (isRunStale()) return;
           for (const msg of data.messages) {
-            state.messages.push({ role: msg.role, content: msg.content });
-            if (msg.role === "assistant") {
+            const appended = appendStoredMessage(msg.role, msg.content);
+            if (appended.role === "assistant") {
               didReceiveAssistant = true;
+              if (!firstAssistantMessageId) {
+                firstAssistantMessageId = appended.id;
+              }
+            }
+          }
+          if (firstAssistantMessageId) {
+            if (!isOpen) {
+              rememberUnreadAnchor(firstAssistantMessageId);
+            } else if (stickToBottomDuringRun || isNearBottom()) {
+              clearUnreadAnchor();
+              queueScrollIntent("bottom");
+            } else {
+              rememberUnreadAnchor(firstAssistantMessageId);
+              if (preserveSnapshot) {
+                queueScrollIntent("preserve", { snapshot: preserveSnapshot });
+              }
+              setJumpToLatestVisible(true);
             }
           }
         }
@@ -6139,13 +6723,21 @@
         if (!shouldHide && !isRunStale()) {
           const isStopped = isAbortError(error);
           if (!isNavigatingAway) {
-            upsertResumeErrorMessage(
+            const errorMessage = upsertResumeErrorMessage(
               messageText,
               isStopped
                 ? "Execution stopped before it finished. Resume to continue from your previous request."
                 : "Something went wrong while executing this request. Resume to try your previous request again."
             );
             didReceiveAssistant = true;
+            if (errorMessage) {
+              if (!isOpen) {
+                rememberUnreadAnchor(errorMessage.id);
+              } else if (stickToBottomDuringRun || isNearBottom()) {
+                clearUnreadAnchor();
+                queueScrollIntent("bottom");
+              }
+            }
             saveState(state);
           }
         }
@@ -6154,6 +6746,7 @@
           activeRunAbortController = null;
         }
         setLoading(false);
+        stickToBottomDuringRun = false;
         state.activeQuery = null;
         state.activeRequestId = null;
         if (!isNavigatingAway) saveState(state);
@@ -6166,7 +6759,6 @@
       }
 
       if (!isOpen && didReceiveAssistant) {
-        setUnread(true);
         playUnreadPulse();
       }
     }
@@ -6177,6 +6769,8 @@
       if (isOpen) return;
       isOpen = true;
       setUnread(false);
+      setJumpToLatestVisible(Boolean(state.firstUnreadMessageId));
+      queueScrollIntent(state.firstUnreadMessageId ? "unread" : "bottom", { messageId: state.firstUnreadMessageId });
       panel.classList.add("open");
       scrim.classList.add("open");
       toggle.classList.add("open");
@@ -6193,6 +6787,7 @@
       if (!isOpen) return;
       stopResizing();
       isOpen = false;
+      setJumpToLatestVisible(false);
       isSecurityPanelOpen = false;
       securityPanelEl.classList.remove("open");
       panel.classList.remove("open");
@@ -6200,6 +6795,7 @@
       toggle.classList.remove("open");
       toggle.setAttribute("aria-expanded", "false");
       applyPanelWidth();
+      syncUnreadBadge();
       syncToggleAriaLabel();
       closeMicMenu();
       stopRecording();
@@ -6231,8 +6827,11 @@
       state.activeQuery = null;
       state.activeRequestId = null;
       state.suggestions = [];
+      state.firstUnreadMessageId = null;
+      state.lastReadMessageId = null;
       saveState(state);
       setUnread(false);
+      setJumpToLatestVisible(false);
       clearFrontendActivity();
       clearFrontendWarning();
       screenShareDismissed = false;

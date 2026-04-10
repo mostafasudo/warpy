@@ -46,6 +46,15 @@ type WidgetSocketMessage = {
   widgetToken?: string
 }
 
+type ScrollHarness = {
+  getClientHeight: () => number
+  getScrollHeight: () => number
+  getScrollTop: () => number
+  setMetrics: (metrics: { clientHeight?: number; scrollHeight?: number; scrollTop?: number }) => void
+}
+
+let scrollIntoViewCalls: string[] = []
+
 class MockWebSocket {
   static CLOSED = 3
   static CLOSING = 2
@@ -163,13 +172,75 @@ function readWidgetState() {
     activeQuery?: string | null
     activeRequestId?: string | null
     conversationId?: string | null
+    firstUnreadMessageId?: string | null
     interruptedByNavigation?: boolean
+    lastReadMessageId?: string | null
+    messageCursor?: number
+    messages?: Array<{ id?: string; role: string; content: string }>
     resumePanelOpen?: boolean | null
+    version?: number
   }
 }
 
 function getWidth(panel: HTMLDivElement) {
   return Number.parseInt(panel.style.width || "0", 10)
+}
+
+function getMessagesScroller(widget: WidgetDom) {
+  return getShadowRoot(widget).querySelector(".cta-widget-messages") as HTMLDivElement
+}
+
+function attachScrollHarness(element: HTMLElement): ScrollHarness {
+  let clientHeight = 0
+  let scrollHeight = 0
+  let scrollTop = 0
+
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    get: () => clientHeight,
+  })
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeight,
+  })
+  Object.defineProperty(element, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = Number(value) || 0
+    },
+  })
+
+  return {
+    getClientHeight: () => clientHeight,
+    getScrollHeight: () => scrollHeight,
+    getScrollTop: () => scrollTop,
+    setMetrics: (metrics) => {
+      if (typeof metrics.clientHeight === "number") clientHeight = metrics.clientHeight
+      if (typeof metrics.scrollHeight === "number") scrollHeight = metrics.scrollHeight
+      if (typeof metrics.scrollTop === "number") scrollTop = metrics.scrollTop
+    },
+  }
+}
+
+function assignRect(
+  element: Element,
+  { top, bottom, left = 0, right = 320 }: { top: number; bottom: number; left?: number; right?: number }
+) {
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      top,
+      bottom,
+      left,
+      right,
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    }),
+  })
 }
 
 async function loadWidget(
@@ -236,6 +307,15 @@ describe("widget desktop resize", () => {
     localStorage.clear()
     sessionStorage.clear()
     setViewport(1280, 900)
+    scrollIntoViewCalls = []
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      writable: true,
+      value: jest.fn(function (this: HTMLElement) {
+        const marker = this.dataset.messageId || this.className || this.textContent || this.tagName
+        scrollIntoViewCalls.push(String(marker))
+      }),
+    })
   })
 
   it("keeps the current width as the default, supports resizing narrower, and persists the chosen width", async () => {
@@ -388,6 +468,238 @@ describe("widget desktop resize", () => {
       expect(suggestionTexts).toEqual(["Send it to finance", "Create another invoice"])
     })
     expect(shadowRoot.textContent).toContain("Here is the update.")
+  })
+
+  it("migrates legacy stored messages by assigning ids and marking the history as read", async () => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      messages: [
+        { role: "user", content: "Legacy user message" },
+        { role: "assistant", content: "Legacy assistant message" },
+      ],
+      conversationId: "conversation-legacy",
+      voice: {},
+      auth: {},
+      ui: {},
+      suggestions: [],
+    }))
+
+    await loadWidget()
+
+    const migrated = readWidgetState()
+    expect(migrated.version).toBe(2)
+    expect(migrated.messages?.map((message) => message.id)).toEqual(["msg_1", "msg_2"])
+    expect(migrated.lastReadMessageId).toBe("msg_2")
+    expect(migrated.firstUnreadMessageId).toBeNull()
+    expect(migrated.messageCursor).toBe(3)
+  })
+
+  it("opens a read conversation at the bottom instead of fabricating unread state", async () => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 2,
+      messageCursor: 4,
+      messages: [
+        { id: "msg_1", role: "user", content: "First" },
+        { id: "msg_2", role: "assistant", content: "Second" },
+        { id: "msg_3", role: "assistant", content: "Third" },
+      ],
+      conversationId: "conversation-read",
+      voice: {},
+      auth: {},
+      ui: {},
+      suggestions: [],
+      lastReadMessageId: "msg_3",
+      firstUnreadMessageId: null,
+    }))
+
+    const widget = await loadWidget()
+    const scrollHarness = attachScrollHarness(getMessagesScroller(widget))
+    scrollHarness.setMetrics({ clientHeight: 180, scrollHeight: 720, scrollTop: 0 })
+
+    await openPanel(widget)
+
+    expect(scrollHarness.getScrollTop()).toBe(720)
+    expect(scrollIntoViewCalls.some((entry) => entry.includes("cta-widget-unread-divider"))).toBe(false)
+    expect(getShadowRoot(widget).querySelector(".cta-widget-unread-divider-label")).toBeNull()
+    expect(readWidgetState().firstUnreadMessageId).toBeNull()
+  })
+
+  it("opens at the unread divider when unread assistant messages are waiting", async () => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 2,
+      messageCursor: 5,
+      messages: [
+        { id: "msg_1", role: "user", content: "What changed?" },
+        { id: "msg_2", role: "assistant", content: "Everything looked good." },
+        { id: "msg_3", role: "assistant", content: "There is also one unread update." },
+        { id: "msg_4", role: "assistant", content: "And another unread update." },
+      ],
+      conversationId: "conversation-unread",
+      voice: {},
+      auth: {},
+      ui: {},
+      suggestions: [],
+      lastReadMessageId: "msg_2",
+      firstUnreadMessageId: "msg_3",
+    }))
+
+    const widget = await loadWidget()
+    const scrollHarness = attachScrollHarness(getMessagesScroller(widget))
+    scrollHarness.setMetrics({ clientHeight: 180, scrollHeight: 720, scrollTop: 0 })
+
+    expect(widget.toggle.classList.contains("has-unread")).toBe(true)
+
+    await openPanel(widget)
+
+    expect(scrollIntoViewCalls.some((entry) => entry.includes("cta-widget-unread-divider"))).toBe(true)
+    expect((getShadowRoot(widget).querySelector(".cta-widget-unread-divider-label") as HTMLSpanElement).textContent).toBe("New")
+    expect((getShadowRoot(widget).querySelector(".cta-widget-jump") as HTMLButtonElement).getAttribute("aria-label")).toBe("Jump to latest")
+    expect(widget.toggle.classList.contains("has-unread")).toBe(false)
+
+    fireEvent.click(widget.close)
+
+    await waitFor(() => {
+      expect(widget.panel.classList.contains("open")).toBe(false)
+    })
+    expect(widget.toggle.classList.contains("has-unread")).toBe(true)
+  })
+
+  it("shows jump to latest for unread conversations and clears unread when clicked", async () => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 2,
+      messageCursor: 5,
+      messages: [
+        { id: "msg_1", role: "user", content: "What changed?" },
+        { id: "msg_2", role: "assistant", content: "Everything looked good." },
+        { id: "msg_3", role: "assistant", content: "There is also one unread update." },
+        { id: "msg_4", role: "assistant", content: "And another unread update." },
+      ],
+      conversationId: "conversation-jump",
+      voice: {},
+      auth: {},
+      ui: {},
+      suggestions: [],
+      lastReadMessageId: "msg_2",
+      firstUnreadMessageId: "msg_3",
+    }))
+
+    const widget = await loadWidget()
+    const scrollHarness = attachScrollHarness(getMessagesScroller(widget))
+    scrollHarness.setMetrics({ clientHeight: 180, scrollHeight: 720, scrollTop: 0 })
+
+    await openPanel(widget)
+
+    const shadowRoot = getShadowRoot(widget)
+    const jumpButton = shadowRoot.querySelector(".cta-widget-jump") as HTMLButtonElement
+    const jumpWrap = shadowRoot.querySelector(".cta-widget-jump-wrap") as HTMLDivElement
+    expect(jumpWrap.classList.contains("visible")).toBe(true)
+
+    fireEvent.click(jumpButton)
+
+    await waitFor(() => {
+      expect(scrollHarness.getScrollTop()).toBe(720)
+    })
+    expect(jumpWrap.classList.contains("visible")).toBe(false)
+    expect(readWidgetState().firstUnreadMessageId).toBeNull()
+    expect(getShadowRoot(widget).querySelector(".cta-widget-unread-divider-label")).toBeNull()
+  })
+
+  it("advances the unread anchor after the user reads part of an unread block", async () => {
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        messageCursor: 5,
+        messages: [
+          { id: "msg_1", role: "user", content: "What changed?" },
+          { id: "msg_2", role: "assistant", content: "Everything looked good." },
+          { id: "msg_3", role: "assistant", content: "Unread update one." },
+          { id: "msg_4", role: "assistant", content: "Unread update two." },
+        ],
+        conversationId: "conversation-partial-read",
+        voice: {},
+        auth: {},
+        ui: {},
+        suggestions: [],
+        lastReadMessageId: "msg_2",
+        firstUnreadMessageId: "msg_3",
+      })
+    )
+
+    const widget = await loadWidget()
+    const scrollHarness = attachScrollHarness(getMessagesScroller(widget))
+    scrollHarness.setMetrics({ clientHeight: 180, scrollHeight: 720, scrollTop: 0 })
+
+    await openPanel(widget)
+
+    const shadowRoot = getShadowRoot(widget)
+    const scroller = getMessagesScroller(widget)
+    const firstUnreadNode = shadowRoot.querySelector('[data-message-id="msg_3"]') as HTMLDivElement
+    const secondUnreadNode = shadowRoot.querySelector('[data-message-id="msg_4"]') as HTMLDivElement
+
+    assignRect(scroller, { top: 0, bottom: 180 })
+    assignRect(firstUnreadNode, { top: -56, bottom: -8 })
+    assignRect(secondUnreadNode, { top: 24, bottom: 88 })
+
+    scrollHarness.setMetrics({ scrollTop: 260 })
+    fireEvent.scroll(scroller)
+
+    await waitFor(() => {
+      expect(readWidgetState().lastReadMessageId).toBe("msg_3")
+      expect(readWidgetState().firstUnreadMessageId).toBe("msg_4")
+    })
+
+    scrollIntoViewCalls = []
+    fireEvent.click(widget.close)
+    await waitFor(() => {
+      expect(widget.panel.classList.contains("open")).toBe(false)
+    })
+
+    await openPanel(widget)
+
+    expect(scrollIntoViewCalls.some((entry) => entry.includes("cta-widget-unread-divider"))).toBe(true)
+    expect(readWidgetState().firstUnreadMessageId).toBe("msg_4")
+  })
+
+  it("pins back to the bottom when sending a suggestion from a long chat", async () => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 2,
+      messageCursor: 4,
+      messages: [
+        { id: "msg_1", role: "user", content: "Start" },
+        { id: "msg_2", role: "assistant", content: "Middle" },
+        { id: "msg_3", role: "assistant", content: "Latest" },
+      ],
+      conversationId: "conversation-suggestions",
+      voice: {},
+      auth: {},
+      ui: {},
+      suggestions: ["Create another refund", "Summarize invoices"],
+      lastReadMessageId: "msg_3",
+      firstUnreadMessageId: null,
+    }))
+
+    MockWebSocket.handler = () => {
+    }
+
+    const widget = await loadWidget({ widgetSuggestionsEnabled: true })
+    const scrollHarness = attachScrollHarness(getMessagesScroller(widget))
+    scrollHarness.setMetrics({ clientHeight: 180, scrollHeight: 920, scrollTop: 120 })
+
+    await openPanel(widget)
+
+    const shadowRoot = getShadowRoot(widget)
+    const suggestionButton = Array.from(shadowRoot.querySelectorAll(".cta-widget-suggestion")).find(
+      (element) => element.textContent === "Create another refund"
+    ) as HTMLButtonElement | undefined
+    expect(suggestionButton).toBeDefined()
+
+    fireEvent.click(suggestionButton!)
+
+    await waitFor(() => {
+      expect(readWidgetState().activeRequestId).toBeTruthy()
+    })
+    expect(scrollHarness.getScrollTop()).toBe(920)
+    expect(readWidgetState().firstUnreadMessageId).toBeNull()
   })
 
   it("keeps Warpy widget routes on the Warpy API even when a customer base URL is configured", async () => {
@@ -910,6 +1222,14 @@ describe("widget desktop resize", () => {
       expect(reloaded.panel.classList.contains("open")).toBe(false)
       expect(readWidgetState().activeRequestId).toBeNull()
       expect(readWidgetState().interruptedByNavigation).toBe(false)
+
+      const scrollHarness = attachScrollHarness(getMessagesScroller(reloaded))
+      scrollHarness.setMetrics({ clientHeight: 180, scrollHeight: 760, scrollTop: 0 })
+
+      await openPanel(reloaded)
+
+      expect(scrollIntoViewCalls.some((entry) => entry.includes("cta-widget-unread-divider"))).toBe(true)
+      expect((reloadedShadowRoot.querySelector(".cta-widget-unread-divider-label") as HTMLSpanElement).textContent).toBe("New")
     } finally {
       jest.useRealTimers()
     }

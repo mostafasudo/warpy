@@ -54,6 +54,11 @@ window.warpy = async (toolName, vars) => {
 - User stop control while runs are in progress (Send becomes Stop).
 - Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
 - Optional suggestion chips: starter suggestions for empty chats plus LLM-generated follow-up suggestions after completed replies.
+- Timeline read-state and scroll coordination for long conversations:
+  - assistant replies that arrive while the panel is closed are anchored to a visible `New` divider
+  - reopening lands at the first unread message instead of a random midpoint
+  - open panels stay pinned only when the user is already at the bottom or the current request is still running
+  - users who are reading older messages get a down-arrow jump control instead of forced viewport jumps
 - System prompt encourages proactive retries and page rescans via `read_page`.
 - Screen autopilot actions and frontend tool actions are tracked in the Activity panel alongside backend actions.
 
