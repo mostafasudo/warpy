@@ -456,7 +456,7 @@ export const ConfigureWidgetPanelContent = () => {
                         {
                           value: "custom" as const,
                           title: "Custom theme",
-                          description: "Define the widget’s light and dark appearance explicitly with a real preview.",
+                          description: "Define the widget’s light and dark appearance explicitly with a live preview.",
                           icon: Palette,
                         },
                       ]).map((option) => {
