@@ -29,6 +29,17 @@ has_skill() {
   return 1
 }
 
+is_generated_skill_wrapper() {
+  target="$1"
+
+  [ -d "$target" ] || return 1
+  [ ! -L "$target" ] || return 1
+  [ -L "$target/SKILL.md" ] || return 1
+
+  count="$(find "$target" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+  [ "$count" = "1" ]
+}
+
 sync_skill_entrypoints() {
   dir="$1"
   replace_real_targets="$2"
@@ -36,7 +47,7 @@ sync_skill_entrypoints() {
   for skill_name in "${skill_names[@]}"; do
     target="$dir/$skill_name"
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-      if [ "$replace_real_targets" = "yes" ]; then
+      if [ "$replace_real_targets" = "yes" ] || is_generated_skill_wrapper "$target"; then
         rm -rf "$target"
       else
         continue
@@ -77,7 +88,7 @@ fi
 skill_names=()
 while IFS= read -r skill_dir; do
   skill_names+=( "$(basename "$skill_dir")" )
-done < <(find "$GSTACK_DIR" -mindepth 1 -maxdepth 1 -type d -exec test -f "{}/SKILL.md" ';' -print | sort)
+done < <(find -H "$GSTACK_DIR" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -exec test -f "{}/SKILL.md" ';' -print | sort)
 
 sync_skill_entrypoints "$CANONICAL_SKILLS_DIR" "no"
 
