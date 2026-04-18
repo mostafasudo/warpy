@@ -385,7 +385,7 @@ describe("AgentPanel", () => {
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
     expect(screen.queryByTestId("widget-theme-preview-frame")).toBeNull()
-    expect(screen.getByText(/preview is hidden in infer mode/i)).not.toBeNull()
+    expect(screen.getByText(/reads your dashboard’s colors and typography at runtime/i)).not.toBeNull()
 
     await user.click(screen.getByRole("button", { name: /custom theme/i }))
 
@@ -577,7 +577,7 @@ describe("AgentPanel", () => {
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
     const titleInput = screen.getByLabelText("Widget name")
-    expect(screen.getByText("Infer from host")).not.toBeNull()
+    expect(screen.getByText("Infer from page", { selector: "div" })).not.toBeNull()
     await user.clear(titleInput)
     await user.type(titleInput, "Acme Assistant")
     expect(screen.getByText("Unsaved")).not.toBeNull()
@@ -871,7 +871,7 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /restore defaults/i }))
     expect(screen.queryByText("Unsaved")).toBeNull()
-    expect(screen.getByText("Infer from host")).not.toBeNull()
+    expect(screen.getByText("Infer from page", { selector: "div" })).not.toBeNull()
     expect((screen.getByLabelText("Widget name") as HTMLInputElement).value).toBe("Warpy")
 
     await user.clear(screen.getByLabelText("Widget name"))
@@ -927,7 +927,7 @@ describe("AgentPanel", () => {
     await user.click(screen.getByLabelText("Widget icon mode"))
     await user.click(screen.getByRole("option", { name: "Default bubble" }))
 
-    expect(screen.getByText("Infer from host")).not.toBeNull()
+    expect(screen.getByText("Infer from page", { selector: "div" })).not.toBeNull()
     expect(screen.queryByRole("img", { name: "Widget icon" })).toBeNull()
     expect(screen.getByLabelText("Widget icon URL")).toBeDisabled()
   })

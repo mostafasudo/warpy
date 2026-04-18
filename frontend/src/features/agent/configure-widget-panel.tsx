@@ -420,7 +420,7 @@ export const ConfigureWidgetPanelContent = () => {
               </div>
               <div className="flex items-center gap-3">
                 <Badge variant={draft.widgetAppearanceMode === "custom" ? "default" : "secondary"}>
-                  {draft.widgetAppearanceMode === "custom" ? "Custom theme" : "Infer from host"}
+                  {draft.widgetAppearanceMode === "custom" ? "Custom theme" : "Infer from page"}
                 </Badge>
                 <CollapsibleTrigger asChild>
                   <Button
@@ -449,8 +449,8 @@ export const ConfigureWidgetPanelContent = () => {
                       {([
                         {
                           value: "infer" as const,
-                          title: "Infer from host page",
-                          description: "Default. Reads the customer dashboard’s colors and typography at runtime.",
+                          title: "Infer from page",
+                          description: "Reads your dashboard’s colors and typography at runtime.",
                           icon: MessageSquare,
                         },
                         {
@@ -510,11 +510,6 @@ export const ConfigureWidgetPanelContent = () => {
                         )
                       })}
                     </div>
-                    {draft.widgetAppearanceMode === "infer" ? (
-                      <p className="mt-4 text-sm text-muted-foreground">
-                        Preview is hidden in infer mode because the widget inherits the real host page at runtime, not the Warpy dashboard.
-                      </p>
-                    ) : null}
                   </ThemeCard>
 
                   <ThemeCard title="Launcher & basics">
