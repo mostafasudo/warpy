@@ -250,6 +250,8 @@ class Agent(Base):
     widget_api_key_last4_draft = Column(Text, nullable=True)
     widget_title = Column(Text, nullable=False, server_default="Warpy")
     widget_icon_url = Column(Text, nullable=True)
+    widget_appearance_mode = Column(Text, nullable=False, server_default="infer", default="infer")
+    widget_theme = Column(json_type, nullable=True)
     widget_behavior = Column(Text, nullable=False, server_default="overlay", default="overlay")
     widget_empty_title = Column(Text, nullable=False, server_default="What would you like to do?")
     widget_empty_description = Column(

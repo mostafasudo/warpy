@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.agent_custom_system_prompt import CUSTOM_USER_SYSTEM_PROMPT_MAX_LENGTH
+from .widget_theme import WidgetTheme
 
 WIDGET_STARTER_SUGGESTION_MAX_COUNT = 3
 
@@ -62,6 +63,8 @@ class AgentWidgetConfigResponse(BaseModel):
 
     widget_title: str = Field(alias="widgetTitle", min_length=1, max_length=80)
     widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl", max_length=2048)
+    widget_appearance_mode: Literal["infer", "custom"] = Field(default="infer", alias="widgetAppearanceMode")
+    widget_theme: WidgetTheme | None = Field(default=None, alias="widgetTheme")
     widget_behavior: Literal["overlay", "push"] = Field(default="overlay", alias="widgetBehavior")
     widget_empty_title: str = Field(alias="widgetEmptyTitle", max_length=120)
     widget_empty_description: str = Field(alias="widgetEmptyDescription", max_length=240)

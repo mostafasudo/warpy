@@ -114,6 +114,8 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     body = fetched.json()
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetIconUrl"] is None
+    assert body["widgetAppearanceMode"] == "infer"
+    assert body["widgetTheme"] is None
     assert body["widgetBehavior"] == "overlay"
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
@@ -127,6 +129,156 @@ def test_agent_widget_config_get_and_update(client: TestClient):
         json={
             "widgetTitle": "Acme Assistant",
             "widgetIconUrl": "https://example.com/icon.png",
+            "widgetAppearanceMode": "custom",
+            "widgetTheme": {
+                "version": 1,
+                "light": {
+                    "colors": {
+                        "text": "#111827",
+                        "mutedText": "#4B5563",
+                        "background": "#FFFFFF",
+                        "surface": "#FFFFFF",
+                        "surfaceStrong": "#F8FAFC",
+                        "border": "#D1D5DB",
+                        "borderStrong": "#9CA3AF",
+                        "accent": "#2563EB",
+                        "accentContrast": "#FFFFFF",
+                        "accentSoft": "#DBEAFE",
+                        "focusRing": "#93C5FD",
+                        "scrim": "#00000038",
+                        "launcherBackground": "#FFFFFF",
+                        "launcherBorder": "#CBD5E1",
+                        "launcherIcon": "#2563EB",
+                        "headerIcon": "#4B5563",
+                        "headerIconHover": "#111827",
+                        "assistantBubble": "#F3F4F6",
+                        "assistantText": "#111827",
+                        "userBubble": "#E5E7EB",
+                        "userText": "#111827",
+                        "userBorder": "#D1D5DB",
+                        "inputBackground": "#FFFFFF",
+                        "inputText": "#111827",
+                        "inputPlaceholder": "#6B7280",
+                        "inputBorder": "#CBD5E1",
+                        "suggestionBackground": "#F8FAFC",
+                        "suggestionText": "#111827",
+                        "suggestionBorder": "#CBD5E1",
+                        "suggestionHoverBackground": "#DBEAFE",
+                        "activityBackground": "#FFFFFF",
+                        "activityText": "#111827",
+                        "activityMuted": "#6B7280",
+                        "warningBackground": "#EFF6FF",
+                        "warningText": "#1D4ED8",
+                        "warningBorder": "#BFDBFE",
+                        "securityBackground": "#FFFFFF",
+                        "securityText": "#111827",
+                        "securityMuted": "#6B7280",
+                        "codeBackground": "#F3F4F6",
+                    },
+                    "typography": {
+                        "fontFamily": "system-ui, sans-serif",
+                        "fontSize": 13,
+                        "headingSize": 16,
+                        "lineHeight": 1.55,
+                        "letterSpacing": 0,
+                        "fontWeight": 500,
+                    },
+                    "dimensions": {
+                        "panelWidth": 440,
+                        "launcherSize": 42,
+                        "launcherRadius": 16,
+                        "panelRadius": 18,
+                        "bubbleRadius": 16,
+                        "controlRadius": 12,
+                        "inputHeight": 42,
+                        "panelPadding": 14,
+                        "messagePadding": 12,
+                    },
+                    "shadows": {
+                        "panelY": 24,
+                        "panelBlur": 60,
+                        "panelSpread": 0,
+                        "panelOpacity": 0.2,
+                        "launcherY": 18,
+                        "launcherBlur": 60,
+                        "launcherSpread": 0,
+                        "launcherOpacity": 0.2,
+                    },
+                },
+                "dark": {
+                    "colors": {
+                        "text": "#F8FAFC",
+                        "mutedText": "#CBD5E1",
+                        "background": "#090A0B",
+                        "surface": "#121416",
+                        "surfaceStrong": "#1B1E22",
+                        "border": "#2D3748",
+                        "borderStrong": "#3F4A5A",
+                        "accent": "#3B82F6",
+                        "accentContrast": "#FFFFFF",
+                        "accentSoft": "#1D4ED833",
+                        "focusRing": "#60A5FA66",
+                        "scrim": "#0000008C",
+                        "launcherBackground": "#121416",
+                        "launcherBorder": "#2D3748",
+                        "launcherIcon": "#93C5FD",
+                        "headerIcon": "#CBD5E1",
+                        "headerIconHover": "#FFFFFF",
+                        "assistantBubble": "#1B1E22",
+                        "assistantText": "#F8FAFC",
+                        "userBubble": "#23262B",
+                        "userText": "#F8FAFC",
+                        "userBorder": "#3F4A5A",
+                        "inputBackground": "#1B1E22",
+                        "inputText": "#F8FAFC",
+                        "inputPlaceholder": "#94A3B8",
+                        "inputBorder": "#334155",
+                        "suggestionBackground": "#1B1E22",
+                        "suggestionText": "#F8FAFC",
+                        "suggestionBorder": "#334155",
+                        "suggestionHoverBackground": "#1D4ED84D",
+                        "activityBackground": "#121416",
+                        "activityText": "#F8FAFC",
+                        "activityMuted": "#CBD5E1",
+                        "warningBackground": "#1E293B",
+                        "warningText": "#E2E8F0",
+                        "warningBorder": "#334155",
+                        "securityBackground": "#090A0B",
+                        "securityText": "#F8FAFC",
+                        "securityMuted": "#CBD5E1",
+                        "codeBackground": "#0F172A",
+                    },
+                    "typography": {
+                        "fontFamily": "system-ui, sans-serif",
+                        "fontSize": 13,
+                        "headingSize": 16,
+                        "lineHeight": 1.55,
+                        "letterSpacing": 0,
+                        "fontWeight": 500,
+                    },
+                    "dimensions": {
+                        "panelWidth": 440,
+                        "launcherSize": 42,
+                        "launcherRadius": 16,
+                        "panelRadius": 18,
+                        "bubbleRadius": 16,
+                        "controlRadius": 12,
+                        "inputHeight": 42,
+                        "panelPadding": 14,
+                        "messagePadding": 12,
+                    },
+                    "shadows": {
+                        "panelY": 24,
+                        "panelBlur": 60,
+                        "panelSpread": 0,
+                        "panelOpacity": 0.62,
+                        "launcherY": 18,
+                        "launcherBlur": 60,
+                        "launcherSpread": 0,
+                        "launcherOpacity": 0.62,
+                    },
+                },
+            },
             "widgetBehavior": "push",
             "widgetEmptyTitle": "How can we help?",
             "widgetEmptyDescription": "Ask a question or request help.",
@@ -139,6 +291,8 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     updated_body = updated.json()
     assert updated_body["widgetTitle"] == "Acme Assistant"
     assert updated_body["widgetIconUrl"] == "https://example.com/icon.png"
+    assert updated_body["widgetAppearanceMode"] == "custom"
+    assert updated_body["widgetTheme"]["version"] == 1
     assert updated_body["widgetBehavior"] == "push"
     assert updated_body["widgetSuggestionsEnabled"] is True
     assert updated_body["widgetStarterSuggestions"] == ["Show recent invoices", "Create a refund"]
@@ -146,6 +300,8 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     refetched = client.get("/agent/widget-config", headers=auth_headers())
     assert refetched.status_code == 200
     assert refetched.json()["widgetTitle"] == "Acme Assistant"
+    assert refetched.json()["widgetAppearanceMode"] == "custom"
+    assert refetched.json()["widgetTheme"]["version"] == 1
     assert refetched.json()["widgetBehavior"] == "push"
     assert refetched.json()["widgetStarterSuggestions"] == ["Show recent invoices", "Create a refund"]
 

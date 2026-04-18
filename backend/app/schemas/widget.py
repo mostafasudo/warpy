@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..models import AuthType, StorageSource
+from .widget_theme import WidgetTheme
 
 WIDGET_SUGGESTION_MAX_COUNT = 3
 WIDGET_DYNAMIC_SUGGESTION_MIN_COUNT = 2
@@ -38,6 +39,8 @@ class WidgetConfigResponse(BaseModel):
     widget_refresh_endpoint_path: str = Field(default="/widget-token", alias="widgetRefreshEndpointPath")
     widget_title: str = Field(default="Warpy", alias="widgetTitle")
     widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl")
+    widget_appearance_mode: Literal["infer", "custom"] = Field(default="infer", alias="widgetAppearanceMode")
+    widget_theme: WidgetTheme | None = Field(default=None, alias="widgetTheme")
     widget_behavior: Literal["overlay", "push"] = Field(default="overlay", alias="widgetBehavior")
     widget_empty_title: str = Field(default="What would you like to do?", alias="widgetEmptyTitle")
     widget_empty_description: str = Field(

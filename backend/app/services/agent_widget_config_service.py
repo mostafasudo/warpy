@@ -15,6 +15,8 @@ def get_agent_widget_config(session: Session, user_id: str) -> AgentWidgetConfig
     return AgentWidgetConfigResponse(
         widget_title=agent.widget_title,
         widget_icon_url=agent.widget_icon_url,
+        widget_appearance_mode=_normalize_widget_appearance_mode(agent.widget_appearance_mode),
+        widget_theme=agent.widget_theme,
         widget_behavior=agent.widget_behavior,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
@@ -36,6 +38,8 @@ def update_agent_widget_config(
 
     agent.widget_title = _strip_required(payload.widget_title, "Widget name")
     agent.widget_icon_url = _normalize_widget_icon_url(payload.widget_icon_url)
+    agent.widget_appearance_mode = _normalize_widget_appearance_mode(payload.widget_appearance_mode)
+    agent.widget_theme = payload.widget_theme.model_dump(mode="json", by_alias=True) if payload.widget_theme else None
     agent.widget_behavior = payload.widget_behavior
     agent.widget_empty_title = _strip_optional(payload.widget_empty_title)
     agent.widget_empty_description = _strip_optional(payload.widget_empty_description)
@@ -52,6 +56,8 @@ def update_agent_widget_config(
     return AgentWidgetConfigResponse(
         widget_title=agent.widget_title,
         widget_icon_url=agent.widget_icon_url,
+        widget_appearance_mode=agent.widget_appearance_mode,
+        widget_theme=agent.widget_theme,
         widget_behavior=agent.widget_behavior,
         widget_empty_title=agent.widget_empty_title,
         widget_empty_description=agent.widget_empty_description,
@@ -84,6 +90,10 @@ def _strip_required(value: str, label: str) -> str:
 
 def _strip_optional(value: str) -> str:
     return value.strip()
+
+
+def _normalize_widget_appearance_mode(value: str | None) -> str:
+    return "custom" if value == "custom" else "infer"
 
 
 def _normalize_widget_starter_suggestions(value: object) -> list[str]:

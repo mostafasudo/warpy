@@ -160,6 +160,8 @@ const baseWidgetSecurity = {
 const baseWidgetConfig = {
   widgetTitle: "Warpy",
   widgetIconUrl: null,
+  widgetAppearanceMode: "infer",
+  widgetTheme: null,
   widgetBehavior: "overlay",
   widgetEmptyTitle: "What would you like to do?",
   widgetEmptyDescription: "Ask a question, request help, or describe what you want to get done.",
@@ -376,6 +378,34 @@ describe("AgentPanel", () => {
     expect(screen.getByTestId("configure-widget-loading")).not.toBeNull()
   })
 
+  it("shows the live preview only in custom theme mode", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+
+    expect(screen.queryByTestId("widget-theme-preview-frame")).toBeNull()
+    expect(screen.getByText(/preview is hidden in infer mode/i)).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /custom theme/i }))
+
+    expect(screen.getByTestId("widget-theme-preview-frame")).not.toBeNull()
+  })
+
+  it("removes the security preview scene when disclosure is disabled", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+    await user.click(screen.getByRole("button", { name: /custom theme/i }))
+
+    expect(screen.getByRole("button", { name: "Security" })).not.toBeNull()
+
+    await user.click(screen.getByLabelText(/show security & privacy disclosure/i))
+
+    expect(screen.queryByRole("button", { name: "Security" })).toBeNull()
+  })
+
   it("shows custom instructions loading state when pending", () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
@@ -547,11 +577,11 @@ describe("AgentPanel", () => {
     await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
 
     const titleInput = screen.getByLabelText("Widget name")
-    expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
+    expect(screen.getByText("Infer from host")).not.toBeNull()
     await user.clear(titleInput)
     await user.type(titleInput, "Acme Assistant")
     expect(screen.getByText("Unsaved")).not.toBeNull()
-    expect(screen.getByText("Custom")).not.toBeNull()
+    expect(screen.getByText("Custom theme")).not.toBeNull()
 
     await user.click(screen.getByRole("button", { name: /save changes/i }))
 
@@ -570,6 +600,36 @@ describe("AgentPanel", () => {
         variant: "success"
       })
     })
+  })
+
+  it("preserves unsaved widget draft values across query refetches", async () => {
+    mockedUseConfigQuery.mockReturnValue({
+      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
+      isPending: false
+    })
+    mockedUseAgentQuery.mockReturnValue({
+      data: { id: "agent-123", userId: "user-1" },
+      isPending: false,
+      error: null
+    })
+    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const view = render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+    const titleInput = screen.getByLabelText("Widget name") as HTMLInputElement
+    await user.clear(titleInput)
+    await user.type(titleInput, "Unsaved widget title")
+    expect(titleInput.value).toBe("Unsaved widget title")
+
+    mockedUseAgentWidgetConfigQuery.mockReturnValue({
+      data: { ...baseWidgetConfig },
+      isPending: false
+    })
+    view.rerender(<AgentPanel />)
+
+    expect((screen.getByLabelText("Widget name") as HTMLInputElement).value).toBe("Unsaved widget title")
   })
 
   it("saves blank empty state fields", async () => {
@@ -811,7 +871,7 @@ describe("AgentPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /restore defaults/i }))
     expect(screen.queryByText("Unsaved")).toBeNull()
-    expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
+    expect(screen.getByText("Infer from host")).not.toBeNull()
     expect((screen.getByLabelText("Widget name") as HTMLInputElement).value).toBe("Warpy")
 
     await user.clear(screen.getByLabelText("Widget name"))
@@ -852,7 +912,7 @@ describe("AgentPanel", () => {
     const iconUrlInput = screen.getByLabelText("Widget icon URL")
     expect(iconUrlInput).not.toBeDisabled()
     await user.type(iconUrlInput, "https://example.com/icon.png")
-    expect(screen.getByText("Custom")).not.toBeNull()
+    expect(screen.getByText("Custom theme")).not.toBeNull()
     expect(screen.getByRole("img", { name: "Widget icon" })).toHaveAttribute("src", "https://example.com/icon.png")
 
     await user.click(screen.getByRole("button", { name: /save changes/i }))
@@ -867,7 +927,7 @@ describe("AgentPanel", () => {
     await user.click(screen.getByLabelText("Widget icon mode"))
     await user.click(screen.getByRole("option", { name: "Default bubble" }))
 
-    expect(screen.getAllByText("Default").length).toBeGreaterThan(0)
+    expect(screen.getByText("Infer from host")).not.toBeNull()
     expect(screen.queryByRole("img", { name: "Widget icon" })).toBeNull()
     expect(screen.getByLabelText("Widget icon URL")).toBeDisabled()
   })

@@ -34,6 +34,8 @@ describe("widget config mutations", () => {
     const next = {
       widgetTitle: "Acme",
       widgetIconUrl: null,
+      widgetAppearanceMode: "infer",
+      widgetTheme: null,
       widgetBehavior: "overlay",
       widgetEmptyTitle: "Hi",
       widgetEmptyDescription: "Hello",

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en" data-preview-scheme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Warpy Widget Preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        position: relative;
+        background:
+          radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 38%),
+          linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
+        color: #0f172a;
+      }
+
+      html[data-preview-scheme="dark"] {
+        color-scheme: dark;
+      }
+
+      html[data-preview-scheme="dark"] body {
+        background:
+          radial-gradient(circle at top right, rgba(96, 165, 250, 0.16), transparent 38%),
+          linear-gradient(180deg, #020617 0%, #0f172a 100%);
+        color: #e2e8f0;
+      }
+
+      .preview-shell {
+        position: absolute;
+        inset: 0;
+        padding: 18px;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      .preview-app {
+        position: relative;
+        flex: 1;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(255, 255, 255, 0.78);
+        backdrop-filter: blur(12px);
+        overflow: hidden;
+      }
+
+      html[data-preview-scheme="dark"] .preview-app {
+        background: rgba(15, 23, 42, 0.78);
+        border-color: rgba(148, 163, 184, 0.22);
+      }
+
+      .preview-topbar {
+        height: 52px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .preview-brand {
+        font-weight: 700;
+      }
+
+      .preview-body {
+        height: calc(100% - 52px);
+        display: grid;
+        place-items: center;
+      }
+
+      .preview-copy {
+        text-align: center;
+        display: grid;
+        gap: 8px;
+        opacity: 0.85;
+      }
+
+      .preview-copy strong {
+        font-size: 20px;
+        letter-spacing: -0.03em;
+      }
+
+      .preview-copy span {
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-shell">
+      <div class="preview-app" aria-hidden="true">
+        <div class="preview-topbar">
+          <span class="preview-brand">Your app</span>
+          <span>Preview host</span>
+        </div>
+        <div class="preview-body">
+          <div class="preview-copy">
+            <strong>Minimal host page</strong>
+            <span>The live widget preview is running inside this fake app.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/widget/preview.js"></script>
+  </body>
+</html>

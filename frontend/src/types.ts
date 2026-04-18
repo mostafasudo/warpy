@@ -152,10 +152,101 @@ export type WidgetApiKeyCreateResponse = {
 };
 
 export type WidgetBehavior = "overlay" | "push";
+export type WidgetAppearanceMode = "infer" | "custom";
+
+export type WidgetThemeColors = {
+  text: string;
+  mutedText: string;
+  background: string;
+  surface: string;
+  surfaceStrong: string;
+  border: string;
+  borderStrong: string;
+  accent: string;
+  accentContrast: string;
+  accentSoft: string;
+  focusRing: string;
+  scrim: string;
+  launcherBackground: string;
+  launcherBorder: string;
+  launcherIcon: string;
+  headerIcon: string;
+  headerIconHover: string;
+  assistantBubble: string;
+  assistantText: string;
+  userBubble: string;
+  userText: string;
+  userBorder: string;
+  inputBackground: string;
+  inputText: string;
+  inputPlaceholder: string;
+  inputBorder: string;
+  suggestionBackground: string;
+  suggestionText: string;
+  suggestionBorder: string;
+  suggestionHoverBackground: string;
+  activityBackground: string;
+  activityText: string;
+  activityMuted: string;
+  warningBackground: string;
+  warningText: string;
+  warningBorder: string;
+  securityBackground: string;
+  securityText: string;
+  securityMuted: string;
+  codeBackground: string;
+};
+
+export type WidgetThemeTypography = {
+  fontFamily: string;
+  fontSize: number;
+  headingSize: number;
+  lineHeight: number;
+  letterSpacing: number;
+  fontWeight: 400 | 500 | 600 | 700;
+};
+
+export type WidgetThemeDimensions = {
+  panelWidth: number;
+  launcherSize: number;
+  launcherRadius: number;
+  panelRadius: number;
+  bubbleRadius: number;
+  controlRadius: number;
+  inputHeight: number;
+  panelPadding: number;
+  messagePadding: number;
+};
+
+export type WidgetThemeShadows = {
+  panelY: number;
+  panelBlur: number;
+  panelSpread: number;
+  panelOpacity: number;
+  launcherY: number;
+  launcherBlur: number;
+  launcherSpread: number;
+  launcherOpacity: number;
+};
+
+export type WidgetThemeMode = {
+  colors: WidgetThemeColors;
+  typography: WidgetThemeTypography;
+  dimensions: WidgetThemeDimensions;
+  shadows: WidgetThemeShadows;
+};
+
+export type WidgetTheme = {
+  version: 1;
+  light: WidgetThemeMode;
+  dark: WidgetThemeMode;
+};
 
 export type AgentWidgetConfigResponse = {
   widgetTitle: string;
   widgetIconUrl: string | null;
+  widgetAppearanceMode: WidgetAppearanceMode;
+  widgetTheme: WidgetTheme | null;
   widgetBehavior: WidgetBehavior;
   widgetEmptyTitle: string;
   widgetEmptyDescription: string;

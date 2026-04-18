@@ -24,6 +24,12 @@ type WidgetConfig = {
   headers?: Record<string, { source: "localStorage" | "sessionStorage" | "cookies"; key: string }>
   isWidgetHidden?: boolean
   sendCookiesWithRequests?: boolean
+  widgetAppearanceMode?: "infer" | "custom"
+  widgetTheme?: {
+    version: 1
+    light: Record<string, unknown>
+    dark: Record<string, unknown>
+  } | null
   widgetStarterSuggestions?: string[]
   widgetSuggestionsEnabled?: boolean
   widgetBehavior?: "overlay" | "push"
@@ -114,12 +120,166 @@ function createConfig(overrides: WidgetConfig = {}): Required<WidgetConfig> {
     isWidgetHidden: false,
     sendCookiesWithRequests: false,
     securityDisclosureEnabled: true,
+    widgetAppearanceMode: "infer",
+    widgetTheme: null,
     widgetBehavior: "overlay",
     widgetInputPlaceholder: "Ask Warpy…",
     widgetStarterSuggestions: [],
     widgetSuggestionsEnabled: false,
     widgetTitle: "Warpy",
     ...overrides,
+  }
+}
+
+function createPreviewTheme() {
+  return {
+    version: 1 as const,
+    light: {
+      colors: {
+        text: "#111827",
+        mutedText: "#4B5563",
+        background: "#FFFFFF",
+        surface: "#FFFFFF",
+        surfaceStrong: "#F8FAFC",
+        border: "#D1D5DB",
+        borderStrong: "#9CA3AF",
+        accent: "#2563EB",
+        accentContrast: "#FFFFFF",
+        accentSoft: "#DBEAFE",
+        focusRing: "#93C5FD",
+        scrim: "#00000038",
+        launcherBackground: "#FFFFFF",
+        launcherBorder: "#CBD5E1",
+        launcherIcon: "#2563EB",
+        headerIcon: "#4B5563",
+        headerIconHover: "#111827",
+        assistantBubble: "#F3F4F6",
+        assistantText: "#111827",
+        userBubble: "#E5E7EB",
+        userText: "#111827",
+        userBorder: "#D1D5DB",
+        inputBackground: "#FFFFFF",
+        inputText: "#111827",
+        inputPlaceholder: "#6B7280",
+        inputBorder: "#CBD5E1",
+        suggestionBackground: "#F8FAFC",
+        suggestionText: "#111827",
+        suggestionBorder: "#CBD5E1",
+        suggestionHoverBackground: "#DBEAFE",
+        activityBackground: "#FFFFFF",
+        activityText: "#111827",
+        activityMuted: "#6B7280",
+        warningBackground: "#EFF6FF",
+        warningText: "#1D4ED8",
+        warningBorder: "#BFDBFE",
+        securityBackground: "#FFFFFF",
+        securityText: "#111827",
+        securityMuted: "#6B7280",
+        codeBackground: "#F3F4F6",
+      },
+      typography: {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: 13,
+        headingSize: 16,
+        lineHeight: 1.55,
+        letterSpacing: 0,
+        fontWeight: 500,
+      },
+      dimensions: {
+        panelWidth: 440,
+        launcherSize: 42,
+        launcherRadius: 16,
+        panelRadius: 18,
+        bubbleRadius: 16,
+        controlRadius: 12,
+        inputHeight: 42,
+        panelPadding: 14,
+        messagePadding: 12,
+      },
+      shadows: {
+        panelY: 24,
+        panelBlur: 60,
+        panelSpread: 0,
+        panelOpacity: 0.2,
+        launcherY: 18,
+        launcherBlur: 60,
+        launcherSpread: 0,
+        launcherOpacity: 0.2,
+      },
+    },
+    dark: {
+      colors: {
+        text: "#F8FAFC",
+        mutedText: "#CBD5E1",
+        background: "#090A0B",
+        surface: "#121416",
+        surfaceStrong: "#1B1E22",
+        border: "#2D3748",
+        borderStrong: "#3F4A5A",
+        accent: "#3B82F6",
+        accentContrast: "#FFFFFF",
+        accentSoft: "#1D4ED833",
+        focusRing: "#60A5FA66",
+        scrim: "#0000008C",
+        launcherBackground: "#121416",
+        launcherBorder: "#2D3748",
+        launcherIcon: "#93C5FD",
+        headerIcon: "#CBD5E1",
+        headerIconHover: "#FFFFFF",
+        assistantBubble: "#1B1E22",
+        assistantText: "#F8FAFC",
+        userBubble: "#23262B",
+        userText: "#F8FAFC",
+        userBorder: "#3F4A5A",
+        inputBackground: "#1B1E22",
+        inputText: "#F8FAFC",
+        inputPlaceholder: "#94A3B8",
+        inputBorder: "#334155",
+        suggestionBackground: "#1B1E22",
+        suggestionText: "#F8FAFC",
+        suggestionBorder: "#334155",
+        suggestionHoverBackground: "#1D4ED84D",
+        activityBackground: "#121416",
+        activityText: "#F8FAFC",
+        activityMuted: "#CBD5E1",
+        warningBackground: "#1E293B",
+        warningText: "#E2E8F0",
+        warningBorder: "#334155",
+        securityBackground: "#090A0B",
+        securityText: "#F8FAFC",
+        securityMuted: "#CBD5E1",
+        codeBackground: "#0F172A",
+      },
+      typography: {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: 13,
+        headingSize: 16,
+        lineHeight: 1.55,
+        letterSpacing: 0,
+        fontWeight: 500,
+      },
+      dimensions: {
+        panelWidth: 440,
+        launcherSize: 42,
+        launcherRadius: 16,
+        panelRadius: 18,
+        bubbleRadius: 16,
+        controlRadius: 12,
+        inputHeight: 42,
+        panelPadding: 14,
+        messagePadding: 12,
+      },
+      shadows: {
+        panelY: 24,
+        panelBlur: 60,
+        panelSpread: 0,
+        panelOpacity: 0.62,
+        launcherY: 18,
+        launcherBlur: 60,
+        launcherSpread: 0,
+        launcherOpacity: 0.62,
+      },
+    },
   }
 }
 
@@ -277,10 +437,46 @@ async function loadWidget(
   }
 }
 
+async function loadPreviewWidget(configOverrides: WidgetConfig = {}) {
+  ;(window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__ = {
+    enabled: true,
+    config: { agentId: AGENT_ID, baseUrl: "" },
+    remoteConfig: createConfig(configOverrides),
+    scene: "messages",
+    colorScheme: "light",
+  }
+  window.eval(widgetSource)
+  const host = await waitFor(() => {
+    const value = document.getElementById(WIDGET_CONTAINER_ID)
+    expect(value).not.toBeNull()
+    return value as HTMLElement
+  })
+  const shadowRoot = host.shadowRoot
+  expect(shadowRoot).not.toBeNull()
+
+  return {
+    close: shadowRoot?.querySelector(".cta-widget-close") as HTMLButtonElement,
+    handle: shadowRoot?.querySelector(".cta-widget-resize-rail") as HTMLElement,
+    host,
+    panel: shadowRoot?.querySelector(".cta-widget-panel") as HTMLDivElement,
+    toggle: shadowRoot?.querySelector(".cta-widget-toggle") as HTMLButtonElement,
+  }
+}
+
 function getShadowRoot(widget: WidgetDom) {
   const shadowRoot = widget.host.shadowRoot
   expect(shadowRoot).not.toBeNull()
   return shadowRoot as ShadowRoot
+}
+
+function getComputedControlStyles(el: Element) {
+  const styles = getComputedStyle(el as HTMLElement)
+  return {
+    backgroundColor: styles.backgroundColor,
+    color: styles.color,
+    opacity: styles.opacity,
+    cursor: styles.cursor,
+  }
 }
 
 async function openPanel(widget: WidgetDom) {
@@ -289,6 +485,317 @@ async function openPanel(widget: WidgetDom) {
     expect(widget.panel.classList.contains("open")).toBe(true)
   })
 }
+
+describe("widget preview mode", () => {
+  beforeEach(() => {
+    global.fetch = jest.fn() as unknown as typeof fetch
+    ;(global as typeof globalThis & { WebSocket: typeof WebSocket }).WebSocket = MockWebSocket as unknown as typeof WebSocket
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: MockWebSocket,
+    })
+    MockWebSocket.reset()
+    document.head.innerHTML = ""
+    document.body.innerHTML = ""
+    document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
+    document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR)
+    delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    localStorage.clear()
+    sessionStorage.clear()
+    setViewport(1280, 900)
+  })
+
+  it("applies custom theme updates without remounting or resetting open state", async () => {
+    const widget = await loadPreviewWidget({
+      widgetAppearanceMode: "custom",
+      widgetTheme: createPreviewTheme(),
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices"],
+    })
+
+    await waitFor(() => {
+      expect(widget.panel.classList.contains("open")).toBe(true)
+    })
+
+    fireEvent.click(widget.close)
+    await waitFor(() => {
+      expect(widget.panel.classList.contains("open")).toBe(false)
+    })
+
+    const hostBefore = widget.host
+    const updatedTheme = createPreviewTheme()
+    updatedTheme.light.colors.launcherIcon = "#DC2626"
+
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          config: createConfig({
+            widgetAppearanceMode: "custom",
+            widgetTheme: updatedTheme,
+          }),
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(widget.host).toBe(hostBefore)
+      expect(widget.host.style.getPropertyValue("--cta-launcher-icon")).toBe("#DC2626")
+      expect(widget.panel.classList.contains("open")).toBe(false)
+    })
+  })
+
+  it("keeps preview controls visually active while remaining inert", async () => {
+    const widget = await loadPreviewWidget({
+      widgetAppearanceMode: "custom",
+      widgetTheme: createPreviewTheme(),
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices"],
+    })
+
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLInputElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+    const mic = shadowRoot.querySelector(".cta-widget-mic") as HTMLButtonElement
+
+    expect(input.disabled).toBe(false)
+    expect(input.readOnly).toBe(true)
+    expect(send.disabled).toBe(false)
+    expect(mic.disabled).toBe(false)
+    expect(MockWebSocket.instances).toHaveLength(0)
+
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          scene: "empty",
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-suggestion")?.textContent).toBe("Show recent invoices")
+    })
+
+    const suggestion = shadowRoot.querySelector(".cta-widget-suggestion") as HTMLButtonElement
+    fireEvent.click(suggestion)
+    fireEvent.click(send)
+    fireEvent.click(mic)
+    fireEvent.keyDown(input, { key: "Enter" })
+
+    expect(MockWebSocket.instances).toHaveLength(0)
+
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          scene: "security",
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      const securityPanel = shadowRoot.querySelector(".cta-security-panel") as HTMLElement
+      expect(securityPanel.classList.contains("open")).toBe(true)
+      expect(MockWebSocket.instances).toHaveLength(0)
+    })
+
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          scene: "autopilot",
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-activity")).not.toBeNull()
+      expect(MockWebSocket.instances).toHaveLength(0)
+    })
+  })
+
+  it("matches preview and real control styles for suggestion chips, send, and input", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        enumerateDevices: jest.fn(async () => [{ kind: "audioinput", deviceId: "mic-1", label: "Mic" }]),
+        getUserMedia: jest.fn(),
+      },
+    })
+
+    const config = {
+      widgetAppearanceMode: "custom" as const,
+      widgetTheme: createPreviewTheme(),
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices"],
+    }
+
+    const preview = await loadPreviewWidget(config)
+    const previewShadow = getShadowRoot(preview)
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          scene: "empty",
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(previewShadow.querySelector(".cta-widget-suggestion")).not.toBeNull()
+    })
+
+    const previewSuggestionStyles = getComputedControlStyles(
+      previewShadow.querySelector(".cta-widget-suggestion") as HTMLButtonElement
+    )
+    const previewSendStyles = getComputedControlStyles(
+      previewShadow.querySelector(".cta-widget-send") as HTMLButtonElement
+    )
+    const previewInputStyles = getComputedControlStyles(
+      previewShadow.querySelector(".cta-widget-input") as HTMLInputElement
+    )
+
+    document.head.innerHTML = ""
+    document.body.innerHTML = ""
+    sessionStorage.clear()
+    localStorage.clear()
+    delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    MockWebSocket.reset()
+
+    const actual = await loadWidget(config)
+    await openPanel(actual)
+    const actualShadow = getShadowRoot(actual)
+
+    await waitFor(() => {
+      expect(actualShadow.querySelector(".cta-widget-suggestion")).not.toBeNull()
+    })
+
+    const actualSuggestion = actualShadow.querySelector(".cta-widget-suggestion") as HTMLButtonElement
+    expect(previewSuggestionStyles).toEqual(getComputedControlStyles(actualSuggestion))
+
+    const actualSend = actualShadow.querySelector(".cta-widget-send") as HTMLButtonElement
+    expect(previewSendStyles).toEqual(getComputedControlStyles(actualSend))
+
+    const actualInput = actualShadow.querySelector(".cta-widget-input") as HTMLInputElement
+    const actualInputStyles = getComputedControlStyles(actualInput)
+    expect(previewInputStyles.backgroundColor).toBe(actualInputStyles.backgroundColor)
+    expect(previewInputStyles.color).toBe(actualInputStyles.color)
+    expect(previewInputStyles.opacity).toBe(actualInputStyles.opacity)
+  })
+
+  it("updates the launcher between overlay and push in preview mode", async () => {
+    setViewport(420, 900)
+    const widget = await loadPreviewWidget({
+      widgetAppearanceMode: "custom",
+      widgetTheme: createPreviewTheme(),
+      widgetBehavior: "overlay",
+    })
+
+    const shadowRoot = getShadowRoot(widget)
+    await waitFor(() => {
+      expect(widget.toggle.getAttribute("data-behavior")).toBe("overlay")
+    })
+
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          config: createConfig({
+            widgetAppearanceMode: "custom",
+            widgetTheme: createPreviewTheme(),
+            widgetBehavior: "push",
+          }),
+          scene: "launcher",
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(widget.toggle.getAttribute("data-behavior")).toBe("push")
+      expect(shadowRoot.querySelector(".cta-widget-panel")?.classList.contains("open")).toBe(false)
+    })
+  })
+
+  it("hides the security button and blocks the security scene when disclosure is disabled", async () => {
+    const widget = await loadPreviewWidget({
+      widgetAppearanceMode: "custom",
+      widgetTheme: createPreviewTheme(),
+      securityDisclosureEnabled: false,
+    })
+
+    const shadowRoot = getShadowRoot(widget)
+    const securityButton = shadowRoot.querySelector(".cta-widget-security-btn") as HTMLButtonElement
+
+    await waitFor(() => {
+      expect(securityButton.style.display).toBe("none")
+    })
+
+    window.dispatchEvent(
+      new CustomEvent("warpy:preview:update", {
+        detail: {
+          scene: "security",
+        },
+      }),
+    )
+
+    await waitFor(() => {
+      const securityPanel = shadowRoot.querySelector(".cta-security-panel") as HTMLElement
+      expect(securityPanel.classList.contains("open")).toBe(false)
+    })
+  })
+})
+
+describe("widget theme inference", () => {
+  beforeEach(() => {
+    global.fetch = jest.fn() as unknown as typeof fetch
+    ;(global as typeof globalThis & { WebSocket: typeof WebSocket }).WebSocket = MockWebSocket as unknown as typeof WebSocket
+    Object.defineProperty(window, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: MockWebSocket,
+    })
+    MockWebSocket.reset()
+    document.head.innerHTML = ""
+    document.body.innerHTML = ""
+    document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
+    document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR)
+    delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    localStorage.clear()
+    sessionStorage.clear()
+    setViewport(1280, 900)
+  })
+
+  it("prefers the visible page surface over OS dark preference when inferring theme", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: jest.fn().mockImplementation(() => ({
+        matches: true,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        addListener: jest.fn(),
+        removeListener: jest.fn(),
+      })),
+    })
+
+    document.body.style.backgroundColor = "transparent"
+    document.documentElement.style.backgroundColor = "transparent"
+
+    const appSurface = document.createElement("main")
+    appSurface.style.position = "fixed"
+    appSurface.style.inset = "0"
+    appSurface.style.backgroundColor = "#FFFFFF"
+    appSurface.style.color = "#111827"
+    document.body.appendChild(appSurface)
+    assignRect(appSurface, { top: 0, bottom: 900, left: 0, right: 1280 })
+
+    Object.defineProperty(document, "elementsFromPoint", {
+      configurable: true,
+      value: () => [appSurface],
+    })
+
+    const widget = await loadWidget()
+
+    await waitFor(() => {
+      expect(widget.host.style.getPropertyValue("--cta-bg")).toBe("rgb(255, 255, 255)")
+    })
+  })
+})
 
 describe("widget desktop resize", () => {
   beforeEach(() => {
@@ -304,6 +811,7 @@ describe("widget desktop resize", () => {
     document.body.innerHTML = ""
     document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
     document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR)
+    delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
     localStorage.clear()
     sessionStorage.clear()
     setViewport(1280, 900)

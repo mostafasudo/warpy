@@ -35,6 +35,157 @@
   const MESSAGE_STORAGE_VERSION = 2;
   const MESSAGE_ID_PREFIX = "msg_";
   const SCROLL_BOTTOM_THRESHOLD = 24;
+  const PREVIEW_EVENT_NAME = "warpy:preview:update";
+  const PREVIEW_BOOTSTRAP_KEY = "__WARPY_WIDGET_PREVIEW__";
+  const DEFAULT_WIDGET_THEME = {
+    version: 1,
+    light: {
+      colors: {
+        text: "#111827",
+        mutedText: "#4B5563",
+        background: "#FFFFFF",
+        surface: "#FFFFFF",
+        surfaceStrong: "#F8FAFC",
+        border: "#D1D5DB",
+        borderStrong: "#9CA3AF",
+        accent: "#2563EB",
+        accentContrast: "#FFFFFF",
+        accentSoft: "#DBEAFE",
+        focusRing: "#93C5FD",
+        scrim: "#00000038",
+        launcherBackground: "#FFFFFF",
+        launcherBorder: "#CBD5E1",
+        launcherIcon: "#2563EB",
+        headerIcon: "#4B5563",
+        headerIconHover: "#111827",
+        assistantBubble: "#F3F4F6",
+        assistantText: "#111827",
+        userBubble: "#E5E7EB",
+        userText: "#111827",
+        userBorder: "#D1D5DB",
+        inputBackground: "#FFFFFF",
+        inputText: "#111827",
+        inputPlaceholder: "#6B7280",
+        inputBorder: "#CBD5E1",
+        suggestionBackground: "#F8FAFC",
+        suggestionText: "#111827",
+        suggestionBorder: "#CBD5E1",
+        suggestionHoverBackground: "#DBEAFE",
+        activityBackground: "#FFFFFF",
+        activityText: "#111827",
+        activityMuted: "#6B7280",
+        warningBackground: "#EFF6FF",
+        warningText: "#1D4ED8",
+        warningBorder: "#BFDBFE",
+        securityBackground: "#FFFFFF",
+        securityText: "#111827",
+        securityMuted: "#6B7280",
+        codeBackground: "#F3F4F6",
+      },
+      typography: {
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontSize: 13,
+        headingSize: 16,
+        lineHeight: 1.55,
+        letterSpacing: 0,
+        fontWeight: 500,
+      },
+      dimensions: {
+        panelWidth: 440,
+        launcherSize: 42,
+        launcherRadius: 16,
+        panelRadius: 18,
+        bubbleRadius: 16,
+        controlRadius: 12,
+        inputHeight: 42,
+        panelPadding: 14,
+        messagePadding: 12,
+      },
+      shadows: {
+        panelY: 24,
+        panelBlur: 60,
+        panelSpread: 0,
+        panelOpacity: 0.2,
+        launcherY: 18,
+        launcherBlur: 60,
+        launcherSpread: 0,
+        launcherOpacity: 0.2,
+      },
+    },
+    dark: {
+      colors: {
+        text: "#F8FAFC",
+        mutedText: "#CBD5E1",
+        background: "#090A0B",
+        surface: "#121416",
+        surfaceStrong: "#1B1E22",
+        border: "#2D3748",
+        borderStrong: "#3F4A5A",
+        accent: "#3B82F6",
+        accentContrast: "#FFFFFF",
+        accentSoft: "#1D4ED833",
+        focusRing: "#60A5FA66",
+        scrim: "#0000008C",
+        launcherBackground: "#121416",
+        launcherBorder: "#2D3748",
+        launcherIcon: "#93C5FD",
+        headerIcon: "#CBD5E1",
+        headerIconHover: "#FFFFFF",
+        assistantBubble: "#1B1E22",
+        assistantText: "#F8FAFC",
+        userBubble: "#23262B",
+        userText: "#F8FAFC",
+        userBorder: "#3F4A5A",
+        inputBackground: "#1B1E22",
+        inputText: "#F8FAFC",
+        inputPlaceholder: "#94A3B8",
+        inputBorder: "#334155",
+        suggestionBackground: "#1B1E22",
+        suggestionText: "#F8FAFC",
+        suggestionBorder: "#334155",
+        suggestionHoverBackground: "#1D4ED84D",
+        activityBackground: "#121416",
+        activityText: "#F8FAFC",
+        activityMuted: "#CBD5E1",
+        warningBackground: "#1E293B",
+        warningText: "#E2E8F0",
+        warningBorder: "#334155",
+        securityBackground: "#090A0B",
+        securityText: "#F8FAFC",
+        securityMuted: "#CBD5E1",
+        codeBackground: "#0F172A",
+      },
+      typography: {
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontSize: 13,
+        headingSize: 16,
+        lineHeight: 1.55,
+        letterSpacing: 0,
+        fontWeight: 500,
+      },
+      dimensions: {
+        panelWidth: 440,
+        launcherSize: 42,
+        launcherRadius: 16,
+        panelRadius: 18,
+        bubbleRadius: 16,
+        controlRadius: 12,
+        inputHeight: 42,
+        panelPadding: 14,
+        messagePadding: 12,
+      },
+      shadows: {
+        panelY: 24,
+        panelBlur: 60,
+        panelSpread: 0,
+        panelOpacity: 0.62,
+        launcherY: 18,
+        launcherBlur: 60,
+        launcherSpread: 0,
+        launcherOpacity: 0.62,
+      },
+    },
+  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Utilities
@@ -97,6 +248,20 @@
 
   function normalizeText(value) {
     return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function cloneObject(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function getPreviewBootstrap() {
+    const preview = window[PREVIEW_BOOTSTRAP_KEY];
+    return preview && typeof preview === "object" ? preview : null;
+  }
+
+  function isPreviewMode() {
+    const preview = getPreviewBootstrap();
+    return Boolean(preview && preview.enabled === true);
   }
 
   // Levenshtein distance for fuzzy matching
@@ -304,7 +469,84 @@
   // Theme Detection & Application
   // ═══════════════════════════════════════════════════════════════════════════
 
-  function inferThemeFromPage() {
+  function detectPageThemeVariant() {
+    const body = document.body;
+    const html = document.documentElement;
+    const attrValues = [
+      html && html.getAttribute ? html.getAttribute("data-theme") : "",
+      body && body.getAttribute ? body.getAttribute("data-theme") : "",
+      html && html.getAttribute ? html.getAttribute("theme") : "",
+      body && body.getAttribute ? body.getAttribute("theme") : "",
+    ];
+    for (const raw of attrValues) {
+      const value = String(raw || "").trim().toLowerCase();
+      if (value === "light" || value === "dark") return value;
+    }
+    if (html && html.classList) {
+      if (html.classList.contains("light")) return "light";
+      if (html.classList.contains("dark")) return "dark";
+    }
+    if (body && body.classList) {
+      if (body.classList.contains("light")) return "light";
+      if (body.classList.contains("dark")) return "dark";
+    }
+    return null;
+  }
+
+  function getThemeVariant(preferredVariant) {
+    if (preferredVariant === "dark" || preferredVariant === "light") return preferredVariant;
+    const detected = detectPageThemeVariant();
+    if (detected) return detected;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  }
+
+  function getDefaultThemeMode(variant) {
+    return cloneObject(DEFAULT_WIDGET_THEME[variant === "dark" ? "dark" : "light"]);
+  }
+
+  function findVisiblePageBackground() {
+    const candidates = [];
+
+    function addCandidate(el, weight) {
+      if (!el || el.id === WIDGET_CONTAINER_ID || typeof el.getBoundingClientRect !== "function") return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 32 || rect.height < 32) return;
+      if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return;
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") < 0.05) return;
+      const color = parseColor(style.backgroundColor);
+      if (!color || color.a <= 0.05) return;
+      candidates.push({ color, score: rect.width * rect.height * weight });
+    }
+
+    if (typeof document.elementsFromPoint === "function") {
+      const centerX = Math.max(0, Math.min(window.innerWidth - 1, Math.round(window.innerWidth / 2)));
+      const centerY = Math.max(0, Math.min(window.innerHeight - 1, Math.round(window.innerHeight / 2)));
+      const stack = document.elementsFromPoint(centerX, centerY);
+      let weight = 3;
+      for (const el of stack) {
+        addCandidate(el, weight);
+        weight = Math.max(1, weight - 0.35);
+      }
+    }
+
+    const selectorCandidates = document.querySelectorAll("main, [role='main'], #root, #app, body > div, body > main");
+    selectorCandidates.forEach((el) => addCandidate(el, 2));
+    if (document.body) {
+      Array.from(document.body.children)
+        .slice(0, 12)
+        .forEach((el) => addCandidate(el, 1.2));
+    }
+
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].color;
+  }
+
+  function inferThemeModeFromPage(preferredVariant) {
     const body = document.body || document.documentElement;
     const bodyStyles = body ? getComputedStyle(body) : null;
     const htmlStyles = getComputedStyle(document.documentElement);
@@ -315,10 +557,13 @@
 
     const bodyBg = bodyStyles ? parseColor(bodyStyles.backgroundColor) : null;
     const htmlBg = parseColor(htmlStyles.backgroundColor);
-    let bg = bodyBg && bodyBg.a > 0.05 ? bodyBg : htmlBg && htmlBg.a > 0.05 ? htmlBg : null;
+    const sampledBg = findVisiblePageBackground();
+    let bg =
+      (sampledBg && sampledBg.a > 0.05 ? sampledBg : null) ||
+      (bodyBg && bodyBg.a > 0.05 ? bodyBg : null) ||
+      (htmlBg && htmlBg.a > 0.05 ? htmlBg : null);
     if (!bg) {
-      const prefersDark =
-        typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const prefersDark = getThemeVariant(preferredVariant) === "dark";
       bg = prefersDark || relativeLuminance(fg) > 0.6 ? { r: 9, g: 10, b: 11, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
     }
 
@@ -387,50 +632,138 @@
     const borderSoft = applyAlpha(themedBorder, clamp(borderAlpha, 0.1, 0.18));
     const borderStrong = applyAlpha(themedBorder, clamp(borderAlpha, 0.14, 0.26));
     const scrim = themedIsDark ? "rgba(0, 0, 0, 0.55)" : "rgba(0, 0, 0, 0.22)";
-    const shadowColor = themedIsDark ? "rgba(0, 0, 0, 0.62)" : "rgba(0, 0, 0, 0.2)";
-
-    return {
-      fontFamily,
-      fontSize,
-      fg: colorCss(themedFg),
-      bg: colorCss(themedBg),
-      bgRgb: `${themedBg.r}, ${themedBg.g}, ${themedBg.b}`,
-      muted: colorCss(themedMuted),
-      surface: colorCss(themedSurface),
-      surfaceStrong: colorCss(themedSurfaceStrong),
-      border: colorCss(borderSoft),
-      borderStrong: colorCss(borderStrong),
-      shadowColor,
-      scrim,
-      accent: colorCss(themedAccent),
-      accentContrast: colorCss(themedAccentContrast),
-      bubbleAssistant: colorCss(themedBubbleAssistant),
-      bubbleUser: colorCss(themedBubbleUser),
-      codeBg: colorCss(themedCodeBg),
-      focus: colorCss(themedFocus),
-    };
+    const variant = themedIsDark ? "dark" : "light";
+    const mode = getDefaultThemeMode(variant);
+    mode.typography.fontFamily = fontFamily || mode.typography.fontFamily;
+    const parsedFontSize = parseFloat(fontSize || "");
+    if (Number.isFinite(parsedFontSize)) {
+      mode.typography.fontSize = clamp(parsedFontSize, 11, 20);
+    }
+    mode.colors.text = colorCss(themedFg) || mode.colors.text;
+    mode.colors.mutedText = colorCss(themedMuted) || mode.colors.mutedText;
+    mode.colors.background = colorCss(themedBg) || mode.colors.background;
+    mode.colors.surface = colorCss(themedSurface) || mode.colors.surface;
+    mode.colors.surfaceStrong = colorCss(themedSurfaceStrong) || mode.colors.surfaceStrong;
+    mode.colors.border = colorCss(borderSoft) || mode.colors.border;
+    mode.colors.borderStrong = colorCss(borderStrong) || mode.colors.borderStrong;
+    mode.colors.accent = colorCss(themedAccent) || mode.colors.accent;
+    mode.colors.accentContrast = colorCss(themedAccentContrast) || mode.colors.accentContrast;
+    mode.colors.accentSoft = colorCss(applyAlpha(themedAccent, themedIsDark ? 0.28 : 0.16)) || mode.colors.accentSoft;
+    mode.colors.focusRing = colorCss(themedFocus) || mode.colors.focusRing;
+    mode.colors.scrim = scrim;
+    mode.colors.launcherBackground = colorCss(themedSurface) || mode.colors.launcherBackground;
+    mode.colors.launcherBorder = colorCss(borderStrong) || mode.colors.launcherBorder;
+    mode.colors.launcherIcon = colorCss(themedAccent) || mode.colors.launcherIcon;
+    mode.colors.headerIcon = colorCss(themedMuted) || mode.colors.headerIcon;
+    mode.colors.headerIconHover = colorCss(themedFg) || mode.colors.headerIconHover;
+    mode.colors.assistantBubble = colorCss(themedBubbleAssistant) || mode.colors.assistantBubble;
+    mode.colors.assistantText = colorCss(themedFg) || mode.colors.assistantText;
+    mode.colors.userBubble = colorCss(themedBubbleUser) || mode.colors.userBubble;
+    mode.colors.userText = colorCss(themedFg) || mode.colors.userText;
+    mode.colors.userBorder = colorCss(borderStrong) || mode.colors.userBorder;
+    mode.colors.inputBackground = colorCss(themedSurface) || mode.colors.inputBackground;
+    mode.colors.inputText = colorCss(themedFg) || mode.colors.inputText;
+    mode.colors.inputPlaceholder = colorCss(themedMuted) || mode.colors.inputPlaceholder;
+    mode.colors.inputBorder = colorCss(borderStrong) || mode.colors.inputBorder;
+    mode.colors.suggestionBackground = colorCss(themedSurfaceStrong) || mode.colors.suggestionBackground;
+    mode.colors.suggestionText = colorCss(themedFg) || mode.colors.suggestionText;
+    mode.colors.suggestionBorder = colorCss(borderSoft) || mode.colors.suggestionBorder;
+    mode.colors.suggestionHoverBackground = colorCss(applyAlpha(themedAccent, themedIsDark ? 0.3 : 0.12)) || mode.colors.suggestionHoverBackground;
+    mode.colors.activityBackground = colorCss(themedSurfaceStrong) || mode.colors.activityBackground;
+    mode.colors.activityText = colorCss(themedFg) || mode.colors.activityText;
+    mode.colors.activityMuted = colorCss(themedMuted) || mode.colors.activityMuted;
+    mode.colors.warningBackground = colorCss(themedBubbleAssistant) || mode.colors.warningBackground;
+    mode.colors.warningText = colorCss(themedFg) || mode.colors.warningText;
+    mode.colors.warningBorder = colorCss(borderSoft) || mode.colors.warningBorder;
+    mode.colors.securityBackground = rgbaCss(themedBg, 0.985);
+    mode.colors.securityText = colorCss(themedFg) || mode.colors.securityText;
+    mode.colors.securityMuted = colorCss(themedMuted) || mode.colors.securityMuted;
+    mode.colors.codeBackground = colorCss(themedCodeBg) || mode.colors.codeBackground;
+    return mode;
   }
 
-  function applyThemeVariables(host) {
-    const theme = inferThemeFromPage();
-    host.style.setProperty("--cta-font-family", theme.fontFamily);
-    host.style.setProperty("--cta-font-size", theme.fontSize);
-    host.style.setProperty("--cta-fg", theme.fg);
-    host.style.setProperty("--cta-bg", theme.bg);
-    host.style.setProperty("--cta-bg-rgb", theme.bgRgb);
-    host.style.setProperty("--cta-fg-muted", theme.muted);
-    host.style.setProperty("--cta-surface", theme.surface);
-    host.style.setProperty("--cta-surface-strong", theme.surfaceStrong);
-    host.style.setProperty("--cta-border", theme.border);
-    host.style.setProperty("--cta-border-strong", theme.borderStrong);
-    host.style.setProperty("--cta-shadow-color", theme.shadowColor);
-    host.style.setProperty("--cta-scrim", theme.scrim);
-    host.style.setProperty("--cta-accent", theme.accent);
-    host.style.setProperty("--cta-accent-contrast", theme.accentContrast);
-    host.style.setProperty("--cta-bubble-assistant", theme.bubbleAssistant);
-    host.style.setProperty("--cta-bubble-user", theme.bubbleUser);
-    host.style.setProperty("--cta-code-bg", theme.codeBg);
-    host.style.setProperty("--cta-focus", theme.focus);
+  function resolveThemeMode(appearanceMode, themeConfig, preferredVariant) {
+    const variant = getThemeVariant(preferredVariant);
+    if (appearanceMode === "custom") {
+      if (themeConfig && themeConfig.version === 1 && themeConfig[variant]) {
+        return cloneObject(themeConfig[variant]);
+      }
+      return getDefaultThemeMode(variant);
+    }
+    return inferThemeModeFromPage(variant);
+  }
+
+  function buildShadowCss(blur, spread, offsetY, opacity) {
+    return `0 ${Math.round(offsetY)}px ${Math.round(blur)}px ${Math.round(spread)}px rgba(0, 0, 0, ${clamp(opacity, 0, 1)})`;
+  }
+
+  function applyThemeVariables(host, appearanceMode, themeConfig, preferredVariant) {
+    const mode = resolveThemeMode(appearanceMode, themeConfig, preferredVariant);
+    const bgColor = parseColor(mode.colors.background) || { r: 255, g: 255, b: 255, a: 1 };
+    const typography = mode.typography || getDefaultThemeMode("light").typography;
+    const dimensions = mode.dimensions || getDefaultThemeMode("light").dimensions;
+    const shadows = mode.shadows || getDefaultThemeMode("light").shadows;
+    const colors = mode.colors || getDefaultThemeMode("light").colors;
+
+    host.style.setProperty("--cta-font-family", typography.fontFamily);
+    host.style.setProperty("--cta-font-size", `${typography.fontSize}px`);
+    host.style.setProperty("--cta-heading-size", `${typography.headingSize}px`);
+    host.style.setProperty("--cta-line-height", String(typography.lineHeight));
+    host.style.setProperty("--cta-letter-spacing", `${typography.letterSpacing}px`);
+    host.style.setProperty("--cta-font-weight", String(typography.fontWeight));
+    host.style.setProperty("--cta-bg", colors.background);
+    host.style.setProperty("--cta-bg-rgb", `${bgColor.r}, ${bgColor.g}, ${bgColor.b}`);
+    host.style.setProperty("--cta-fg", colors.text);
+    host.style.setProperty("--cta-fg-muted", colors.mutedText);
+    host.style.setProperty("--cta-surface", colors.surface);
+    host.style.setProperty("--cta-surface-strong", colors.surfaceStrong);
+    host.style.setProperty("--cta-border", colors.border);
+    host.style.setProperty("--cta-border-strong", colors.borderStrong);
+    host.style.setProperty("--cta-accent", colors.accent);
+    host.style.setProperty("--cta-accent-contrast", colors.accentContrast);
+    host.style.setProperty("--cta-accent-soft", colors.accentSoft);
+    host.style.setProperty("--cta-focus", colors.focusRing);
+    host.style.setProperty("--cta-ring", colors.focusRing);
+    host.style.setProperty("--cta-scrim", colors.scrim);
+    host.style.setProperty("--cta-launcher-bg", colors.launcherBackground);
+    host.style.setProperty("--cta-launcher-border", colors.launcherBorder);
+    host.style.setProperty("--cta-launcher-icon", colors.launcherIcon);
+    host.style.setProperty("--cta-header-icon", colors.headerIcon);
+    host.style.setProperty("--cta-header-icon-hover", colors.headerIconHover);
+    host.style.setProperty("--cta-bubble-assistant", colors.assistantBubble);
+    host.style.setProperty("--cta-bubble-assistant-text", colors.assistantText);
+    host.style.setProperty("--cta-bubble-user", colors.userBubble);
+    host.style.setProperty("--cta-bubble-user-text", colors.userText);
+    host.style.setProperty("--cta-bubble-user-border", colors.userBorder);
+    host.style.setProperty("--cta-input-bg", colors.inputBackground);
+    host.style.setProperty("--cta-input-text", colors.inputText);
+    host.style.setProperty("--cta-input-placeholder", colors.inputPlaceholder);
+    host.style.setProperty("--cta-input-border", colors.inputBorder);
+    host.style.setProperty("--cta-suggestion-bg", colors.suggestionBackground);
+    host.style.setProperty("--cta-suggestion-text", colors.suggestionText);
+    host.style.setProperty("--cta-suggestion-border", colors.suggestionBorder);
+    host.style.setProperty("--cta-suggestion-hover-bg", colors.suggestionHoverBackground);
+    host.style.setProperty("--cta-activity-bg", colors.activityBackground);
+    host.style.setProperty("--cta-activity-text", colors.activityText);
+    host.style.setProperty("--cta-activity-muted", colors.activityMuted);
+    host.style.setProperty("--cta-warning-bg", colors.warningBackground);
+    host.style.setProperty("--cta-warning-text", colors.warningText);
+    host.style.setProperty("--cta-warning-border", colors.warningBorder);
+    host.style.setProperty("--cta-security-bg", colors.securityBackground);
+    host.style.setProperty("--cta-security-text", colors.securityText);
+    host.style.setProperty("--cta-security-muted", colors.securityMuted);
+    host.style.setProperty("--cta-code-bg", colors.codeBackground);
+    host.style.setProperty("--cta-panel-width", `${dimensions.panelWidth}px`);
+    host.style.setProperty("--cta-launcher-size", `${dimensions.launcherSize}px`);
+    host.style.setProperty("--cta-launcher-radius", `${dimensions.launcherRadius}px`);
+    host.style.setProperty("--cta-panel-radius", `${dimensions.panelRadius}px`);
+    host.style.setProperty("--cta-message-radius", `${dimensions.bubbleRadius}px`);
+    host.style.setProperty("--cta-control-radius", `${dimensions.controlRadius}px`);
+    host.style.setProperty("--cta-input-height", `${dimensions.inputHeight}px`);
+    host.style.setProperty("--cta-panel-padding", `${dimensions.panelPadding}px`);
+    host.style.setProperty("--cta-message-padding", `${dimensions.messagePadding}px`);
+    host.style.setProperty("--cta-panel-shadow", buildShadowCss(shadows.panelBlur, shadows.panelSpread, shadows.panelY, shadows.panelOpacity));
+    host.style.setProperty("--cta-launcher-shadow", buildShadowCss(shadows.launcherBlur, shadows.launcherSpread, shadows.launcherY, shadows.launcherOpacity));
   }
 
   function observeTheme(host) {
@@ -439,11 +772,12 @@
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = null;
-        applyThemeVariables(host);
+        const state = host.__ctaThemeState || {};
+        applyThemeVariables(host, state.appearanceMode || "infer", state.themeConfig || null, state.preferredVariant || null);
       });
     };
 
-    applyThemeVariables(host);
+    requestSync();
 
     const observer = new MutationObserver(requestSync);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
@@ -473,6 +807,10 @@
 
   function resolveApiUrl() {
     try {
+      const preview = getPreviewBootstrap();
+      if (preview && typeof preview.apiUrl === "string" && preview.apiUrl.trim()) {
+        return preview.apiUrl.trim().replace(/\/$/, "");
+      }
       // Warpy-managed widget routes always go to Warpy's API origin.
       // data-base-url is reserved for customer-owned backend calls only.
       const host = window.location && window.location.hostname ? window.location.hostname : "";
@@ -499,6 +837,13 @@
   }
 
   function getScriptData() {
+    const preview = getPreviewBootstrap();
+    if (preview && preview.config && typeof preview.config === "object") {
+      return {
+        agentId: preview.config.agentId || "preview-agent",
+        baseUrl: preview.config.baseUrl || "",
+      };
+    }
     const current = document.currentScript;
     const fromCurrent =
       current && current.tagName === "SCRIPT" && current.getAttribute && current.getAttribute("data-agent-id") ? current : null;
@@ -516,6 +861,7 @@
   }
 
   function loadState() {
+    if (isPreviewMode()) return null;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : null;
@@ -525,12 +871,14 @@
   }
 
   function saveState(state) {
+    if (isPreviewMode()) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch { }
   }
 
   function loadUiState() {
+    if (isPreviewMode()) return null;
     try {
       const raw = localStorage.getItem(UI_STORAGE_KEY);
       if (!raw) return null;
@@ -542,6 +890,7 @@
   }
 
   function saveUiState(ui) {
+    if (isPreviewMode()) return;
     try {
       localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(ui || {}));
     } catch { }
@@ -3193,14 +3542,55 @@
         --cta-surface-strong: rgba(255, 255, 255, 0.92);
         --cta-border: rgba(17, 24, 39, 0.12);
         --cta-border-strong: rgba(17, 24, 39, 0.18);
-        --cta-shadow-color: rgba(0, 0, 0, 0.2);
         --cta-scrim: rgba(0, 0, 0, 0.22);
         --cta-accent: rgb(37, 99, 235);
         --cta-accent-contrast: rgb(255, 255, 255);
+        --cta-accent-soft: rgba(37, 99, 235, 0.12);
         --cta-bubble-assistant: rgba(17, 24, 39, 0.06);
+        --cta-bubble-assistant-text: #111827;
         --cta-bubble-user: rgba(17, 24, 39, 0.08);
+        --cta-bubble-user-text: #111827;
+        --cta-bubble-user-border: rgba(17, 24, 39, 0.18);
         --cta-code-bg: rgba(17, 24, 39, 0.1);
         --cta-focus: rgba(37, 99, 235, 0.32);
+        --cta-ring: rgba(37, 99, 235, 0.32);
+        --cta-launcher-bg: rgba(255, 255, 255, 0.72);
+        --cta-launcher-border: rgba(17, 24, 39, 0.18);
+        --cta-launcher-icon: rgb(37, 99, 235);
+        --cta-header-icon: rgba(17, 24, 39, 0.7);
+        --cta-header-icon-hover: #111827;
+        --cta-input-bg: rgba(255, 255, 255, 0.72);
+        --cta-input-text: #111827;
+        --cta-input-placeholder: rgba(17, 24, 39, 0.7);
+        --cta-input-border: rgba(17, 24, 39, 0.18);
+        --cta-suggestion-bg: rgba(255, 255, 255, 0.92);
+        --cta-suggestion-text: #111827;
+        --cta-suggestion-border: rgba(17, 24, 39, 0.12);
+        --cta-suggestion-hover-bg: rgba(37, 99, 235, 0.12);
+        --cta-activity-bg: rgba(255, 255, 255, 0.92);
+        --cta-activity-text: #111827;
+        --cta-activity-muted: rgba(17, 24, 39, 0.7);
+        --cta-warning-bg: rgba(17, 24, 39, 0.06);
+        --cta-warning-text: #111827;
+        --cta-warning-border: rgba(17, 24, 39, 0.12);
+        --cta-security-bg: rgba(255, 255, 255, 0.985);
+        --cta-security-text: #111827;
+        --cta-security-muted: rgba(17, 24, 39, 0.7);
+        --cta-panel-width: 440px;
+        --cta-launcher-size: 42px;
+        --cta-launcher-radius: 16px;
+        --cta-panel-radius: 18px;
+        --cta-message-radius: 16px;
+        --cta-control-radius: 12px;
+        --cta-input-height: 42px;
+        --cta-panel-padding: 14px;
+        --cta-message-padding: 12px;
+        --cta-heading-size: 16px;
+        --cta-line-height: 1.55;
+        --cta-letter-spacing: 0px;
+        --cta-font-weight: 500;
+        --cta-panel-shadow: 0 24px 60px 0 rgba(0, 0, 0, 0.2);
+        --cta-launcher-shadow: 0 18px 60px 0 rgba(0, 0, 0, 0.2);
       }
 
       *,
@@ -3220,14 +3610,14 @@
         top: 70vh;
         right: calc(16px + env(safe-area-inset-right, 0px));
         transform: translateY(-50%) translateX(10px);
-        width: 42px;
-        height: 42px;
+        width: var(--cta-launcher-size);
+        height: var(--cta-launcher-size);
         padding: 0;
         gap: 0;
-        border-radius: 999px;
-        background: var(--cta-surface);
-        border: 1px solid var(--cta-border-strong);
-        color: var(--cta-accent);
+        border-radius: var(--cta-launcher-radius);
+        background: var(--cta-launcher-bg);
+        border: 1px solid var(--cta-launcher-border);
+        color: var(--cta-launcher-icon);
         cursor: grab;
         display: flex;
         align-items: center;
@@ -3237,7 +3627,7 @@
         z-index: 2;
         touch-action: none;
         transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
-        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        box-shadow: var(--cta-launcher-shadow);
         backdrop-filter: blur(18px) saturate(160%);
         -webkit-backdrop-filter: blur(18px) saturate(160%);
         overflow: hidden;
@@ -3246,10 +3636,10 @@
       .cta-widget-toggle[data-behavior="push"] {
         right: calc(-10px + env(safe-area-inset-right, 0px));
         transform: translateY(-50%);
-        width: 48px;
-        height: 48px;
+        width: calc(var(--cta-launcher-size) + 6px);
+        height: calc(var(--cta-launcher-size) + 6px);
         padding: 0;
-        border-radius: 16px 0 0 16px;
+        border-radius: var(--cta-launcher-radius) 0 0 var(--cta-launcher-radius);
         opacity: 1;
       }
 
@@ -3276,7 +3666,7 @@
 
       .cta-widget-toggle:focus-visible {
         outline: none;
-        box-shadow: 0 18px 60px var(--cta-shadow-color), 0 0 0 4px var(--cta-focus);
+        box-shadow: var(--cta-launcher-shadow), 0 0 0 4px var(--cta-focus);
       }
 
       .cta-widget-toggle-brand {
@@ -3335,11 +3725,11 @@
         padding: 8px 10px;
         border-radius: 12px;
         border: 1px solid var(--cta-border);
-        background: var(--cta-surface-strong);
-        color: var(--cta-fg);
+        background: var(--cta-warning-bg);
+        color: var(--cta-warning-text);
         font-size: 12px;
         line-height: 1.35;
-        box-shadow: 0 14px 42px var(--cta-shadow-color);
+        box-shadow: var(--cta-launcher-shadow);
         opacity: 0;
         pointer-events: none;
         transition: opacity 180ms ease, transform 180ms ease;
@@ -3409,10 +3799,10 @@
         top: 0;
         right: 0;
         bottom: 0;
-        width: min(440px, calc(100vw - 56px));
+        width: min(var(--cta-panel-width), calc(100vw - 56px));
         max-width: 100vw;
         background: var(--cta-surface);
-        box-shadow: -4px 0 24px var(--cta-shadow-color);
+        box-shadow: var(--cta-panel-shadow);
         display: grid;
         grid-template-rows: auto 1fr auto;
         grid-template-areas:
@@ -3425,7 +3815,7 @@
         opacity: 0;
         transform: translateX(calc(100% + 16px));
         transition: transform 240ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 200ms ease;
-        border-radius: 18px 0 0 18px;
+        border-radius: var(--cta-panel-radius) 0 0 var(--cta-panel-radius);
         z-index: 3;
         backdrop-filter: blur(22px) saturate(160%);
         -webkit-backdrop-filter: blur(22px) saturate(160%);
@@ -3499,7 +3889,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 10px 14px;
+        padding: 10px var(--cta-panel-padding);
         padding-top: calc(10px + env(safe-area-inset-top, 0px));
         background: transparent;
       }
@@ -3524,17 +3914,17 @@
         background: transparent;
         border: none;
         cursor: pointer;
-        border-radius: 10px;
+        border-radius: var(--cta-control-radius);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
-        color: var(--cta-fg-muted);
+        color: var(--cta-header-icon);
         transition: color 160ms ease, transform 160ms ease;
       }
 
       .cta-widget-close:hover {
-        color: var(--cta-fg);
+        color: var(--cta-header-icon-hover);
       }
 
       .cta-widget-close-hint {
@@ -3580,17 +3970,17 @@
         padding: 0;
         background: transparent;
         border: none;
-        border-radius: 10px;
+        border-radius: var(--cta-control-radius);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: var(--cta-fg-muted);
+        color: var(--cta-header-icon);
         transition: color 160ms ease, transform 160ms ease;
       }
 
       .cta-widget-new-chat:hover {
-        color: var(--cta-fg);
+        color: var(--cta-header-icon-hover);
       }
 
       .cta-widget-new-chat:active {
@@ -3614,17 +4004,17 @@
         padding: 0;
         background: transparent;
         border: none;
-        border-radius: 10px;
+        border-radius: var(--cta-control-radius);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: var(--cta-fg-muted);
+        color: var(--cta-header-icon);
         transition: color 160ms ease, transform 160ms ease;
       }
 
       .cta-widget-security-btn:hover {
-        color: var(--cta-fg);
+        color: var(--cta-header-icon-hover);
       }
 
       .cta-widget-security-btn:active {
@@ -3645,7 +4035,8 @@
       .cta-security-panel {
         position: absolute;
         inset: 0;
-        background: rgba(var(--cta-bg-rgb, 255, 255, 255), 0.985);
+        background: var(--cta-security-bg);
+        color: var(--cta-security-text);
         display: flex;
         flex-direction: column;
         z-index: 10;
@@ -3661,7 +4052,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 14px;
+        padding: 10px var(--cta-panel-padding);
         padding-top: calc(10px + env(safe-area-inset-top, 0px));
         background: transparent;
       }
@@ -3672,17 +4063,17 @@
         padding: 0;
         background: transparent;
         border: none;
-        border-radius: 10px;
+        border-radius: var(--cta-control-radius);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: var(--cta-fg-muted);
+        color: var(--cta-header-icon);
         transition: color 160ms ease;
       }
 
       .cta-security-back:hover {
-        color: var(--cta-fg);
+        color: var(--cta-header-icon-hover);
       }
 
       .cta-security-back:focus-visible {
@@ -3699,13 +4090,14 @@
       .cta-security-title {
         font-size: 13px;
         font-weight: 600;
+        color: var(--cta-security-text);
         margin: 0;
       }
 
       .cta-security-content {
         flex: 1;
         overflow-y: auto;
-        padding: 20px 16px;
+        padding: 20px var(--cta-panel-padding);
         background: transparent;
       }
 
@@ -3722,7 +4114,7 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--cta-fg-muted);
+        color: var(--cta-security-muted);
         margin: 0 0 12px;
       }
 
@@ -3752,13 +4144,14 @@
       .cta-security-provider-name {
         font-size: 14px;
         font-weight: 600;
+        color: var(--cta-security-text);
         margin: 0;
       }
 
       .cta-security-text {
         font-size: 13px;
         line-height: 1.55;
-        color: var(--cta-fg-muted);
+        color: var(--cta-security-muted);
         margin: 0;
       }
 
@@ -3766,7 +4159,7 @@
         grid-area: messages;
         overflow-y: auto;
         min-height: 0;
-        padding: 14px;
+        padding: var(--cta-panel-padding);
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -3843,7 +4236,7 @@
         background: var(--cta-bg);
         color: var(--cta-fg-muted);
         cursor: pointer;
-        box-shadow: 0 10px 22px var(--cta-shadow-color);
+        box-shadow: var(--cta-panel-shadow);
         pointer-events: auto;
         transition: transform 160ms ease, opacity 160ms ease, background 160ms ease, color 160ms ease;
         display: inline-flex;
@@ -3860,7 +4253,7 @@
       .cta-widget-jump:focus-visible {
         outline: none;
         color: var(--cta-fg);
-        box-shadow: 0 0 0 4px var(--cta-focus), 0 10px 22px var(--cta-shadow-color);
+        box-shadow: 0 0 0 4px var(--cta-focus), var(--cta-panel-shadow);
       }
 
       .cta-widget-jump svg {
@@ -3911,15 +4304,16 @@
       }
 
       .cta-widget-empty h3 {
-        font-size: 14px;
-        font-weight: 650;
+        font-size: var(--cta-heading-size);
+        font-weight: 700;
         margin: 0 0 8px;
         color: var(--cta-fg);
-        letter-spacing: -0.01em;
+        letter-spacing: var(--cta-letter-spacing);
       }
 
       .cta-widget-empty p {
-        font-size: 13px;
+        font-size: var(--cta-font-size);
+        line-height: var(--cta-line-height);
         margin: 0;
         max-width: 320px;
       }
@@ -3935,9 +4329,9 @@
 
       .cta-widget-suggestion {
         appearance: none;
-        border: 1px solid var(--cta-border);
-        background: var(--cta-surface-strong);
-        color: var(--cta-fg);
+        border: 1px solid var(--cta-suggestion-border);
+        background: var(--cta-suggestion-bg);
+        color: var(--cta-suggestion-text);
         border-radius: 999px;
         padding: 9px 12px;
         font: inherit;
@@ -3950,7 +4344,7 @@
 
       .cta-widget-suggestion:hover:not(:disabled) {
         border-color: var(--cta-accent);
-        background: var(--cta-accent-soft);
+        background: var(--cta-suggestion-hover-bg);
         transform: translateY(-1px);
       }
 
@@ -3967,8 +4361,8 @@
 
       .cta-widget-activity {
         border: 1px solid var(--cta-border);
-        background: var(--cta-surface-strong);
-        border-radius: 16px;
+        background: var(--cta-activity-bg);
+        border-radius: var(--cta-panel-radius);
         padding: 10px 12px;
         display: flex;
         flex-direction: column;
@@ -3986,14 +4380,14 @@
         gap: 8px;
         font-size: 12px;
         font-weight: 600;
-        color: var(--cta-fg);
+        color: var(--cta-activity-text);
       }
 
       .cta-widget-activity-status {
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: var(--cta-fg-muted);
+        color: var(--cta-activity-muted);
       }
 
       .cta-widget-activity-list {
@@ -4007,7 +4401,7 @@
         align-items: center;
         gap: 8px;
         font-size: 12px;
-        color: var(--cta-fg-muted);
+        color: var(--cta-activity-muted);
       }
 
       .cta-widget-activity-step::before {
@@ -4020,7 +4414,7 @@
       }
 
       .cta-widget-activity-step[data-status="running"] {
-        color: var(--cta-fg);
+        color: var(--cta-activity-text);
       }
 
       .cta-widget-activity-step[data-status="running"]::before {
@@ -4029,11 +4423,11 @@
       }
 
       .cta-widget-activity-step[data-status="done"] {
-        color: var(--cta-fg);
+        color: var(--cta-activity-text);
       }
 
       .cta-widget-activity-step[data-status="done"]::before {
-        background: var(--cta-fg-muted);
+        background: var(--cta-activity-muted);
       }
 
       .cta-widget-activity-step[data-status="error"] {
@@ -4050,8 +4444,8 @@
         gap: 10px;
         padding: 8px 10px;
         border-radius: 12px;
-        background: var(--cta-bubble-assistant);
-        border: 1px solid var(--cta-border);
+        background: var(--cta-warning-bg);
+        border: 1px solid var(--cta-warning-border);
         position: sticky;
         top: 0;
         z-index: 2;
@@ -4075,7 +4469,7 @@
         min-width: 0;
         font-size: 12px;
         line-height: 1.35;
-        color: var(--cta-fg-muted);
+        color: var(--cta-warning-text);
       }
 
       .cta-widget-screen-prompt-countdown {
@@ -4086,7 +4480,7 @@
       .cta-widget-screen-prompt-btn {
         height: 28px;
         padding: 0 10px;
-        border-radius: 8px;
+        border-radius: var(--cta-control-radius);
         border: 1px solid var(--cta-border);
         background: var(--cta-surface-strong);
         color: var(--cta-fg);
@@ -4125,7 +4519,7 @@
         background: none;
         border: none;
         padding: 0;
-        color: var(--cta-fg-muted);
+        color: var(--cta-warning-text);
         font-size: 11px;
         cursor: pointer;
         flex-shrink: 0;
@@ -4134,7 +4528,7 @@
       }
 
       .cta-widget-screen-prompt-link:hover {
-        color: var(--cta-fg);
+        color: var(--cta-header-icon-hover);
       }
 
       .cta-widget-screen-prompt-link:focus-visible {
@@ -4144,10 +4538,12 @@
 
       .cta-widget-message {
         max-width: 92%;
-        padding: 10px 12px;
-        border-radius: 16px;
-        font-size: 13px;
-        line-height: 1.55;
+        padding: var(--cta-message-padding);
+        border-radius: var(--cta-message-radius);
+        font-size: var(--cta-font-size);
+        line-height: var(--cta-line-height);
+        letter-spacing: var(--cta-letter-spacing);
+        font-weight: var(--cta-font-weight);
         word-wrap: break-word;
         border: 1px solid var(--cta-border);
       }
@@ -4155,12 +4551,15 @@
       .cta-widget-message.user {
         align-self: flex-end;
         background: var(--cta-bubble-user);
+        color: var(--cta-bubble-user-text);
+        border-color: var(--cta-bubble-user-border);
         border-bottom-right-radius: 6px;
       }
 
       .cta-widget-message.assistant {
         align-self: flex-start;
         background: var(--cta-bubble-assistant);
+        color: var(--cta-bubble-assistant-text);
         border-bottom-left-radius: 6px;
       }
 
@@ -4176,12 +4575,12 @@
         letter-spacing: -0.01em;
       }
 
-      .cta-widget-message h1 { font-size: 16px; }
-      .cta-widget-message h2 { font-size: 15px; }
+      .cta-widget-message h1 { font-size: calc(var(--cta-heading-size) + 2px); }
+      .cta-widget-message h2 { font-size: calc(var(--cta-heading-size) + 1px); }
       .cta-widget-message h3,
       .cta-widget-message h4,
       .cta-widget-message h5,
-      .cta-widget-message h6 { font-size: 14px; }
+      .cta-widget-message h6 { font-size: var(--cta-heading-size); }
 
       .cta-widget-message p,
       .cta-widget-message ul,
@@ -4273,7 +4672,7 @@
       .cta-widget-resume {
         height: 30px;
         padding: 0 12px;
-        border-radius: 10px;
+        border-radius: var(--cta-control-radius);
         border: 1px solid var(--cta-border);
         background: var(--cta-surface-strong);
         color: var(--cta-fg);
@@ -4322,7 +4721,7 @@
       .cta-widget-input-area {
         grid-area: footer;
         position: relative;
-        padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+        padding: 10px var(--cta-panel-padding) calc(10px + env(safe-area-inset-bottom, 0px));
         background: transparent;
       }
 
@@ -4330,9 +4729,9 @@
         margin-bottom: 8px;
         padding: 8px 10px;
         border-radius: 12px;
-        border: 1px solid var(--cta-border);
-        background: var(--cta-bubble-assistant);
-        color: var(--cta-fg);
+        border: 1px solid var(--cta-warning-border);
+        background: var(--cta-warning-bg);
+        color: var(--cta-warning-text);
         font-size: 12px;
         line-height: 1.35;
         display: none;
@@ -4350,21 +4749,21 @@
 
       .cta-widget-input {
         flex: 1;
-        height: 42px;
+        height: var(--cta-input-height);
         padding: 0 12px;
         border: 1px solid transparent;
-        border-radius: 14px;
-        background: var(--cta-surface);
-        color: var(--cta-fg);
+        border-radius: var(--cta-control-radius);
+        background: var(--cta-input-bg);
+        color: var(--cta-input-text);
         outline: none;
         min-width: 0;
-        font-size: 13px;
-        box-shadow: inset 0 0 0 1px var(--cta-border);
+        font-size: var(--cta-font-size);
+        box-shadow: inset 0 0 0 1px var(--cta-input-border);
         transition: box-shadow 90ms ease, background-color 90ms ease;
       }
 
       .cta-widget-input::placeholder {
-        color: var(--cta-fg-muted);
+        color: var(--cta-input-placeholder);
       }
 
       .cta-widget-input:focus {
@@ -4372,11 +4771,11 @@
       }
 
       .cta-widget-send {
-        width: 42px;
-        height: 42px;
+        width: var(--cta-input-height);
+        height: var(--cta-input-height);
         background: transparent;
         border: none;
-        border-radius: 12px;
+        border-radius: var(--cta-control-radius);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -4437,10 +4836,10 @@
 
       .cta-widget-mic {
         position: relative;
-        width: 42px;
-        height: 42px;
+        width: var(--cta-input-height);
+        height: var(--cta-input-height);
         border: none;
-        border-radius: 12px;
+        border-radius: var(--cta-control-radius);
         background: transparent;
         display: flex;
         align-items: center;
@@ -4464,9 +4863,9 @@
 
       .cta-widget-mic-select {
         width: 32px;
-        height: 42px;
+        height: var(--cta-input-height);
         border: none;
-        border-radius: 0 12px 12px 0;
+        border-radius: 0 var(--cta-control-radius) var(--cta-control-radius) 0;
         margin-left: -1px;
         background: transparent;
         display: flex;
@@ -4529,10 +4928,10 @@
         bottom: 48px;
         right: 0;
         min-width: 220px;
-        background: var(--cta-bg);
+        background: var(--cta-surface);
         border: 1px solid var(--cta-border);
-        border-radius: 14px;
-        box-shadow: 0 18px 60px var(--cta-shadow-color);
+        border-radius: var(--cta-panel-radius);
+        box-shadow: var(--cta-panel-shadow);
         display: none;
         overflow: hidden;
         z-index: 5;
@@ -4559,6 +4958,7 @@
 
       .cta-widget-mic-menu button.active {
         background: var(--cta-bubble-user);
+        color: var(--cta-bubble-user-text);
       }
 
       .cta-voice-hint,
@@ -4571,9 +4971,9 @@
         border-radius: 12px;
         display: none;
         justify-content: center;
-        border: 1px solid var(--cta-border);
-        background: var(--cta-bubble-assistant);
-        color: var(--cta-fg-muted);
+        border: 1px solid var(--cta-warning-border);
+        background: var(--cta-warning-bg);
+        color: var(--cta-warning-text);
       }
 
       .cta-voice-error {
@@ -4652,7 +5052,10 @@
   // Widget Creation & Lifecycle
   // ═══════════════════════════════════════════════════════════════════════════
 
-  function createWidget(config, initialConfigData) {
+  function createWidget(config, initialConfigData, options) {
+    const host = options && options.host ? options.host : null;
+    const previewBootstrap = options && options.previewBootstrap ? options.previewBootstrap : null;
+    const isPreview = Boolean(previewBootstrap && previewBootstrap.enabled);
     const apiUrl = resolveApiUrl();
     ensurePagePushStyle();
 
@@ -4677,11 +5080,6 @@
     }
     if (typeof state.ui.launcherY !== "number") {
       state.ui.launcherY = 0.72;
-      saveUiState(state.ui);
-      saveState(state);
-    }
-    if (typeof state.ui.panelWidth !== "number") {
-      state.ui.panelWidth = PANEL_DEFAULT_WIDTH;
       saveUiState(state.ui);
       saveState(state);
     }
@@ -4741,6 +5139,8 @@
 
     let widgetTitle = "Warpy";
     let widgetIconUrl = null;
+    let widgetAppearanceMode = "infer";
+    let widgetTheme = null;
     let widgetBehavior = "overlay";
     let widgetEmptyTitle = "What would you like to do?";
     let widgetEmptyDescription = "Ask a question, request help, or describe what you want to get done.";
@@ -4748,6 +5148,10 @@
     let widgetSuggestionsEnabled = false;
     let widgetStarterSuggestions = [];
     let securityDisclosureEnabled = true;
+    let previewColorScheme = previewBootstrap && (previewBootstrap.colorScheme === "dark" || previewBootstrap.colorScheme === "light")
+      ? previewBootstrap.colorScheme
+      : null;
+    let activeThemeMode = getDefaultThemeMode(previewColorScheme || "light");
     let isSecurityPanelOpen = false;
     let frontendActivity = null;
     let frontendActivityTimer = null;
@@ -4766,6 +5170,17 @@
 
     const root = document.createElement("div");
     let widgetHidden = false;
+
+    function syncThemeState() {
+      activeThemeMode = resolveThemeMode(widgetAppearanceMode, widgetTheme, previewColorScheme);
+      if (!host) return;
+      host.__ctaThemeState = {
+        appearanceMode: widgetAppearanceMode,
+        themeConfig: widgetTheme,
+        preferredVariant: previewColorScheme,
+      };
+      applyThemeVariables(host, widgetAppearanceMode, widgetTheme, previewColorScheme);
+    }
 
     function hideWidget() {
       if (widgetHidden) return;
@@ -5198,7 +5613,13 @@
     }
 
     function getPreferredPanelWidth() {
-      const width = typeof state.ui.panelWidth === "number" ? state.ui.panelWidth : PANEL_DEFAULT_WIDTH;
+      const themeWidth =
+        activeThemeMode &&
+          activeThemeMode.dimensions &&
+          typeof activeThemeMode.dimensions.panelWidth === "number"
+          ? activeThemeMode.dimensions.panelWidth
+          : PANEL_DEFAULT_WIDTH;
+      const width = typeof state.ui.panelWidth === "number" ? state.ui.panelWidth : themeWidth;
       return clampInt(width, PANEL_BASE_MIN_WIDTH, PANEL_BASE_MAX_WIDTH);
     }
 
@@ -5240,6 +5661,9 @@
     }
 
     function getResolvedWidgetBehavior() {
+      if (isPreview) {
+        return widgetBehavior === "push" ? "push" : "overlay";
+      }
       if (widgetBehavior !== "push") return "overlay";
       return getViewportWidth() > PAGE_PUSH_BREAKPOINT ? "push" : "overlay";
     }
@@ -5314,7 +5738,14 @@
 
     function syncHeader() {
       panel.setAttribute("aria-label", widgetTitle);
-      if (inputEl) inputEl.setAttribute("placeholder", widgetInputPlaceholder);
+      if (inputEl) {
+        inputEl.setAttribute("placeholder", widgetInputPlaceholder);
+        inputEl.disabled = widgetHidden;
+        inputEl.readOnly = isPreview;
+      }
+      if (newChatEl) {
+        newChatEl.disabled = widgetHidden;
+      }
     }
 
     function syncIcons() {
@@ -5325,9 +5756,18 @@
       if (securityBtnEl) {
         securityBtnEl.style.display = securityDisclosureEnabled ? "inline-flex" : "none";
       }
+      if (!securityDisclosureEnabled && currentPreviewScene === "security") {
+        currentPreviewScene = "empty";
+      }
+      if (!securityDisclosureEnabled && isSecurityPanelOpen) {
+        isSecurityPanelOpen = false;
+        securityPanelEl.classList.remove("open");
+        emitPreviewSnapshot("security_hidden");
+      }
     }
 
     function applyWidgetUiConfig() {
+      syncThemeState();
       syncHeader();
       syncIcons();
       syncSecurityButton();
@@ -5440,7 +5880,7 @@
         button.textContent = suggestion;
         button.disabled = isLoading || widgetHidden;
         button.addEventListener("click", () => {
-          if (isLoading || widgetHidden) return;
+          if (isLoading || widgetHidden || isPreview) return;
           inputEl.value = "";
           syncSendButton();
           sendMessage(suggestion);
@@ -5769,6 +6209,109 @@
       screenShareHostEl.replaceChildren();
     }
 
+    let currentPreviewScene = previewBootstrap && typeof previewBootstrap.scene === "string"
+      ? previewBootstrap.scene
+      : "launcher";
+
+    function getPreviewSnapshot() {
+      return {
+        isOpen,
+        scene: currentPreviewScene,
+        securityPanelOpen: isSecurityPanelOpen,
+        messageCount: state.messages.length,
+        widgetTitle,
+        widgetBehavior,
+      };
+    }
+
+    function postPreviewMessage(type, payload) {
+      if (!isPreview || window.parent === window) return;
+      window.parent.postMessage({
+        type: `warpy-widget-preview:${type}`,
+        ...payload,
+      }, "*");
+    }
+
+    function emitPreviewSnapshot(reason) {
+      postPreviewMessage("stateSnapshot", {
+        reason,
+        snapshot: getPreviewSnapshot(),
+      });
+    }
+
+    function replacePreviewMessages(messages) {
+      state.messages = messages.map((message) => createStoredMessage(message.role, message.content));
+      state.firstUnreadMessageId = null;
+      state.lastReadMessageId = getLastMessageId();
+      state.suggestions = [];
+    }
+
+    function buildPreviewMessages() {
+      return [
+        {
+          role: "assistant",
+          content: "Hi! I can help you review revenue, approvals, and account activity.",
+        },
+        {
+          role: "user",
+          content: "Show me the invoices that need attention.",
+        },
+        {
+          role: "assistant",
+          content: "You have **3 invoices** waiting for review. I can summarize them, open the billing screen, or start a refund.",
+        },
+      ];
+    }
+
+    function applyPreviewScene(scene, options = {}) {
+      if (!isPreview) return;
+      const nextScene = typeof scene === "string" && scene ? scene : "launcher";
+      currentPreviewScene = !securityDisclosureEnabled && nextScene === "security" ? "empty" : nextScene;
+      clearFrontendActivity();
+      clearFrontendWarning();
+      isSecurityPanelOpen = false;
+      securityPanelEl.classList.remove("open");
+      state.messages = [];
+      state.suggestions = [];
+
+      if (currentPreviewScene === "launcher") {
+        closePanel({ restoreLauncherFocus: false });
+      } else if (currentPreviewScene === "messages") {
+        replacePreviewMessages(buildPreviewMessages());
+        openPanel();
+      } else if (currentPreviewScene === "autopilot") {
+        replacePreviewMessages(buildPreviewMessages());
+        openPanel();
+        setFrontendActivity({
+          title: "Screen Autopilot",
+          status: "running",
+          steps: [
+            { label: "Reading page context", status: "done" },
+            { label: "Finding the invoices table", status: "done" },
+            { label: "Preparing the next UI action", status: "running" },
+          ],
+        });
+        showFrontendWarning("Preview mode: page actions are simulated.");
+      } else {
+        state.messages = [];
+        state.suggestions = [];
+        openPanel();
+        if (currentPreviewScene === "security") {
+          isSecurityPanelOpen = true;
+          securityPanelEl.classList.add("open");
+        }
+      }
+
+      renderMessages();
+      if (options.announce !== false) {
+        postPreviewMessage("sceneChanged", {
+          scene: currentPreviewScene,
+          snapshot: getPreviewSnapshot(),
+        });
+      }
+      emitPreviewSnapshot("scene");
+    }
+
     function createMessageNode(message) {
       const bubble = document.createElement("div");
       bubble.dataset.messageId = message.id;
@@ -6071,11 +6614,27 @@
     }
 
     function updateMicState() {
+      if (isPreview) {
+        micEl.classList.remove("recording");
+        micEl.disabled = false;
+        micEl.setAttribute("aria-pressed", "false");
+        micEl.title = "Voice input is disabled in preview";
+        micSelectEl.style.display = "none";
+        micSelectEl.disabled = false;
+        micSelectEl.title = "Voice input is disabled in preview";
+        micEl.classList.remove("paired");
+        setVoiceError("");
+        setVoiceHint("");
+        syncSendButton();
+        return;
+      }
       const hasMic = micDevices.length > 0;
       micEl.classList.toggle("recording", isRecording);
-      micEl.disabled = !hasMic || micPermissionDenied || isTranscribing;
+      micEl.disabled = isPreview || !hasMic || micPermissionDenied || isTranscribing;
       micEl.setAttribute("aria-pressed", isRecording ? "true" : "false");
-      micEl.title = micPermissionDenied
+      micEl.title = isPreview
+        ? "Voice input is disabled in preview"
+        : micPermissionDenied
         ? "Microphone access blocked"
         : hasMic
           ? isRecording
@@ -6084,8 +6643,10 @@
           : "No microphone detected";
       const showSelector = micDevices.length > 1 && !micPermissionDenied;
       micSelectEl.style.display = showSelector ? "flex" : "none";
-      micSelectEl.disabled = !showSelector || micPermissionDenied || isTranscribing;
-      micSelectEl.title = micPermissionDenied
+      micSelectEl.disabled = isPreview || !showSelector || micPermissionDenied || isTranscribing;
+      micSelectEl.title = isPreview
+        ? "Voice input is disabled in preview"
+        : micPermissionDenied
         ? "Microphone access blocked"
         : showSelector
           ? "Select microphone"
@@ -6149,6 +6710,12 @@
     }
 
     async function refreshDevices(requestAccess = false) {
+      if (isPreview) {
+        micDevices = [];
+        micPermissionDenied = false;
+        updateMicState();
+        return;
+      }
       if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
         micDevices = [];
         micPermissionDenied = true;
@@ -6216,6 +6783,7 @@
     }
 
     async function transcribeRecording(blob) {
+      if (isPreview) return;
       if (isTranscribing) return;
       isTranscribing = true;
       updateMicState();
@@ -6272,6 +6840,7 @@
     }
 
     async function startRecording() {
+      if (isPreview) return;
       if (isRecording || isTranscribing) return;
       setVoiceError("");
       if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -6341,6 +6910,10 @@
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
       widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
       widgetIconUrl = getConfigString(data, "widgetIconUrl");
+      if (data.widgetAppearanceMode === "custom" || data.widgetAppearanceMode === "infer") {
+        widgetAppearanceMode = data.widgetAppearanceMode;
+      }
+      widgetTheme = data.widgetTheme && typeof data.widgetTheme === "object" ? cloneObject(data.widgetTheme) : null;
       if (data.widgetBehavior === "push" || data.widgetBehavior === "overlay") {
         widgetBehavior = data.widgetBehavior;
       }
@@ -6359,6 +6932,8 @@
       }
       if (typeof data.securityDisclosureEnabled === "boolean") {
         securityDisclosureEnabled = data.securityDisclosureEnabled;
+      } else if (typeof data.widgetSecurityDisclosureEnabled === "boolean") {
+        securityDisclosureEnabled = data.widgetSecurityDisclosureEnabled;
       }
       applyWidgetUiConfig();
     }
@@ -6372,7 +6947,13 @@
 
     function ensureConfigLoaded() {
       if (!configPromise) {
-        configPromise = initialConfigData ? Promise.resolve(applyRemoteConfig(initialConfigData)) : fetchConfig();
+        if (initialConfigData) {
+          configPromise = Promise.resolve(applyRemoteConfig(initialConfigData));
+        } else if (isPreview) {
+          configPromise = Promise.resolve();
+        } else {
+          configPromise = fetchConfig();
+        }
       }
       return configPromise;
     }
@@ -6644,7 +7225,7 @@
 
     async function sendMessage(text, options = {}) {
       const messageText = String(text || "").trim();
-      if (!messageText || isLoading || widgetHidden) return;
+      if (!messageText || isLoading || widgetHidden || isPreview) return;
       refMap.clear();
       const runEpoch = chatEpoch;
       const isRunStale = () => runEpoch !== chatEpoch;
@@ -6777,10 +7358,13 @@
       toggle.setAttribute("aria-expanded", "true");
       applyPanelWidth();
       syncToggleAriaLabel();
-      inputEl.focus();
+      if (!isPreview) {
+        inputEl.focus();
+      }
       syncSendButton();
       syncFrontendWarningUi();
       renderMessages();
+      emitPreviewSnapshot("open");
     }
 
     function closePanel({ restoreLauncherFocus = true } = {}) {
@@ -6807,6 +7391,7 @@
       } else {
         inputEl.blur();
       }
+      emitPreviewSnapshot("close");
     }
 
     function togglePanel() {
@@ -6841,13 +7426,17 @@
         screenSharePromiseResolve = null;
       }
       renderMessages();
+      if (isPreview) {
+        currentPreviewScene = "empty";
+        emitPreviewSnapshot("new_chat");
+      }
     }
 
     // ─── Event Binding ──────────────────────────────────────────────────────
 
     toggle.addEventListener("click", async () => {
       if (ignoreToggleClick || widgetHidden) return;
-      if (!isOpen) {
+      if (!isOpen && !isPreview) {
         await fetchConfig();
       }
       if (widgetHidden) return;
@@ -6863,10 +7452,12 @@
     securityBtnEl.addEventListener("click", () => {
       isSecurityPanelOpen = true;
       securityPanelEl.classList.add("open");
+      emitPreviewSnapshot("security_open");
     });
     securityBackEl.addEventListener("click", () => {
       isSecurityPanelOpen = false;
       securityPanelEl.classList.remove("open");
+      emitPreviewSnapshot("security_close");
     });
     document.addEventListener("keydown", (event) => {
       if (!isOpen) return;
@@ -6879,6 +7470,7 @@
       if (isSecurityPanelOpen) {
         isSecurityPanelOpen = false;
         securityPanelEl.classList.remove("open");
+        emitPreviewSnapshot("security_close");
         return;
       }
       closePanel({ restoreLauncherFocus: false });
@@ -6920,12 +7512,17 @@
         stopCurrentExecution();
         return;
       }
+      if (isPreview) return;
       sendMessage(inputEl.value);
       inputEl.value = "";
       syncSendButton();
     });
 
     inputEl.addEventListener("keydown", (e) => {
+      if (isPreview) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (isRecording) {
@@ -6940,11 +7537,39 @@
     });
 
     ensureConfigLoaded();
-    refreshDevices(false);
+    if (!isPreview) {
+      refreshDevices(false);
+    }
     updateMicState();
     applyWidgetUiConfig();
 
-    if (state.interruptedByNavigation && state.activeQuery) {
+    if (isPreview) {
+      window.addEventListener(PREVIEW_EVENT_NAME, (event) => {
+        const detail = event && event.detail && typeof event.detail === "object" ? event.detail : {};
+        if (detail.previewColorScheme === "dark" || detail.previewColorScheme === "light") {
+          previewColorScheme = detail.previewColorScheme;
+        }
+        if (detail.config && typeof detail.config === "object") {
+          applyRemoteConfig(detail.config);
+        } else {
+          syncThemeState();
+        }
+        if (typeof detail.scene === "string") {
+          applyPreviewScene(detail.scene);
+          return;
+        }
+        emitPreviewSnapshot("config");
+      });
+      if (previewBootstrap && previewBootstrap.remoteConfig) {
+        applyRemoteConfig(previewBootstrap.remoteConfig);
+      }
+      applyPreviewScene(currentPreviewScene, { announce: false });
+      postPreviewMessage("ready", {
+        snapshot: getPreviewSnapshot(),
+      });
+    }
+
+    if (!isPreview && state.interruptedByNavigation && state.activeQuery) {
       const shouldOpenPanelOnResume = state.resumePanelOpen !== false;
       state.interruptedByNavigation = false;
       state.resumePanelOpen = null;
@@ -6972,6 +7597,7 @@
 
   async function init() {
     try {
+      const previewBootstrap = getPreviewBootstrap();
       const config = getScriptData();
       if (!config || !config.agentId) {
         console.warn("[Warpy] Missing data-agent-id attribute");
@@ -6979,7 +7605,9 @@
       }
 
       const apiUrl = resolveApiUrl();
-      const initialConfigData = await fetchWidgetConfig(apiUrl, config.agentId, 2500);
+      const initialConfigData = previewBootstrap && previewBootstrap.remoteConfig
+        ? cloneObject(previewBootstrap.remoteConfig)
+        : await fetchWidgetConfig(apiUrl, config.agentId, 2500);
       if (initialConfigData && shouldHideWidget(initialConfigData)) {
         const existing = document.getElementById(WIDGET_CONTAINER_ID);
         if (existing) {
@@ -6995,9 +7623,16 @@
 
       const host = document.createElement("div");
       host.id = WIDGET_CONTAINER_ID;
+      host.__ctaThemeState = {
+        appearanceMode: initialConfigData && initialConfigData.widgetAppearanceMode === "custom" ? "custom" : "infer",
+        themeConfig: initialConfigData ? initialConfigData.widgetTheme || null : null,
+        preferredVariant: previewBootstrap && (previewBootstrap.colorScheme === "dark" || previewBootstrap.colorScheme === "light")
+          ? previewBootstrap.colorScheme
+          : null,
+      };
       const shadowRoot = host.attachShadow({ mode: "open" });
       shadowRoot.appendChild(createStyles());
-      shadowRoot.appendChild(createWidget(config, initialConfigData));
+      shadowRoot.appendChild(createWidget(config, initialConfigData, { host, previewBootstrap }));
       observeTheme(host);
       document.body.appendChild(host);
     } catch { }

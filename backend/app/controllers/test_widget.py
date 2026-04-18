@@ -151,6 +151,8 @@ def test_widget_config_returns_headers(client: TestClient):
     assert body["actionsRemaining"] == 50
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetIconUrl"] is None
+    assert body["widgetAppearanceMode"] == "infer"
+    assert body["widgetTheme"] is None
     assert body["widgetBehavior"] == "overlay"
     assert body["widgetEmptyTitle"] == "What would you like to do?"
     assert body["widgetEmptyDescription"] == "Ask a question, request help, or describe what you want to get done."
