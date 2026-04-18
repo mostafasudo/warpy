@@ -546,6 +546,15 @@
     return candidates[0].color;
   }
 
+  function applyInferredTypography(mode, fontFamily, fontSize) {
+    mode.typography.fontFamily = fontFamily || mode.typography.fontFamily;
+    const parsedFontSize = parseFloat(fontSize || "");
+    if (!Number.isFinite(parsedFontSize)) return;
+    const compactFontSize = clamp(parsedFontSize - 1, 12, 14);
+    mode.typography.fontSize = compactFontSize;
+    mode.typography.headingSize = clamp(compactFontSize + 1, 14, 15);
+  }
+
   function inferThemeModeFromPage(preferredVariant) {
     const body = document.body || document.documentElement;
     const bodyStyles = body ? getComputedStyle(body) : null;
@@ -634,11 +643,7 @@
     const scrim = themedIsDark ? "rgba(0, 0, 0, 0.55)" : "rgba(0, 0, 0, 0.22)";
     const variant = themedIsDark ? "dark" : "light";
     const mode = getDefaultThemeMode(variant);
-    mode.typography.fontFamily = fontFamily || mode.typography.fontFamily;
-    const parsedFontSize = parseFloat(fontSize || "");
-    if (Number.isFinite(parsedFontSize)) {
-      mode.typography.fontSize = clamp(parsedFontSize, 11, 20);
-    }
+    applyInferredTypography(mode, fontFamily, fontSize);
     mode.colors.text = colorCss(themedFg) || mode.colors.text;
     mode.colors.mutedText = colorCss(themedMuted) || mode.colors.mutedText;
     mode.colors.background = colorCss(themedBg) || mode.colors.background;

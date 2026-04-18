@@ -795,6 +795,27 @@ describe("widget theme inference", () => {
       expect(widget.host.style.getPropertyValue("--cta-bg")).toBe("rgb(255, 255, 255)")
     })
   })
+
+  it("keeps inferred typography compact for standard dashboard body sizes", async () => {
+    document.body.style.backgroundColor = "#FFFFFF"
+    document.body.style.color = "#111827"
+    document.body.style.fontFamily = "Georgia, serif"
+    document.body.style.fontSize = "14px"
+
+    const widget = await loadWidget({
+      widgetSuggestionsEnabled: true,
+      widgetStarterSuggestions: ["Show recent invoices"],
+    })
+    await openPanel(widget)
+
+    const shadowRoot = getShadowRoot(widget)
+    expect(shadowRoot.querySelector(".cta-widget-input")).not.toBeNull()
+    expect(shadowRoot.querySelector(".cta-widget-suggestion")).not.toBeNull()
+
+    expect(widget.host.style.getPropertyValue("--cta-font-family")).toContain("Georgia")
+    expect(widget.host.style.getPropertyValue("--cta-font-size")).toBe("13px")
+    expect(widget.host.style.getPropertyValue("--cta-heading-size")).toBe("14px")
+  })
 })
 
 describe("widget desktop resize", () => {
