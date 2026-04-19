@@ -14,23 +14,23 @@ def test_tool_cache_load_save_roundtrip():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    eid1 = uuid4()
-    eid2 = uuid4()
+    eid1 = f"db:{uuid4()}"
+    eid2 = f"db:{uuid4()}"
     cache.add_tools([eid1, eid2])
     cache.save()
 
     call_args = redis.setex.call_args
     assert call_args is not None
     saved_data = json.loads(call_args[0][2])
-    assert str(eid1) in saved_data
-    assert str(eid2) in saved_data
+    assert eid1 in saved_data
+    assert eid2 in saved_data
 
 
 def test_tool_cache_load_from_redis():
     redis = MagicMock()
     conv_id = uuid4()
-    eid = uuid4()
-    redis.get.return_value = json.dumps({str(eid): 1000.0})
+    eid = f"db:{uuid4()}"
+    redis.get.return_value = json.dumps({eid: 1000.0})
 
     cache = ToolCache(redis, conv_id)
     tools = cache.load()
@@ -45,9 +45,9 @@ def test_tool_cache_lru_eviction():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    old_id = uuid4()
-    mid_id = uuid4()
-    new_id = uuid4()
+    old_id = f"db:{uuid4()}"
+    mid_id = f"db:{uuid4()}"
+    new_id = f"db:{uuid4()}"
 
     cache._tools = {
         old_id: 100.0,
@@ -67,7 +67,7 @@ def test_tool_cache_cap_enforcement():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    ids = [uuid4() for _ in range(30)]
+    ids = [f"db:{uuid4()}" for _ in range(30)]
     for i, eid in enumerate(ids):
         cache._tools[eid] = float(i)
 
@@ -85,11 +85,27 @@ def test_tool_cache_remove_invalid():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    valid_id = uuid4()
-    invalid_id = uuid4()
+    valid_id = f"db:{uuid4()}"
+    invalid_id = f"db:{uuid4()}"
     cache._tools = {valid_id: 100.0, invalid_id: 200.0}
 
     cache.remove_invalid({valid_id})
+
+    assert valid_id in cache._tools
+    assert invalid_id not in cache._tools
+
+
+def test_tool_cache_remove_invalid_normalizes_input_ids():
+    redis = MagicMock()
+    conv_id = uuid4()
+    cache = ToolCache(redis, conv_id)
+
+    valid_uuid = uuid4()
+    valid_id = f"db:{valid_uuid}"
+    invalid_id = f"db:{uuid4()}"
+    cache._tools = {valid_id: 100.0, invalid_id: 200.0}
+
+    cache.remove_invalid({valid_uuid})
 
     assert valid_id in cache._tools
     assert invalid_id not in cache._tools
@@ -100,7 +116,7 @@ def test_tool_cache_update_used():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    eid = uuid4()
+    eid = f"db:{uuid4()}"
     cache._tools = {eid: 100.0}
 
     before = time.time()
@@ -115,8 +131,8 @@ def test_tool_cache_add_tools():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    eid1 = uuid4()
-    eid2 = uuid4()
+    eid1 = f"db:{uuid4()}"
+    eid2 = f"db:{uuid4()}"
     cache._tools = {eid1: 100.0}
 
     cache.add_tools([eid1, eid2])
@@ -143,7 +159,7 @@ def test_tool_cache_redis_unavailable_save():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    cache.add_tools([uuid4()])
+    cache.add_tools([f"db:{uuid4()}"])
     cache.save()
 
 
@@ -163,7 +179,7 @@ def test_tool_cache_clear():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    cache._tools = {uuid4(): 100.0}
+    cache._tools = {f"db:{uuid4()}": 100.0}
     cache.clear()
 
     assert len(cache._tools) == 0
@@ -176,7 +192,7 @@ def test_tool_cache_clear_redis_error():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    cache._tools = {uuid4(): 100.0}
+    cache._tools = {f"db:{uuid4()}": 100.0}
     cache.clear()
 
     assert len(cache._tools) == 0
@@ -187,8 +203,8 @@ def test_tool_cache_get_tool_ids():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    eid1 = uuid4()
-    eid2 = uuid4()
+    eid1 = f"db:{uuid4()}"
+    eid2 = f"db:{uuid4()}"
     cache._tools = {eid1: 100.0, eid2: 200.0}
 
     ids = cache.get_tool_ids()
@@ -212,10 +228,9 @@ def test_tool_cache_enforce_cap_no_eviction_needed():
     conv_id = uuid4()
     cache = ToolCache(redis, conv_id)
 
-    eid = uuid4()
+    eid = f"db:{uuid4()}"
     cache._tools = {eid: 100.0}
 
     cache.enforce_cap(10)
 
     assert eid in cache._tools
-

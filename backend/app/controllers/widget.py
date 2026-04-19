@@ -30,6 +30,7 @@ from ..schemas.widget import (
     WidgetMessagePayload,
 )
 from ..services.agent_chain import AgentExecutor
+from ..services.mcp_runtime import make_db_tool_ref
 from ..services.openai_responses_ws import OpenAIResponsesTransportError, OpenAIResponsesWebSocketSession
 from ..services.agent_service import build_agent_executor_config
 from ..services.billing_service import consume_actions_for_tool_results, get_billing_actions_summary
@@ -110,7 +111,7 @@ class WidgetPreloadResult:
     history: list[dict[str, str]]
     pending_messages: list | None
     pending_input_items: list[dict[str, Any]] | None
-    active_tool_ids: list[UUID] | None
+    active_tool_ids: list[str] | None
     pending_tool_calls: list[dict[str, Any]]
     actions_remaining: int
     hidden_response: WidgetChatResponse | None = None
@@ -121,7 +122,7 @@ class WidgetPreloadResult:
 class WidgetResponsesState:
     messages: list
     input_items: list[dict[str, Any]]
-    active_tool_ids: list[UUID]
+    active_tool_ids: list[str]
     tool_calls: list[dict[str, Any]]
     legacy: bool = False
 
@@ -165,7 +166,7 @@ def serialize_tool_call(call: Any) -> dict[str, Any]:
 
 def _serialize_pending_state(
     input_items: list[dict[str, Any]],
-    active_tool_ids: list[UUID],
+    active_tool_ids: list[str],
     tool_calls: list,
 ) -> str:
     return json.dumps(
@@ -192,15 +193,24 @@ def _parse_responses_input_items(payload: Any) -> list[dict[str, Any]]:
     return input_items
 
 
-def _parse_tool_ids(payload: Any) -> list[UUID]:
+def _normalize_tool_ref(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        raise WidgetStateDecodeError("Pending state contains an invalid tool_id")
+    if ":" in text:
+        return text
+    try:
+        return make_db_tool_ref(UUID(text))
+    except ValueError as exc:
+        raise WidgetStateDecodeError("Pending state contains an invalid tool_id") from exc
+
+
+def _parse_tool_ids(payload: Any) -> list[str]:
     if not isinstance(payload, list):
         raise WidgetStateDecodeError("Pending state tool_ids must be a list")
-    tool_ids: list[UUID] = []
+    tool_ids: list[str] = []
     for tool_id in payload:
-        try:
-            tool_ids.append(UUID(str(tool_id)))
-        except (TypeError, ValueError) as exc:
-            raise WidgetStateDecodeError("Pending state contains an invalid tool_id") from exc
+        tool_ids.append(_normalize_tool_ref(tool_id))
     return tool_ids
 
 
@@ -294,7 +304,7 @@ def deserialize_pending_state(state: str) -> WidgetResponsesState:
         return WidgetResponsesState(
             messages=messages,
             input_items=OpenAIResponsesWebSocketSession.messages_to_input_items(messages),
-            active_tool_ids=[UUID(tool_id) for tool_id in payload.get("tool_ids") or []],
+            active_tool_ids=[_normalize_tool_ref(tool_id) for tool_id in payload.get("tool_ids") or []],
             tool_calls=tool_calls,
             legacy=True,
         )
@@ -1238,6 +1248,13 @@ async def widget_session(
                 )
 
             try:
+                if hasattr(executor, "set_mcp_auth_bundles"):
+                    executor.set_mcp_auth_bundles(
+                        {
+                            connection_id: bundle.model_dump(by_alias=True)
+                            for connection_id, bundle in (payload.mcp_auth_bundles or {}).items()
+                        }
+                    )
                 execution_started_at = time.perf_counter()
                 result = await executor.run_step(
                     user_message=payload.message,

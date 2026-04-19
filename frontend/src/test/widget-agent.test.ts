@@ -23,6 +23,7 @@ type WidgetConfig = {
   }
   headers?: Record<string, { source: "localStorage" | "sessionStorage" | "cookies"; key: string }>
   isWidgetHidden?: boolean
+  mcpConnections?: Array<{ id: string; name: string; authMode: "none" | "static_headers" | "token_exchange"; tokenExchangePath?: string | null }>
   sendCookiesWithRequests?: boolean
   widgetAppearanceMode?: "infer" | "custom"
   widgetTheme?: {
@@ -118,6 +119,7 @@ function createConfig(overrides: WidgetConfig = {}): Required<WidgetConfig> {
     auth: { mode: "none" },
     headers: {},
     isWidgetHidden: false,
+    mcpConnections: [],
     sendCookiesWithRequests: false,
     securityDisclosureEnabled: true,
     widgetAppearanceMode: "infer",

@@ -11,6 +11,7 @@ import { useAgentQuery } from "@/queries/use-agent"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
+import { useMcpConnectionsQuery } from "@/queries/use-mcp-connections"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import type { AuthConfig, FeatureWithTools } from "@/types"
 
@@ -359,6 +360,7 @@ const getBackendToolCount = (feature: FeatureWithTools) => feature.backendToolCo
 
 export const DashboardPanel = () => {
   const configQuery = useConfigQuery()
+  const mcpConnectionsQuery = useMcpConnectionsQuery()
   const featuresQuery = useFeaturesQuery("")
   const activityQuery = useActivitySummaryQuery()
   const agentQuery = useAgentQuery()
@@ -372,15 +374,16 @@ export const DashboardPanel = () => {
 
   const isMissingAgent = agentQuery.error instanceof Error && agentQuery.error.message === agentNotFoundMessage
   const hasAgent = Boolean(agentQuery.data)
-  const hasSetupError = configQuery.isError || featuresQuery.isError || (agentQuery.isError && !isMissingAgent)
-  const isSetupLoading = configQuery.isPending || featuresQuery.isPending || agentQuery.isPending
+  const hasSetupError = configQuery.isError || mcpConnectionsQuery.isError || featuresQuery.isError || (agentQuery.isError && !isMissingAgent)
+  const isSetupLoading = configQuery.isPending || mcpConnectionsQuery.isPending || featuresQuery.isPending || agentQuery.isPending
   const environmentCount = getConfiguredEnvironmentCount(config?.baseUrl)
   const headerEntries = Object.entries(config?.headers ?? {})
   const headerCount = headerEntries.length
+  const mcpConnectionCount = mcpConnectionsQuery.data?.length ?? 0
   const sendCookiesWithRequests = Boolean(
     config?.sendCookiesWithRequests || (config?.auth as { mode?: string } | undefined)?.mode === "browserCookies"
   )
-  const authReady = isAuthorizationReady(config?.auth, sendCookiesWithRequests)
+  const authReady = isAuthorizationReady(config?.auth, sendCookiesWithRequests) || mcpConnectionCount > 0
   const featureCount = features.length
   const configuredActionCount = features.reduce((total, feature) => total + feature.toolCount, 0)
   const backendAuthRelevant = features.some((feature) => getBackendToolCount(feature) > 0)
@@ -449,7 +452,9 @@ export const DashboardPanel = () => {
           ? "Add auth so backend tools can run."
           : "Optional until you add backend tools."
         : authReady
-          ? headerCount > 0
+          ? mcpConnectionCount > 0
+            ? `Auth is ready. ${mcpConnectionCount} MCP connection${mcpConnectionCount === 1 ? "" : "s"} ${mcpConnectionCount === 1 ? "is" : "are"} set.`
+            : headerCount > 0
             ? `Auth is ready. ${headerCount} extra header${headerCount === 1 ? "" : "s"} ${headerCount === 1 ? "is" : "are"} set.`
             : "Auth is ready."
           : backendAuthRelevant
@@ -503,7 +508,9 @@ export const DashboardPanel = () => {
       valueStyle: "status",
       tone: authReady ? "done" : backendAuthRelevant ? "current" : "optional",
       helper: authReady
-        ? headerCount > 0
+        ? mcpConnectionCount > 0
+          ? `${mcpConnectionCount} MCP connection${mcpConnectionCount === 1 ? "" : "s"} ready.`
+          : headerCount > 0
           ? `${headerCount} extra header${headerCount === 1 ? "" : "s"} set.`
           : sendCookiesWithRequests
             ? "Cookies will be sent."

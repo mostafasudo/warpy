@@ -9,6 +9,7 @@ import { useAgentQuery } from "@/queries/use-agent"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
+import { useMcpConnectionsQuery } from "@/queries/use-mcp-connections"
 import { useNavigationStore } from "@/stores/navigation"
 
 jest.mock("@/queries/use-config", () => ({
@@ -31,11 +32,16 @@ jest.mock("@/queries/use-knowledge-base-status", () => ({
   useKnowledgeBaseStatusQuery: jest.fn(),
 }))
 
+jest.mock("@/queries/use-mcp-connections", () => ({
+  useMcpConnectionsQuery: jest.fn(),
+}))
+
 const mockedUseConfigQuery = useConfigQuery as jest.Mock
 const mockedUseFeaturesQuery = useFeaturesQuery as jest.Mock
 const mockedUseActivitySummaryQuery = useActivitySummaryQuery as jest.Mock
 const mockedUseAgentQuery = useAgentQuery as jest.Mock
 const mockedUseKnowledgeBaseStatusQuery = useKnowledgeBaseStatusQuery as jest.Mock
+const mockedUseMcpConnectionsQuery = useMcpConnectionsQuery as jest.Mock
 
 const makeQuery = (overrides: Record<string, unknown> = {}) => ({
   data: null,
@@ -75,18 +81,21 @@ const setOverviewMocks = ({
   }),
   agent = makeQuery({ data: { id: "agent-1", userId: "user-1" } }),
   knowledgeBase = makeQuery({ data: { enabled: false, documentCount: 0, readyDocumentCount: 0 } }),
+  mcpConnections = makeQuery({ data: [] }),
 }: {
   config?: Record<string, unknown>
   features?: Record<string, unknown>
   activity?: Record<string, unknown>
   agent?: Record<string, unknown>
   knowledgeBase?: Record<string, unknown>
+  mcpConnections?: Record<string, unknown>
 } = {}) => {
   mockedUseConfigQuery.mockReturnValue(config)
   mockedUseFeaturesQuery.mockReturnValue(features)
   mockedUseActivitySummaryQuery.mockReturnValue(activity)
   mockedUseAgentQuery.mockReturnValue(agent)
   mockedUseKnowledgeBaseStatusQuery.mockReturnValue(knowledgeBase)
+  mockedUseMcpConnectionsQuery.mockReturnValue(mcpConnections)
 }
 
 describe("DashboardPanel", () => {
@@ -212,6 +221,28 @@ describe("DashboardPanel", () => {
 
     expect(screen.queryByText("Add auth for backend tools next")).toBeNull()
     expect(screen.getByText("Authorization is set.")).not.toBeNull()
+  })
+
+  it("treats MCP connections as satisfying auth setup", () => {
+    setOverviewMocks({
+      config: makeQuery({
+        data: makeConfigData({
+          baseUrl: { production: "https://api.example.com" },
+          headers: { tenant: { source: "cookies", key: "tenant_id" } },
+        }),
+      }),
+      mcpConnections: makeQuery({
+        data: [{ id: "conn-1", name: "Stripe MCP", authMode: "none", serverUrl: "https://mcp.example.com" }],
+      }),
+      features: makeQuery({
+        data: [makeFeature({ toolCount: 1, backendToolCount: 1 })],
+      }),
+    })
+
+    render(<DashboardPanel />)
+
+    expect(screen.queryByText("Add auth for backend tools next")).toBeNull()
+    expect(screen.getByText("1 MCP connection ready.")).not.toBeNull()
   })
 
   it("pushes action mapping when features exist without mapped actions", async () => {

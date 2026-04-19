@@ -14,6 +14,7 @@ from app.services.agent_tools import (
     create_js_exec_tool,
     create_read_page_tool,
 )
+from app.services.mcp_runtime import make_db_tool_ref
 
 
 class DummyFeature:
@@ -123,7 +124,7 @@ def test_create_find_tools_tool_formats_results(monkeypatch: pytest.MonkeyPatch)
 
     tool = create_find_tools_tool(session, "user_1")
     response = json.loads(tool.invoke("order"))
-    assert response[0]["id"] == str(tool_record.id)
+    assert response[0]["id"] == make_db_tool_ref(tool_record.id)
     assert response[0]["toolType"] == "backend"
     assert response[0]["name"] == "createOrder"
     assert response[0]["description"] == "Create order"
@@ -174,7 +175,7 @@ def test_create_find_tools_tool_ignores_disabled(monkeypatch: pytest.MonkeyPatch
     tool = create_find_tools_tool(session, "user_1")
     response = json.loads(tool.invoke("anything"))
     assert len(response) == 1
-    assert response[0]["id"] == str(enabled.id)
+    assert response[0]["id"] == make_db_tool_ref(enabled.id)
 
 
 def test_create_backend_tool_uses_session_provider(monkeypatch: pytest.MonkeyPatch):

@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langsmith.run_helpers import trace as langsmith_trace
 from redis import Redis
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..core.config import get_settings
 from ..core.agent_custom_system_prompt import (
@@ -27,11 +27,13 @@ from ..schemas.widget import (
     WIDGET_SUGGESTION_MAX_COUNT,
     WIDGET_SUGGESTION_MAX_LENGTH,
 )
-from .openai_responses_ws import OpenAIResponsesWebSocketSession
+from .openai_responses_ws import OpenAIResponsesTransportError, OpenAIResponsesWebSocketSession
 from .agent_execution import execute_backend_tool, get_enabled_tool
 from .agent_schema import SchemaFactory, serialize_args
-from .agent_tools import ToolSnapshot, create_find_elements_tool, create_find_tools_tool, create_frontend_actions_tool, create_js_exec_tool, create_read_page_tool, get_agent_tools
+from .agent_tools import ToolSnapshot, create_find_elements_tool, create_find_tools_tool, create_frontend_actions_tool, create_js_exec_tool, create_mcp_tool, create_read_page_tool, get_agent_tools
 from .context_budget import truncate_tool_result
+from .embedding_service import search_similar_tools
+from .mcp_runtime import McpAuthExpiredError, McpStepContext, is_db_tool_ref, is_mcp_tool_ref, make_db_tool_ref, parse_db_tool_ref
 from .tool_cache import ToolCache
 
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
@@ -164,7 +166,15 @@ class StepResult:
     done: bool = False
     messages: list[BaseMessage] = field(default_factory=list)
     responses_input_items: list[dict[str, Any]] = field(default_factory=list)
-    active_tool_ids: list[UUID] = field(default_factory=list)
+    active_tool_ids: list[str] = field(default_factory=list)
+
+
+class _NullMcpContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
 
 
 class AgentExecutor:
@@ -182,6 +192,7 @@ class AgentExecutor:
         custom_user_system_prompt: str = DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
         responses_transport: OpenAIResponsesWebSocketSession | None = None,
         session_provider: Callable[[], ContextManager[Session]] | None = None,
+        mcp_auth_bundles: dict[str, dict[str, Any]] | None = None,
     ):
         self.session = session
         self.session_provider = session_provider
@@ -205,8 +216,10 @@ class AgentExecutor:
         )
         self.responses_transport = responses_transport
         self._model = llm_config.chat_model
-        self.active_tool_ids: list[UUID] = []
+        self.active_tool_ids: list[str] = []
         self._tool_cache: ToolCache | None = None
+        self._mcp_step_context: McpStepContext | None = None
+        self._mcp_auth_bundles = mcp_auth_bundles or {}
         if conversation_id:
             self._tool_cache = ToolCache(redis_client, conversation_id)
 
@@ -232,30 +245,50 @@ class AgentExecutor:
         raw = metadata.get("warpy_tool")
         return raw if isinstance(raw, dict) else None
 
-    def _parse_tool_ids_from_response(self, content: str) -> list[UUID]:
+    def set_mcp_auth_bundles(self, bundles: dict[str, dict[str, Any]] | None) -> None:
+        self._mcp_auth_bundles = bundles or {}
+
+    def _parse_tool_ids_from_response(self, content: str) -> list[str]:
         try:
             data = json.loads(content)
             if isinstance(data, list):
-                return [UUID(item["id"]) for item in data if "id" in item]
-        except (json.JSONDecodeError, ValueError, KeyError):
+                refs: list[str] = []
+                for item in data:
+                    if "id" not in item:
+                        continue
+                    raw = str(item["id"]).strip()
+                    if not raw:
+                        continue
+                    if ":" in raw:
+                        refs.append(raw)
+                        continue
+                    try:
+                        refs.append(make_db_tool_ref(UUID(raw)))
+                    except ValueError:
+                        refs.append(raw)
+                return refs
+        except (json.JSONDecodeError, ValueError, KeyError, TypeError):
             return []
         return []
 
-    def _get_valid_tool_ids(self) -> set[UUID]:
+    def _get_valid_tool_ids(self) -> set[str]:
         if not self.active_tool_ids:
             return set()
-        return self._with_session(
+        db_ids = [tool_id for tool_id in (parse_db_tool_ref(tool_ref) for tool_ref in self.active_tool_ids) if tool_id is not None]
+        valid_db_refs = self._with_session(
             lambda session: {
-                tool.id
+                make_db_tool_ref(tool.id)
                 for tool in session.scalars(
                     select(Tool).where(
-                        Tool.id.in_(self.active_tool_ids),
+                        Tool.id.in_(db_ids),
                         Tool.user_id == self.user_id,
                         Tool.agent_enabled.is_(True)
                     )
                 ).all()
             }
-        )
+        ) if db_ids else set()
+        valid_mcp_refs = {tool_ref for tool_ref in self.active_tool_ids if is_mcp_tool_ref(tool_ref)}
+        return valid_db_refs | valid_mcp_refs
 
     def _sync_cache(self) -> None:
         if not self._tool_cache:
@@ -269,7 +302,7 @@ class AgentExecutor:
         self._tool_cache.remove_invalid(valid_ids)
         self.active_tool_ids = [tool_id for tool_id in self.active_tool_ids if tool_id in valid_ids]
 
-    def _update_cache_after_discovery(self, new_ids: list[UUID]) -> None:
+    def _update_cache_after_discovery(self, new_ids: list[str]) -> None:
         if not self._tool_cache:
             return
         self._tool_cache.add_tools(new_ids)
@@ -303,11 +336,20 @@ class AgentExecutor:
         tools.extend(get_agent_tools(
             self.session,
             self.user_id,
-            self.active_tool_ids,
+            [tool_id for tool_id in (parse_db_tool_ref(tool_ref) for tool_ref in self.active_tool_ids) if tool_id is not None],
             self.schema_factory,
             conversation_id=self.conversation_id,
             **get_agent_tools_kwargs,
         ))
+        return tools
+
+    async def _get_tools_async(self):
+        tools = self._get_tools()
+        if not self._mcp_step_context:
+            return tools
+        snapshots = await self._mcp_step_context.get_snapshots_for_refs(self.active_tool_ids)
+        for snapshot in snapshots:
+            tools.append(create_mcp_tool(snapshot, self.schema_factory))
         return tools
 
     async def _invoke_main_agent(
@@ -363,7 +405,10 @@ class AgentExecutor:
     def _get_tool_by_name(self, tool_name: str) -> Tool | ToolSnapshot | None:
         def resolve(session: Session) -> Tool | ToolSnapshot | None:
             for tool_id in self.active_tool_ids:
-                tool = session.get(Tool, tool_id)
+                parsed_id = parse_db_tool_ref(tool_id)
+                if parsed_id is None:
+                    continue
+                tool = session.get(Tool, parsed_id)
                 if tool and tool.agent_enabled:
                     tool_spec = tool.tool or {}
                     function_spec = tool_spec.get("function", {})
@@ -375,6 +420,75 @@ class AgentExecutor:
         if self.session is None and self.session_provider is None:
             return None
         return self._with_session(resolve)
+
+    def _discover_db_tools(self, query: str) -> list[dict[str, Any]]:
+        def load(session: Session) -> list[dict[str, Any]]:
+            tool_ids = search_similar_tools(session, self.user_id, query)
+            if not tool_ids:
+                return []
+            tools = session.scalars(
+                select(Tool)
+                .where(
+                    Tool.id.in_(tool_ids),
+                    Tool.user_id == self.user_id,
+                    Tool.agent_enabled.is_(True),
+                )
+                .options(selectinload(Tool.feature))
+            ).all()
+            results: list[dict[str, Any]] = []
+            for tool in tools:
+                tool_spec = tool.tool or {}
+                function = tool_spec.get("function", {})
+                is_backend = getattr(tool, "tool_type", "backend") == "backend"
+                results.append(
+                    {
+                        "id": make_db_tool_ref(tool.id),
+                        "toolType": "backend" if is_backend else "frontend",
+                        "method": tool.method.value if is_backend and tool.method else None,
+                        "path": tool.path if is_backend else None,
+                        "name": function.get("name", ""),
+                        "description": function.get("description", ""),
+                        "feature": getattr(tool.feature, "name", ""),
+                    }
+                )
+            return results
+
+        return self._with_session(load)
+
+    async def _run_find_tools(self, query: str) -> str:
+        results = self._discover_db_tools(query)
+        if self._mcp_step_context is not None:
+            try:
+                results.extend(snapshot.to_discovery_result() for snapshot in await self._mcp_step_context.search_tools(query))
+            except McpAuthExpiredError as error:
+                raise OpenAIResponsesTransportError(
+                    code="MCP_AUTH_EXPIRED",
+                    message="MCP authorization expired. Refresh connection headers and retry.",
+                    retriable=True,
+                ) from error
+        return json.dumps(results, indent=2)
+
+    async def _get_mcp_snapshot(self, tool_ref: str):
+        if not self._mcp_step_context:
+            return None
+        snapshots = await self._mcp_step_context.get_snapshots_for_refs([tool_ref])
+        return snapshots[0] if snapshots else None
+
+    async def _execute_mcp_tool(self, tool_ref: str, tool_args: dict[str, Any]) -> str:
+        snapshot = await self._get_mcp_snapshot(tool_ref)
+        if snapshot is None or not self._mcp_step_context:
+            return json.dumps({"error": "MCP tool not found"}, indent=2)
+        serialized = serialize_args(tool_args)
+        filtered = {key: value for key, value in serialized.items() if value is not None}
+        try:
+            result = await self._mcp_step_context.call_tool(snapshot, filtered)
+        except McpAuthExpiredError as error:
+            raise OpenAIResponsesTransportError(
+                code="MCP_AUTH_EXPIRED",
+                message="MCP authorization expired. Refresh connection headers and retry.",
+                retriable=True,
+            ) from error
+        return json.dumps(result, indent=2)
 
     def _build_messages_from_history(
         self,
@@ -670,7 +784,7 @@ Keep it brief and friendly."""
         conversation_history: list[dict[str, str]],
         tool_results: list[ToolResultPayload] | None = None,
         pending_messages: list[BaseMessage] | None = None,
-        active_tool_ids: list[UUID] | None = None,
+        active_tool_ids: list[str] | None = None,
         pending_input_items: list[dict[str, Any]] | None = None,
     ) -> StepResult:
         if active_tool_ids:
@@ -711,242 +825,269 @@ Keep it brief and friendly."""
                     if self.responses_transport:
                         responses_input_items.extend(self.responses_transport.message_to_input_items(system_note))
 
-        max_iterations = llm_config.max_iterations
-        iteration = 0
-        
-        while iteration < max_iterations:
-            iteration += 1
-            tools = self._get_tools()
-            runtime_messages, responses_input_items, response = await self._invoke_main_agent(
-                runtime_messages,
-                tools,
-                responses_input_items if self.responses_transport else None,
+        context = (
+            McpStepContext(
+                session_provider=self.session_provider,
+                user_id=self.user_id,
+                auth_bundles=self._mcp_auth_bundles,
             )
-            messages.append(response)
-            runtime_messages.append(response)
+            if self.session_provider is not None
+            else None
+        )
 
-            if not response.tool_calls:
-                final_response = self._sanitize_user_facing_kb_language(
-                    response.content or "",
-                    used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+        async with (context or _NullMcpContext()) as mcp_context:
+            self._mcp_step_context = None if isinstance(mcp_context, _NullMcpContext) else mcp_context
+            if self._mcp_step_context is not None:
+                try:
+                    valid_mcp_refs = await self._mcp_step_context.validate_refs(
+                        {tool_ref for tool_ref in self.active_tool_ids if is_mcp_tool_ref(tool_ref)}
+                    )
+                    valid_db_refs = {tool_ref for tool_ref in self._get_valid_tool_ids() if is_db_tool_ref(tool_ref)}
+                    self.active_tool_ids = [
+                        tool_ref
+                        for tool_ref in self.active_tool_ids
+                        if tool_ref in valid_db_refs or tool_ref in valid_mcp_refs
+                    ]
+                except McpAuthExpiredError as error:
+                    raise OpenAIResponsesTransportError(
+                        code="MCP_AUTH_EXPIRED",
+                        message="MCP authorization expired. Refresh connection headers and retry.",
+                        retriable=True,
+                    ) from error
+
+            max_iterations = llm_config.max_iterations
+            iteration = 0
+
+            while iteration < max_iterations:
+                iteration += 1
+                tools = await self._get_tools_async()
+                runtime_messages, responses_input_items, response = await self._invoke_main_agent(
+                    runtime_messages,
+                    tools,
+                    responses_input_items if self.responses_transport else None,
                 )
-                suggestions = await self._maybe_generate_widget_suggestions(messages, final_response)
-                return StepResult(
-                    response=final_response,
-                    suggestions=suggestions,
-                    done=True,
-                    messages=messages,
-                    responses_input_items=responses_input_items,
-                    active_tool_ids=self.active_tool_ids
-                )
+                messages.append(response)
+                runtime_messages.append(response)
 
-            pending_tool_calls: list[ToolCallPayload] = []
+                if not response.tool_calls:
+                    final_response = self._sanitize_user_facing_kb_language(
+                        response.content or "",
+                        used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                    )
+                    suggestions = await self._maybe_generate_widget_suggestions(messages, final_response)
+                    return StepResult(
+                        response=final_response,
+                        suggestions=suggestions,
+                        done=True,
+                        messages=messages,
+                        responses_input_items=responses_input_items,
+                        active_tool_ids=self.active_tool_ids
+                    )
 
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                
-                if tool_name in DISCOVERY_TOOL_NAMES:
-                    tool = next((t for t in tools if t.name in DISCOVERY_TOOL_NAMES), None)
-                    if tool:
+                pending_tool_calls: list[ToolCallPayload] = []
+
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+
+                    if tool_name in DISCOVERY_TOOL_NAMES:
                         try:
-                            tool_result = tool.invoke(tool_args)
+                            tool_result = await self._run_find_tools(tool_args.get("query", "") if isinstance(tool_args, dict) else "")
                             new_ids = self._parse_tool_ids_from_response(tool_result)
-                            added_ids: list[UUID] = []
+                            added_ids: list[str] = []
                             for tool_id in new_ids:
                                 if tool_id not in self.active_tool_ids:
                                     self.active_tool_ids.append(tool_id)
                                     added_ids.append(tool_id)
                             if added_ids:
                                 self._update_cache_after_discovery(added_ids)
+                        except OpenAIResponsesTransportError:
+                            raise
                         except Exception as error:
                             log_error("AgentExecutor", "run_step", "find_tools failed", exc=error)
                             tool_result = f"Error: {str(error)}"
-                    else:
-                        tool_result = "Tool not found"
-                    tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
-                    messages.append(tool_message)
-                    runtime_messages.append(tool_message)
-                    if self.responses_transport:
-                        responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
-                elif tool_name in KNOWLEDGE_BASE_TOOL_NAMES:
-                    tool = next((t for t in tools if t.name in KNOWLEDGE_BASE_TOOL_NAMES), None)
-                    if tool:
-                        try:
-                            tool_result = tool.invoke(tool_args)
-                        except Exception as error:
-                            log_error("AgentExecutor", "run_step", "search_knowledge_base failed", exc=error)
-                            tool_result = f"Error: {str(error)}"
-                    else:
-                        tool_result = "Tool not found"
-                    tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
-                    messages.append(tool_message)
-                    runtime_messages.append(tool_message)
-                    if self.responses_transport:
-                        responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
-                elif tool_name == "read_page":
-                    try:
-                        args = tool_args if isinstance(tool_args, dict) else {}
-                        pending_tool_calls.append(ToolCallPayload(
-                            id=tool_call["id"],
-                            type="read_page",
-                            name=tool_name,
-                            goal="Reading page",
-                            readPageOptions=args,
-                        ))
-                    except Exception as error:
-                        log_error("AgentExecutor", "run_step", "read_page args invalid", exc=error)
-                        tool_message = ToolMessage(
-                            content="read_page args invalid",
-                            tool_call_id=tool_call["id"]
-                        )
+                        tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
                         messages.append(tool_message)
                         runtime_messages.append(tool_message)
                         if self.responses_transport:
                             responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
-                elif tool_name == "find_elements":
-                    try:
-                        args = tool_args if isinstance(tool_args, dict) else {}
-                        pending_tool_calls.append(ToolCallPayload(
-                            id=tool_call["id"],
-                            type="find_elements",
-                            name=tool_name,
-                            findQuery=args.get("query", ""),
-                        ))
-                    except Exception as error:
-                        log_error("AgentExecutor", "run_step", "find_elements args invalid", exc=error)
-                        tool_message = ToolMessage(
-                            content="find_elements args invalid",
-                            tool_call_id=tool_call["id"]
-                        )
-                        messages.append(tool_message)
-                        runtime_messages.append(tool_message)
-                        if self.responses_transport:
-                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
-                elif tool_name == "frontend":
-                    try:
-                        pending_tool_calls.append(ToolCallPayload(
-                            id=tool_call["id"],
-                            type="frontend",
-                            name=tool_name,
-                            goal=tool_args.get("goal") if isinstance(tool_args, dict) else None,
-                            actions=tool_args.get("actions", []) if isinstance(tool_args, dict) else [],
-                        ))
-                    except Exception as error:
-                        log_error("AgentExecutor", "run_step", "frontend args invalid", exc=error)
-                        tool_message = ToolMessage(
-                            content="frontend args invalid",
-                            tool_call_id=tool_call["id"]
-                        )
-                        messages.append(tool_message)
-                        runtime_messages.append(tool_message)
-                        if self.responses_transport:
-                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
-                elif tool_name == "js_exec":
-                    try:
-                        args = tool_args if isinstance(tool_args, dict) else {}
-                        pending_tool_calls.append(ToolCallPayload(
-                            id=tool_call["id"],
-                            type="js_exec",
-                            name=tool_name,
-                            jsCode=args.get("code", ""),
-                        ))
-                    except Exception as error:
-                        log_error("AgentExecutor", "run_step", "js_exec args invalid", exc=error)
-                        tool_message = ToolMessage(
-                            content="js_exec args invalid",
-                            tool_call_id=tool_call["id"]
-                        )
-                        messages.append(tool_message)
-                        runtime_messages.append(tool_message)
-                        if self.responses_transport:
-                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
-                else:
-                    tool = next((item for item in tools if item.name == tool_name), None)
-                    tool_metadata = self._extract_tool_metadata(tool)
-                    fallback_tool = self._get_tool_by_name(tool_name) if tool is None else None
-                    if tool_metadata or fallback_tool:
-                        resolved_tool_id: UUID | None = None
-                        if tool_metadata and tool_metadata.get("id"):
+                    elif tool_name in KNOWLEDGE_BASE_TOOL_NAMES:
+                        tool = next((t for t in tools if t.name in KNOWLEDGE_BASE_TOOL_NAMES), None)
+                        if tool:
                             try:
-                                resolved_tool_id = UUID(str(tool_metadata["id"]))
-                            except (TypeError, ValueError):
-                                resolved_tool_id = None
-                        elif fallback_tool:
-                            resolved_tool_id = fallback_tool.id
-                        if resolved_tool_id is None:
-                            tool_message = ToolMessage(
-                                content=f"Tool '{tool_name}' has no valid identifier",
-                                tool_call_id=tool_call["id"],
-                            )
+                                tool_result = tool.invoke(tool_args)
+                            except Exception as error:
+                                log_error("AgentExecutor", "run_step", "search_knowledge_base failed", exc=error)
+                                tool_result = f"Error: {str(error)}"
+                        else:
+                            tool_result = "Tool not found"
+                        tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
+                        messages.append(tool_message)
+                        runtime_messages.append(tool_message)
+                        if self.responses_transport:
+                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                    elif tool_name == "read_page":
+                        try:
+                            args = tool_args if isinstance(tool_args, dict) else {}
+                            pending_tool_calls.append(ToolCallPayload(
+                                id=tool_call["id"],
+                                type="read_page",
+                                name=tool_name,
+                                goal="Reading page",
+                                readPageOptions=args,
+                            ))
+                        except Exception as error:
+                            log_error("AgentExecutor", "run_step", "read_page args invalid", exc=error)
+                            tool_message = ToolMessage(content="read_page args invalid", tool_call_id=tool_call["id"])
+                            messages.append(tool_message)
+                            runtime_messages.append(tool_message)
+                            if self.responses_transport:
+                                responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                    elif tool_name == "find_elements":
+                        try:
+                            args = tool_args if isinstance(tool_args, dict) else {}
+                            pending_tool_calls.append(ToolCallPayload(
+                                id=tool_call["id"],
+                                type="find_elements",
+                                name=tool_name,
+                                findQuery=args.get("query", ""),
+                            ))
+                        except Exception as error:
+                            log_error("AgentExecutor", "run_step", "find_elements args invalid", exc=error)
+                            tool_message = ToolMessage(content="find_elements args invalid", tool_call_id=tool_call["id"])
+                            messages.append(tool_message)
+                            runtime_messages.append(tool_message)
+                            if self.responses_transport:
+                                responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                    elif tool_name == "frontend":
+                        try:
+                            pending_tool_calls.append(ToolCallPayload(
+                                id=tool_call["id"],
+                                type="frontend",
+                                name=tool_name,
+                                goal=tool_args.get("goal") if isinstance(tool_args, dict) else None,
+                                actions=tool_args.get("actions", []) if isinstance(tool_args, dict) else [],
+                            ))
+                        except Exception as error:
+                            log_error("AgentExecutor", "run_step", "frontend args invalid", exc=error)
+                            tool_message = ToolMessage(content="frontend args invalid", tool_call_id=tool_call["id"])
+                            messages.append(tool_message)
+                            runtime_messages.append(tool_message)
+                            if self.responses_transport:
+                                responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                    elif tool_name == "js_exec":
+                        try:
+                            args = tool_args if isinstance(tool_args, dict) else {}
+                            pending_tool_calls.append(ToolCallPayload(
+                                id=tool_call["id"],
+                                type="js_exec",
+                                name=tool_name,
+                                jsCode=args.get("code", ""),
+                            ))
+                        except Exception as error:
+                            log_error("AgentExecutor", "run_step", "js_exec args invalid", exc=error)
+                            tool_message = ToolMessage(content="js_exec args invalid", tool_call_id=tool_call["id"])
+                            messages.append(tool_message)
+                            runtime_messages.append(tool_message)
+                            if self.responses_transport:
+                                responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                    else:
+                        tool = next((item for item in tools if item.name == tool_name), None)
+                        tool_metadata = self._extract_tool_metadata(tool)
+                        fallback_tool = self._get_tool_by_name(tool_name) if tool is None else None
+                        if tool_metadata and tool_metadata.get("toolType") == "mcp":
+                            try:
+                                tool_result = await self._execute_mcp_tool(str(tool_metadata.get("ref") or ""), tool_args if isinstance(tool_args, dict) else {})
+                            except OpenAIResponsesTransportError:
+                                raise
+                            except Exception as error:
+                                log_error("AgentExecutor", "run_step", "MCP tool execution failed", exc=error, tool_name=tool_name)
+                                tool_result = f"Error executing tool: {str(error)}"
+                            tool_message = ToolMessage(content=self._truncate_tool_content(tool_result), tool_call_id=tool_call["id"])
                             messages.append(tool_message)
                             runtime_messages.append(tool_message)
                             if self.responses_transport:
                                 responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
                             continue
-                        resolved_tool_type = tool_metadata.get("toolType", "backend") if tool_metadata else getattr(fallback_tool, "tool_type", "backend")
-                        fallback_method = getattr(fallback_tool, "method", None)
-                        resolved_method = tool_metadata.get("method") if tool_metadata else (fallback_method.value if fallback_method else None)
-                        resolved_path = tool_metadata.get("path") if tool_metadata else getattr(fallback_tool, "path", None)
-                        serialized = serialize_args(tool_args)
-                        filtered = {k: v for k, v in serialized.items() if v is not None}
-                        if resolved_tool_type == "frontend":
+                        if tool_metadata or fallback_tool:
+                            resolved_tool_id: UUID | None = None
+                            if tool_metadata and tool_metadata.get("id"):
+                                try:
+                                    resolved_tool_id = UUID(str(tool_metadata["id"]))
+                                except (TypeError, ValueError):
+                                    resolved_tool_id = None
+                            elif fallback_tool:
+                                resolved_tool_id = fallback_tool.id
+                            if resolved_tool_id is None:
+                                tool_message = ToolMessage(
+                                    content=f"Tool '{tool_name}' has no valid identifier",
+                                    tool_call_id=tool_call["id"],
+                                )
+                                messages.append(tool_message)
+                                runtime_messages.append(tool_message)
+                                if self.responses_transport:
+                                    responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                                continue
+                            resolved_tool_type = tool_metadata.get("toolType", "backend") if tool_metadata else getattr(fallback_tool, "tool_type", "backend")
+                            fallback_method = getattr(fallback_tool, "method", None)
+                            resolved_method = tool_metadata.get("method") if tool_metadata else (fallback_method.value if fallback_method else None)
+                            resolved_path = tool_metadata.get("path") if tool_metadata else getattr(fallback_tool, "path", None)
+                            serialized = serialize_args(tool_args)
+                            filtered = {k: v for k, v in serialized.items() if v is not None}
+                            if resolved_tool_type == "frontend":
+                                pending_tool_calls.append(ToolCallPayload(
+                                    id=tool_call["id"],
+                                    type="frontend",
+                                    toolId=resolved_tool_id,
+                                    name=tool_name,
+                                    params=filtered,
+                                ))
+                                continue
                             pending_tool_calls.append(ToolCallPayload(
                                 id=tool_call["id"],
-                                type="frontend",
+                                type="backend",
                                 toolId=resolved_tool_id,
                                 name=tool_name,
-                                params=filtered,
+                                method=resolved_method,
+                                path=resolved_path,
+                                params=filtered.get("params", {}),
+                                query=filtered.get("query", {}),
+                                body=filtered.get("body", {}),
+                                headers=filtered.get("headers", {})
                             ))
-                            continue
-                        pending_tool_calls.append(ToolCallPayload(
-                            id=tool_call["id"],
-                            type="backend",
-                            toolId=resolved_tool_id,
-                            name=tool_name,
-                            method=resolved_method,
-                            path=resolved_path,
-                            params=filtered.get("params", {}),
-                            query=filtered.get("query", {}),
-                            body=filtered.get("body", {}),
-                            headers=filtered.get("headers", {})
-                        ))
-                    else:
-                        tool_message = ToolMessage(
-                            content=f"Tool '{tool_name}' not found",
-                            tool_call_id=tool_call["id"]
-                        )
-                        messages.append(tool_message)
-                        runtime_messages.append(tool_message)
-                        if self.responses_transport:
-                            responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
+                        else:
+                            tool_message = ToolMessage(content=f"Tool '{tool_name}' not found", tool_call_id=tool_call["id"])
+                            messages.append(tool_message)
+                            runtime_messages.append(tool_message)
+                            if self.responses_transport:
+                                responses_input_items.extend(self.responses_transport.message_to_input_items(tool_message))
 
-            if pending_tool_calls:
-                return StepResult(
-                    tool_calls=pending_tool_calls,
-                    done=False,
-                    messages=messages,
-                    responses_input_items=responses_input_items,
-                    active_tool_ids=self.active_tool_ids
-                )
+                if pending_tool_calls:
+                    return StepResult(
+                        tool_calls=pending_tool_calls,
+                        done=False,
+                        messages=messages,
+                        responses_input_items=responses_input_items,
+                        active_tool_ids=self.active_tool_ids
+                    )
 
-        log_info("AgentExecutor", "run_step", "Max iterations reached")
-        user_input = user_message or ""
-        if not user_input and conversation_history:
-            for msg in reversed(conversation_history):
-                if msg["role"] == "user":
-                    user_input = msg["content"]
-                    break
-        max_iter_response = await self._generate_max_iterations_response(user_input)
-        suggestions = await self._maybe_generate_widget_suggestions(messages, max_iter_response)
-        return StepResult(
-            response=max_iter_response,
-            suggestions=suggestions,
-            done=True,
-            messages=messages,
-            responses_input_items=responses_input_items,
-            active_tool_ids=self.active_tool_ids
-        )
+            log_info("AgentExecutor", "run_step", "Max iterations reached")
+            user_input = user_message or ""
+            if not user_input and conversation_history:
+                for msg in reversed(conversation_history):
+                    if msg["role"] == "user":
+                        user_input = msg["content"]
+                        break
+            max_iter_response = await self._generate_max_iterations_response(user_input)
+            suggestions = await self._maybe_generate_widget_suggestions(messages, max_iter_response)
+            return StepResult(
+                response=max_iter_response,
+                suggestions=suggestions,
+                done=True,
+                messages=messages,
+                responses_input_items=responses_input_items,
+                active_tool_ids=self.active_tool_ids
+            )
 
     async def run(self, user_message: str, conversation_history: list[dict[str, str]]):
         self._sync_cache()

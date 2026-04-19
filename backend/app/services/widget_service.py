@@ -15,6 +15,7 @@ from ..schemas.widget import (
     WidgetConfigResponse,
 )
 from .billing_service import get_billing_actions_summary
+from .mcp_connection_service import list_widget_mcp_connections
 from .user_rate_limit_service import is_rate_limited
 
 
@@ -90,6 +91,7 @@ def get_widget_config(
         auth=auth_config,
         send_cookies_with_requests=send_cookies_with_requests,
         headers=header_map,
+        mcp_connections=list_widget_mcp_connections(session, agent.user_id),
         is_widget_hidden=summary.is_widget_hidden or is_user_rate_limited,
         actions_remaining=summary.total_remaining,
         require_signed_widget_token=agent.widget_auth_enabled,

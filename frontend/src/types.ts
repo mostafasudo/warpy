@@ -3,6 +3,7 @@ export type AuthStorageSource = StorageSource;
 
 export type AuthorizationType = "bearer" | "basic" | "none";
 export type AuthMode = "none" | "header";
+export type McpAuthMode = "none" | "static_headers" | "token_exchange";
 
 export type ConfigMap = Record<string, string>;
 export type HeaderConfig = Record<string, { source: StorageSource; key: string }>;
@@ -18,6 +19,30 @@ export type ConfigResponse = {
   auth?: AuthConfig;
   sendCookiesWithRequests?: boolean;
   headers: HeaderConfig;
+};
+
+export type McpConnection = {
+  id: string;
+  name: string;
+  serverUrl: string;
+  authMode: McpAuthMode;
+  staticHeaders?: Record<string, string> | null;
+  tokenExchangePath?: string | null;
+};
+
+export type McpConnectionPayload = {
+  name: string;
+  serverUrl: string;
+  authMode: McpAuthMode;
+  staticHeaders?: Record<string, string> | null;
+  tokenExchangePath?: string | null;
+};
+
+export type WidgetMcpConnection = {
+  id: string;
+  name: string;
+  authMode: McpAuthMode;
+  tokenExchangePath?: string | null;
 };
 
 export type OnboardingStatus = "not_started" | "in_progress" | "completed" | "not_applicable";

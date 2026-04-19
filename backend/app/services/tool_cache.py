@@ -8,11 +8,12 @@ from redis.exceptions import RedisError
 
 from ..core.llm_config import llm_config
 from ..core.logger import log_error, log_info
+from .mcp_runtime import make_db_tool_ref
 
 
 @dataclass
 class CachedTool:
-    tool_id: UUID
+    tool_id: str
     last_used: float
 
 
@@ -23,7 +24,7 @@ class ToolCache:
         self._redis = redis
         self._conversation_id = conversation_id
         self._key = f"{self.KEY_PREFIX}{conversation_id}"
-        self._tools: dict[UUID, float] = {}
+        self._tools: dict[str, float] = {}
 
     def _load_from_redis(self) -> None:
         if not self._redis:
@@ -32,7 +33,7 @@ class ToolCache:
             data = self._redis.get(self._key)
             if data:
                 parsed = json.loads(data)
-                self._tools = {UUID(k): v for k, v in parsed.items()}
+                self._tools = {str(k): float(v) for k, v in parsed.items()}
         except (RedisError, json.JSONDecodeError) as exc:
             log_error("ToolCache", "_load_from_redis", "Failed to load cache", exc=exc)
             self._tools = {}
@@ -53,23 +54,30 @@ class ToolCache:
     def save(self) -> None:
         self._save_to_redis()
 
-    def get_tool_ids(self) -> list[UUID]:
+    def get_tool_ids(self) -> list[str]:
         return list(self._tools.keys())
 
-    def update_used(self, tool_ids: list[UUID]) -> None:
+    def update_used(self, tool_ids: list[str]) -> None:
         now = time.time()
         for tool_id in tool_ids:
-            if tool_id in self._tools:
-                self._tools[tool_id] = now
+            normalized = str(tool_id)
+            if normalized in self._tools:
+                self._tools[normalized] = now
 
-    def add_tools(self, tool_ids: list[UUID]) -> None:
+    def add_tools(self, tool_ids: list[str]) -> None:
         now = time.time()
         for tool_id in tool_ids:
-            if tool_id not in self._tools:
-                self._tools[tool_id] = now
+            normalized = str(tool_id)
+            if normalized not in self._tools:
+                self._tools[normalized] = now
 
-    def remove_invalid(self, valid_ids: set[UUID]) -> None:
-        to_remove = [tool_id for tool_id in self._tools if tool_id not in valid_ids]
+    def remove_invalid(self, valid_ids: set[str]) -> None:
+        normalized_valid_ids: set[str] = set()
+        for tool_id in valid_ids:
+            normalized_valid_ids.add(str(tool_id))
+            if isinstance(tool_id, UUID):
+                normalized_valid_ids.add(make_db_tool_ref(tool_id))
+        to_remove = [tool_id for tool_id in self._tools if tool_id not in normalized_valid_ids]
         for tool_id in to_remove:
             del self._tools[tool_id]
         if to_remove:

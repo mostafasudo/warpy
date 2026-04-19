@@ -21,6 +21,8 @@ import type {
   FeatureWithTools,
   FrontendCapabilityResponse,
   FrontendCapabilityUpdate,
+  McpConnection,
+  McpConnectionPayload,
   KnowledgeBaseStatusResponse,
   KnowledgeBaseToggle,
   KnowledgeDocumentContentResponse,
@@ -174,6 +176,8 @@ export type {
   FeatureWithTools,
   FrontendCapabilityResponse,
   FrontendCapabilityUpdate,
+  McpConnection,
+  McpConnectionPayload,
   KnowledgeBaseStatusResponse,
   KnowledgeBaseToggle,
   KnowledgeDocumentContentResponse,
@@ -251,6 +255,21 @@ export const apiClient = {
     }),
   deleteFeature: (id: string) =>
     request<void>(`/features/${id}`, {
+      method: "DELETE",
+    }),
+  listMcpConnections: () => request<McpConnection[]>("/mcp-connections"),
+  createMcpConnection: (payload: McpConnectionPayload) =>
+    request<McpConnection>("/mcp-connections", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMcpConnection: (id: string, payload: McpConnectionPayload) =>
+    request<McpConnection>(`/mcp-connections/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteMcpConnection: (id: string) =>
+    request<void>(`/mcp-connections/${id}`, {
       method: "DELETE",
     }),
   listFeatureTools: (featureId: string, page: number) => {

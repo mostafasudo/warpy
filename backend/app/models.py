@@ -26,6 +26,12 @@ class AuthType(str, enum.Enum):
     none = "none"
 
 
+class McpAuthMode(str, enum.Enum):
+    none = "none"
+    static_headers = "static_headers"
+    token_exchange = "token_exchange"
+
+
 class WidgetRunStatus(str, enum.Enum):
     running = "running"
     waiting_for_tools = "waiting_for_tools"
@@ -119,6 +125,25 @@ class SessionHeader(Base):
     source = Column(Enum(StorageSource, name="storage_source", native_enum=True, validate_strings=True), nullable=False)
     key = Column(Text, nullable=False)
     auth_type = Column(Enum(AuthType, name="auth_type", native_enum=True, validate_strings=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class McpConnection(Base):
+    __tablename__ = "mcp_connections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    name = Column(Text, nullable=False)
+    server_url = Column(Text, nullable=False)
+    auth_mode = Column(
+        Enum(McpAuthMode, name="mcp_auth_mode", native_enum=True, validate_strings=True),
+        nullable=False,
+        server_default=McpAuthMode.none.value,
+        default=McpAuthMode.none,
+    )
+    static_headers = Column(json_type, nullable=True)
+    token_exchange_path = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

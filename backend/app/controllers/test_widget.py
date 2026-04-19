@@ -18,6 +18,7 @@ from app.models import Agent, BillingAccount, BillingActionConsumption, Conversa
 from app.schemas.auth import ClerkSession
 from app.services.agent_chain import StepResult
 from app.services.billing_service import get_or_create_billing_account
+from app.services.mcp_runtime import make_db_tool_ref
 
 EMPTY_V2_TOOL_CONTEXT = '{"version": 2, "format": "responses_input_items", "input_items": []}'
 
@@ -1535,7 +1536,7 @@ def test_widget_session_restores_pending_state_on_new_socket(client: TestClient,
             pending_input_items=None,
         ):
             if tool_results:
-                assert active_tool_ids == [pending_tool_id]
+                assert active_tool_ids == [make_db_tool_ref(pending_tool_id)]
                 assert pending_input_items == pending_input_items_expected
                 assert pending_messages is None
                 return StepResult(
@@ -1552,7 +1553,7 @@ def test_widget_session_restores_pending_state_on_new_socket(client: TestClient,
                 done=False,
                 messages=[HumanMessage(content="pending websocket state")],
                 responses_input_items=list(pending_input_items_expected),
-                active_tool_ids=[pending_tool_id],
+                active_tool_ids=[make_db_tool_ref(pending_tool_id)],
             )
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeResumableSocketExecutor)
@@ -1634,7 +1635,7 @@ def test_widget_session_rewrites_legacy_pending_state_to_v2(client: TestClient, 
         ):
             if tool_results:
                 assert pending_input_items == expected_input_items
-                assert active_tool_ids == [pending_tool_id]
+                assert active_tool_ids == [make_db_tool_ref(pending_tool_id)]
                 return StepResult(
                     response="legacy resumed",
                     done=True,
@@ -1650,7 +1651,7 @@ def test_widget_session_rewrites_legacy_pending_state_to_v2(client: TestClient, 
                 done=False,
                 messages=[],
                 responses_input_items=[{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "start"}]}],
-                active_tool_ids=[pending_tool_id],
+                active_tool_ids=[make_db_tool_ref(pending_tool_id)],
             )
 
     monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeLegacyPendingExecutor)

@@ -3,13 +3,15 @@ import json
 from contextlib import contextmanager
 from uuid import UUID
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from app.core.agent_custom_system_prompt import DEFAULT_CUSTOM_USER_SYSTEM_PROMPT
 from app.services.agent_chain import AgentExecutor, MAX_HISTORY_PAIRS
-from app.services.openai_responses_ws import OpenAIResponsesInvocationResult, OpenAIResponsesWebSocketSession
+from app.services.mcp_runtime import McpAuthExpiredError, McpToolSnapshot, make_db_tool_ref
+from app.services.openai_responses_ws import OpenAIResponsesInvocationResult, OpenAIResponsesTransportError, OpenAIResponsesWebSocketSession
 from app.schemas.widget import ToolResultPayload
 
 
@@ -59,7 +61,7 @@ def test_agent_executor_runs_with_tool_calls(monkeypatch):
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
     result = asyncio.run(executor.run("hello", []))
     assert result == "done"
-    assert tool_id in executor.active_tool_ids
+    assert make_db_tool_ref(tool_id) in executor.active_tool_ids
     assert tool_calls_seen[0] == []
     assert tool_calls_seen[1] == [tool_id]
 
@@ -150,9 +152,9 @@ def test_get_valid_tool_ids_uses_session_provider():
         llm_client=DummyLLM([]),
         session_provider=session_provider,
     )
-    executor.active_tool_ids = [tool_id]
+    executor.active_tool_ids = [make_db_tool_ref(tool_id)]
 
-    assert executor._get_valid_tool_ids() == {tool_id}
+    assert executor._get_valid_tool_ids() == {make_db_tool_ref(tool_id)}
     assert len(sessions) == 1
 
 
@@ -202,6 +204,187 @@ def test_run_step_handles_js_exec_tool(monkeypatch):
     call = result.tool_calls[0]
     assert call.tool_type == "js_exec"
     assert call.js_code == "document.title"
+
+
+def test_run_step_discovers_mcp_tools(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "find_tools", "args": {"query": "stripe"}}]),
+        AIMessage(content="done", tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    snapshot = McpToolSnapshot(
+        ref="mcp:11111111-1111-1111-1111-111111111111:get_customer",
+        connection_id=UUID("11111111-1111-1111-1111-111111111111"),
+        connection_name="Stripe MCP",
+        connection_slug="stripe_mcp",
+        alias_name="stripe_mcp__get_customer",
+        server_tool_name="get_customer",
+        description="Fetch a customer",
+        input_schema={"type": "object", "properties": {"customerId": {"type": "string"}}},
+    )
+
+    class FakeMcpContext:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def validate_refs(self, refs):
+            return refs
+
+        async def search_tools(self, query):
+            assert query == "stripe"
+            return [snapshot]
+
+        async def get_snapshots_for_refs(self, refs):
+            return [snapshot] if snapshot.ref in refs else []
+
+    @contextmanager
+    def session_provider():
+        class EmptySession:
+            def scalars(self, _query):
+                class Result:
+                    def all(self):
+                        return []
+                return Result()
+        yield EmptySession()
+
+    monkeypatch.setattr("app.services.agent_chain.McpStepContext", FakeMcpContext)
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, session_provider=session_provider)
+    monkeypatch.setattr(executor, "_discover_db_tools", lambda _query: [])
+
+    result = asyncio.run(executor.run_step("Find Stripe tools", []))
+
+    assert result.done is True
+    assert snapshot.ref in executor.active_tool_ids
+
+
+def test_run_step_executes_mcp_tools_server_side(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "stripe_mcp__get_customer", "args": {"customerId": "cus_1"}}]),
+        AIMessage(content="done", tool_calls=[]),
+    ]
+    llm = DummyLLM(responses)
+    snapshot = McpToolSnapshot(
+        ref="mcp:11111111-1111-1111-1111-111111111111:get_customer",
+        connection_id=UUID("11111111-1111-1111-1111-111111111111"),
+        connection_name="Stripe MCP",
+        connection_slug="stripe_mcp",
+        alias_name="stripe_mcp__get_customer",
+        server_tool_name="get_customer",
+        description="Fetch a customer",
+        input_schema={"type": "object", "properties": {"customerId": {"type": "string"}}},
+    )
+
+    class FakeMcpContext:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def validate_refs(self, refs):
+            return refs
+
+        async def search_tools(self, _query):
+            return []
+
+        async def get_snapshots_for_refs(self, refs):
+            return [snapshot] if snapshot.ref in refs else []
+
+        async def call_tool(self, tool_snapshot, arguments):
+            assert tool_snapshot.alias_name == snapshot.alias_name
+            assert arguments == {"customerId": "cus_1"}
+            return {"structuredContent": {"ok": True}}
+
+    @contextmanager
+    def session_provider():
+        class EmptySession:
+            def scalars(self, _query):
+                class Result:
+                    def all(self):
+                        return []
+                return Result()
+        yield EmptySession()
+
+    monkeypatch.setattr("app.services.agent_chain.McpStepContext", FakeMcpContext)
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, session_provider=session_provider)
+    monkeypatch.setattr(executor, "_discover_db_tools", lambda _query: [])
+
+    result = asyncio.run(executor.run_step("Get Stripe customer", [], active_tool_ids=[snapshot.ref]))
+
+    assert result.done is True
+    assert result.response == "done"
+    assert any(
+        isinstance(message, ToolMessage) and "structuredContent" in str(message.content)
+        for message in llm.invocations[1]
+    )
+
+
+def test_run_step_raises_retriable_error_when_mcp_auth_expires(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "stripe_mcp__get_customer", "args": {}}]),
+    ]
+    llm = DummyLLM(responses)
+    snapshot = McpToolSnapshot(
+        ref="mcp:11111111-1111-1111-1111-111111111111:get_customer",
+        connection_id=UUID("11111111-1111-1111-1111-111111111111"),
+        connection_name="Stripe MCP",
+        connection_slug="stripe_mcp",
+        alias_name="stripe_mcp__get_customer",
+        server_tool_name="get_customer",
+        description="Fetch a customer",
+        input_schema={"type": "object", "properties": {}},
+    )
+
+    class FakeMcpContext:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def validate_refs(self, refs):
+            return refs
+
+        async def search_tools(self, _query):
+            return []
+
+        async def get_snapshots_for_refs(self, refs):
+            return [snapshot] if snapshot.ref in refs else []
+
+        async def call_tool(self, _tool_snapshot, _arguments):
+            raise McpAuthExpiredError("expired")
+
+    @contextmanager
+    def session_provider():
+        class EmptySession:
+            def scalars(self, _query):
+                class Result:
+                    def all(self):
+                        return []
+                return Result()
+        yield EmptySession()
+
+    monkeypatch.setattr("app.services.agent_chain.McpStepContext", FakeMcpContext)
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm, session_provider=session_provider)
+    monkeypatch.setattr(executor, "_discover_db_tools", lambda _query: [])
+
+    with pytest.raises(OpenAIResponsesTransportError) as error:
+        asyncio.run(executor.run_step("Get Stripe customer", [], active_tool_ids=[snapshot.ref]))
+
+    assert error.value.code == "MCP_AUTH_EXPIRED"
+    assert error.value.retriable is True
 
 
 def test_run_step_routes_frontend_feature_tool_calls(monkeypatch):

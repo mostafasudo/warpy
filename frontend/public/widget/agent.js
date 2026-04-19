@@ -1091,6 +1091,83 @@
     return credentials ? { headers, credentials } : { headers };
   }
 
+  function normalizeMcpConnections(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((item) => item && typeof item === "object" && typeof item.id === "string")
+      .map((item) => ({
+        id: String(item.id),
+        name: typeof item.name === "string" ? item.name : "",
+        authMode: typeof item.authMode === "string" ? item.authMode : "none",
+        tokenExchangePath: typeof item.tokenExchangePath === "string" ? item.tokenExchangePath : null,
+      }));
+  }
+
+  function isMcpBundleExpiring(bundle) {
+    if (!bundle || !bundle.expiresAt) return false;
+    var expiresAt = Date.parse(bundle.expiresAt);
+    if (!Number.isFinite(expiresAt)) return false;
+    return expiresAt - Date.now() <= 30000;
+  }
+
+  async function fetchMcpAuthBundle(connection) {
+    if (!connection || connection.authMode !== "token_exchange" || !connection.tokenExchangePath) {
+      return null;
+    }
+    if (!config.baseUrl) {
+      throw new Error("Missing baseUrl");
+    }
+    var url = new URL(connection.tokenExchangePath, config.baseUrl.endsWith("/") ? config.baseUrl : config.baseUrl + "/");
+    var sessionRequestConfig = buildRequestConfig(authConfig, headerConfig, sendCookiesWithRequests);
+    var response = await fetchWithTimeout(url.toString(), {
+      method: "POST",
+      headers: sessionRequestConfig.headers,
+      credentials: sessionRequestConfig.credentials,
+    });
+    if (!response.ok) {
+      throw new Error("MCP token exchange failed");
+    }
+    var data = await response.json().catch(() => null);
+    if (!data || typeof data !== "object" || !data.headers || typeof data.headers !== "object") {
+      throw new Error("MCP token exchange failed");
+    }
+    var headers = {};
+    for (var entry of Object.entries(data.headers)) {
+      if (!entry[0] || entry[1] == null) continue;
+      headers[String(entry[0])] = String(entry[1]);
+    }
+    if (!Object.keys(headers).length) {
+      throw new Error("MCP token exchange failed");
+    }
+    return {
+      headers,
+      expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : null,
+    };
+  }
+
+  async function ensureMcpAuthBundles(forceRefresh) {
+    if (!mcpConnections.length) {
+      return;
+    }
+    for (var connection of mcpConnections) {
+      if (!connection || connection.authMode !== "token_exchange") continue;
+      var existing = mcpAuthBundles[connection.id];
+      if (!forceRefresh && existing && !isMcpBundleExpiring(existing)) {
+        continue;
+      }
+      try {
+        var bundle = await fetchMcpAuthBundle(connection);
+        if (bundle) {
+          mcpAuthBundles[connection.id] = bundle;
+        } else {
+          delete mcpAuthBundles[connection.id];
+        }
+      } catch (_error) {
+        delete mcpAuthBundles[connection.id];
+      }
+    }
+  }
+
   function substitutePath(path, params) {
     let result = path;
     for (const [key, value] of Object.entries(params)) {
@@ -5108,6 +5185,8 @@
     let authConfig = { mode: "none" };
     let headerConfig = {};
     let sendCookiesWithRequests = false;
+    let mcpConnections = [];
+    let mcpAuthBundles = {};
     let widgetAuthToken = state.auth.token || null;
     let widgetRefreshEndpointPath = "/widget-token";
     let configPromise = null;
@@ -6912,6 +6991,8 @@
         authConfig = { mode: "none" };
       }
       headerConfig = data.headers || {};
+      mcpConnections = normalizeMcpConnections(data.mcpConnections);
+      mcpAuthBundles = {};
       widgetRefreshEndpointPath = data.widgetRefreshEndpointPath || "/widget-token";
       widgetTitle = getConfigString(data, "widgetTitle") || widgetTitle;
       widgetIconUrl = getConfigString(data, "widgetIconUrl");
@@ -7010,6 +7091,8 @@
       return new Promise((resolve, reject) => {
         let finished = false;
         let toolIterations = 0;
+        let mcpAuthRetried = false;
+        let lastRequest = null;
         let currentConversationId = initialRequest.conversationId || null;
         let currentRequestId = initialRequest.requestId || null;
         const websocket = new WebSocket(buildWidgetSessionUrl(apiUrl));
@@ -7054,14 +7137,23 @@
           });
         }
 
-        function sendRequest(request) {
+        async function sendRequest(request, skipBundleRefresh) {
           if (finished || websocket.readyState !== WebSocket.OPEN) {
             fail(new Error("Widget session failed"));
             return;
           }
+          var hasTokenExchangeConnections = mcpConnections.some((connection) => connection && connection.authMode === "token_exchange");
+          if (!skipBundleRefresh && hasTokenExchangeConnections) {
+            await ensureMcpAuthBundles(false);
+          }
+          lastRequest = request;
+          const nextRequest = Object.assign({}, request);
+          if (Object.keys(mcpAuthBundles).length > 0) {
+            nextRequest.mcpAuthBundles = mcpAuthBundles;
+          }
           websocket.send(JSON.stringify({
             type: "chat.request",
-            request,
+            request: nextRequest,
             ...(widgetAuthToken ? { widgetToken: widgetAuthToken } : {}),
           }));
         }
@@ -7094,7 +7186,7 @@
           try {
             const toolResults = await runToolCalls(response.toolCalls, signal);
             if (finished) return;
-            sendRequest({
+            await sendRequest({
               agentId: config.agentId,
               conversationId: currentConversationId,
               requestId: currentRequestId,
@@ -7119,7 +7211,7 @@
         }
 
         websocket.onopen = () => {
-          sendRequest(initialRequest);
+          void sendRequest(initialRequest).catch(fail);
         };
 
         websocket.onmessage = (event) => {
@@ -7138,6 +7230,18 @@
 
           if (data.type === "chat.error") {
             const socketError = data.error || {};
+            if (socketError.code === "MCP_AUTH_EXPIRED" && socketError.retriable === true && !mcpAuthRetried && lastRequest) {
+              mcpAuthRetried = true;
+              void (async () => {
+                try {
+                  await ensureMcpAuthBundles(true);
+                  await sendRequest(lastRequest, true);
+                } catch (retryError) {
+                  fail(retryError);
+                }
+              })();
+              return;
+            }
             fail(createWidgetSocketError(socketError.code, socketError.message, socketError.retriable));
             return;
           }

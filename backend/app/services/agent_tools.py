@@ -13,6 +13,7 @@ from ..models import Tool
 from .embedding_service import search_similar_tools
 from .agent_execution import execute_backend_tool, get_enabled_tool
 from .agent_schema import SchemaFactory, serialize_args
+from .mcp_runtime import McpToolSnapshot, make_db_tool_ref
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class ToolSnapshot:
     def to_metadata(self) -> dict[str, Any]:
         return {
             "id": str(self.id),
+            "ref": make_db_tool_ref(self.id),
             "toolType": self.tool_type,
             "method": self.method,
             "path": self.path,
@@ -193,7 +195,7 @@ def create_find_tools_tool(
                 is_backend = getattr(tool, "tool_type", "backend") == "backend"
                 result.append(
                     {
-                        "id": str(tool.id),
+                        "id": make_db_tool_ref(tool.id),
                         "toolType": "backend" if is_backend else "frontend",
                         "method": tool.method.value if is_backend and tool.method else None,
                         "path": tool.path if is_backend else None,
@@ -342,6 +344,23 @@ def create_frontend_tool(tool: Tool | ToolSnapshot, schema_factory: SchemaFactor
         name=snapshot.name,
         description=snapshot.description or "Run a frontend tool handler in the browser",
         args_schema=InputModel
+    )
+    structured_tool.metadata = {**(structured_tool.metadata or {}), "warpy_tool": snapshot.to_metadata()}
+    return structured_tool
+
+
+def create_mcp_tool(snapshot: McpToolSnapshot, schema_factory: SchemaFactory | None = None) -> StructuredTool:
+    factory = schema_factory or SchemaFactory()
+    InputModel = factory.model_from_schema(f"{snapshot.alias_name}Input", snapshot.input_schema)
+
+    def execute_func(**_kwargs: Any) -> str:
+        return json.dumps({"status": "queued"})
+
+    structured_tool = StructuredTool.from_function(
+        func=execute_func,
+        name=snapshot.alias_name,
+        description=snapshot.description or f"Call MCP tool {snapshot.server_tool_name}",
+        args_schema=InputModel,
     )
     structured_tool.metadata = {**(structured_tool.metadata or {}), "warpy_tool": snapshot.to_metadata()}
     return structured_tool

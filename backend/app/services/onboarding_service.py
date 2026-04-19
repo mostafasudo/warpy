@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from ..models import Agent, Environment, Feature, KnowledgeDocument, KnowledgeWebsite, SessionHeader, UserOnboardingState
+from ..models import Agent, Environment, Feature, KnowledgeDocument, KnowledgeWebsite, McpConnection, SessionHeader, UserOnboardingState
 from ..schemas.agent import AgentResponse
 from ..schemas.onboarding import OnboardingStateResponse
 from .agent_service import get_agent, get_or_create_agent
@@ -62,6 +62,10 @@ def _has_authorization_header(session: Session, user_id: str) -> bool:
     )
 
 
+def _has_mcp_connections(session: Session, user_id: str) -> bool:
+    return session.scalar(select(McpConnection.id).where(McpConnection.user_id == user_id).limit(1)) is not None
+
+
 def _has_features(session: Session, user_id: str) -> bool:
     return session.scalar(select(Feature.id).where(Feature.user_id == user_id).limit(1)) is not None
 
@@ -86,6 +90,7 @@ def _has_meaningful_setup(session: Session, user_id: str) -> bool:
         get_agent(session, user_id) is not None,
         _has_non_empty_base_url(session, user_id),
         _has_session_headers(session, user_id),
+        _has_mcp_connections(session, user_id),
         _has_features(session, user_id),
         _has_knowledge_sources(session, user_id),
     ))
@@ -96,7 +101,7 @@ def _get_next_step(session: Session, user_id: str) -> str:
         return "website"
     if not _has_non_empty_base_url(session, user_id):
         return "baseUrl"
-    if not _has_authorization_header(session, user_id):
+    if not (_has_authorization_header(session, user_id) or _has_mcp_connections(session, user_id)):
         return "auth"
     return "agent"
 

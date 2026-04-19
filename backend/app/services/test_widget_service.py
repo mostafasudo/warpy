@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models import Agent, AuthType, Message, SessionHeader, StorageSource, WidgetRunStatus
+from app.models import Agent, AuthType, McpAuthMode, McpConnection, Message, SessionHeader, StorageSource, WidgetRunStatus
 from app.services.widget_service import (
     claim_widget_run,
     claim_widget_run_for_request,
@@ -161,6 +161,37 @@ def test_get_widget_config_preserves_legacy_cookie_backed_authorization_headers(
     assert config.auth.auth_type == AuthType.basic
     assert config.send_cookies_with_requests is False
     assert config.headers == {}
+
+
+def test_get_widget_config_includes_safe_mcp_connection_summaries(db_session: Session):
+    agent = Agent(user_id="user_1")
+    db_session.add(agent)
+    db_session.add(
+        McpConnection(
+            user_id="user_1",
+            name="Stripe MCP",
+            server_url="https://example.com/mcp",
+            auth_mode=McpAuthMode.token_exchange,
+            token_exchange_path="/api/mcp/token-exchange",
+            static_headers={"Authorization": "Bearer secret"},
+        )
+    )
+    db_session.add(
+        McpConnection(
+            user_id="user_1",
+            name="Public MCP",
+            server_url="https://example.com/public-mcp",
+            auth_mode=McpAuthMode.none,
+        )
+    )
+    db_session.flush()
+
+    config = get_widget_config(db_session, agent)
+    assert len(config.mcp_connections) == 2
+    stripe = next(connection for connection in config.mcp_connections if connection.name == "Stripe MCP")
+    assert stripe.auth_mode == "token_exchange"
+    assert stripe.token_exchange_path == "/api/mcp/token-exchange"
+    assert not hasattr(stripe, "static_headers")
 
 
 def test_create_widget_conversation(db_session: Session):

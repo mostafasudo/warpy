@@ -60,6 +60,21 @@ def _create_feature(user_id: str = "user_1"):
         session.add(Feature(user_id=user_id, name="Orders"))
 
 
+def _create_mcp_connection(user_id: str = "user_1"):
+    from app.core.database import session_scope
+    from app.models import McpAuthMode, McpConnection
+
+    with session_scope() as session:
+        session.add(
+            McpConnection(
+                user_id=user_id,
+                name="Stripe MCP",
+                server_url="https://mcp.example.com",
+                auth_mode=McpAuthMode.none,
+            )
+        )
+
+
 def _save_config(user_id: str = "user_1", *, production_url: str = "https://api.example.com", auth_header: bool = True):
     from app.core.database import session_scope
     from app.schemas.config import ConfigPayload
@@ -144,6 +159,27 @@ def test_get_onboarding_state_for_existing_configured_user(client: TestClient):
     assert response.status_code == 200
     assert response.json()["status"] == "not_applicable"
     assert response.json()["shouldShow"] is False
+
+
+def test_get_onboarding_state_treats_mcp_connection_as_meaningful_setup(client: TestClient):
+    _create_mcp_connection()
+
+    response = client.get("/onboarding/state", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_applicable"
+    assert response.json()["shouldShow"] is False
+
+
+def test_get_onboarding_state_skips_auth_step_when_mcp_connection_exists(client: TestClient):
+    _create_onboarding_state()
+    _create_website()
+    _save_config(auth_header=False)
+    _create_mcp_connection()
+
+    response = client.get("/onboarding/state", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["status"] == "in_progress"
+    assert response.json()["nextStep"] == "agent"
 
 
 def test_start_onboarding_is_idempotent(client: TestClient):

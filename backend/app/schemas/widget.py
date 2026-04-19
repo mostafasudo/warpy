@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..models import AuthType, StorageSource
+from .mcp_connection import McpAuthBundlePayload, WidgetMcpConnectionResponse
 from .widget_theme import WidgetTheme
 
 WIDGET_SUGGESTION_MAX_COUNT = 3
@@ -33,6 +34,7 @@ class WidgetConfigResponse(BaseModel):
     auth: WidgetAuthConfig = Field(default_factory=WidgetAuthConfig)
     send_cookies_with_requests: bool = Field(default=False, alias="sendCookiesWithRequests")
     headers: dict[str, SessionHeaderConfig] = {}
+    mcp_connections: list[WidgetMcpConnectionResponse] = Field(default_factory=list, alias="mcpConnections")
     is_widget_hidden: bool = Field(default=False, alias="isWidgetHidden")
     actions_remaining: int = Field(default=0, alias="actionsRemaining")
     require_signed_widget_token: bool = Field(default=False, alias="requireSignedWidgetToken")
@@ -129,6 +131,7 @@ class WidgetChatRequest(BaseModel):
     request_id: str | None = Field(default=None, alias="requestId")
     message: str | None = None
     tool_results: list[ToolResultPayload] = Field(default=[], alias="toolResults")
+    mcp_auth_bundles: dict[str, McpAuthBundlePayload] = Field(default_factory=dict, alias="mcpAuthBundles")
 
 
 class WidgetChatResponse(BaseModel):

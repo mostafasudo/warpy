@@ -258,6 +258,31 @@ describe("apiClient", () => {
     expect(fetchSpy).toHaveBeenCalledWith(new URL("/features/f2", "http://api.test"), expect.objectContaining({ method: "DELETE" }))
   })
 
+  it("supports MCP connection operations", async () => {
+    const responses = [
+      jsonResponse([{ id: "conn-1", name: "Stripe MCP", serverUrl: "https://mcp.example.com", authMode: "none" }]),
+      jsonResponse({ id: "conn-2", name: "Linear", serverUrl: "https://linear.example.com/mcp", authMode: "static_headers" }),
+      jsonResponse({ id: "conn-2", name: "Linear v2", serverUrl: "https://linear.example.com/mcp", authMode: "token_exchange" }),
+      textResponse("", 204),
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.listMcpConnections()
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/mcp-connections", "http://api.test"), expect.any(Object))
+
+    await apiClient.createMcpConnection({ name: "Linear", serverUrl: "https://linear.example.com/mcp", authMode: "static_headers", staticHeaders: { Authorization: "Bearer secret" } })
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/mcp-connections", "http://api.test"), expect.objectContaining({ method: "POST" }))
+
+    await apiClient.updateMcpConnection("conn-2", { name: "Linear v2", serverUrl: "https://linear.example.com/mcp", authMode: "token_exchange", tokenExchangePath: "/api/mcp/token-exchange" })
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/mcp-connections/conn-2", "http://api.test"), expect.objectContaining({ method: "PUT" }))
+
+    await apiClient.deleteMcpConnection("conn-2")
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/mcp-connections/conn-2", "http://api.test"), expect.objectContaining({ method: "DELETE" }))
+  })
+
   it("supports widget security operations", async () => {
     const responses = [
       jsonResponse({
