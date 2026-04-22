@@ -112,7 +112,7 @@ Pipeline rules:
 - Persistent GTM state lives under `/Users/levw/.codex/state/warpy-gtm/`.
 - Temporary CSV artifacts live under `/Users/levw/.codex/tmp/warpy-gtm/`.
 - When due-task volume is high, prioritize tasks that move conversations forward: manual emails, multithread steps, earned DMs, asset sends, connection requests, then low-friction social touches.
-- The task executor must respect both per-run caps and daily caps for social actions so a `30-minute` cron never over-saturates LinkedIn or X.
+- The task executor must respect both per-run caps and daily caps for social actions so an hourly cron never over-saturates LinkedIn or X.
 - The task executor must never automate reply handling, objection handling, or live back-and-forth. Those remain AE-owned in Apollo.
 
 Lead-builder split by execution layer:
@@ -124,12 +124,12 @@ Lead-builder split by execution layer:
 Recommended automation cadence:
 
 - `Lead Builder automation`: once every weekday morning
-- `Task Executor automation`: every `30 minutes` on weekdays
+- `Task Executor automation`: once per hour on weekdays
 
 Recommended schedules:
 
 - Lead Builder: weekdays at `1:00 PM` in the target market timezone
-- Task Executor: every `30 minutes` on weekdays, but only act on tasks that are already due in Apollo
+- Task Executor: once per hour on weekdays, but only act on tasks that are already due in Apollo
 - For social actions, if the lead's local time is visible and outside `8:00 AM` to `6:00 PM`, skip the action until the next run even if the cron is active
 
 ### Lead definitions
