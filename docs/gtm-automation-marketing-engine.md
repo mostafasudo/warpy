@@ -70,7 +70,7 @@ The automation should treat these as separate writing surfaces, not as a copy-pa
 Default automation:
 
 - name: `Warpy Marketing Engine`
-- schedule: weekdays at `8:30 AM` `Africa/Cairo`
+- schedule: weekdays at `3:00 PM` `Africa/Cairo`
 - output: `1` core idea pair only
 - publish mode: Buffer drafts only
 

@@ -128,7 +128,7 @@ Recommended automation cadence:
 
 Recommended schedules:
 
-- Lead Builder: weekdays at `9:00 AM` in the target market timezone
+- Lead Builder: weekdays at `1:00 PM` in the target market timezone
 - Task Executor: every `30 minutes` on weekdays, but only act on tasks that are already due in Apollo
 - For social actions, if the lead's local time is visible and outside `8:00 AM` to `6:00 PM`, skip the action until the next run even if the cron is active
 
@@ -226,7 +226,7 @@ Use these as the default zones for post ideas:
 
 The v1 marketing engine is intentionally narrow:
 
-- run once every weekday morning at `8:30 AM` `Africa/Cairo`
+- run once every weekday at `3:00 PM` `Africa/Cairo`
 - create exactly `1` core idea pair per run
 - write exactly `2` Buffer drafts when a topic clears the quality bar:
   - `1` LinkedIn draft for Abdel's personal LinkedIn
