@@ -1,17 +1,22 @@
-import { type ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 
-import { Activity, ArrowRight, BookOpen, Braces, Link2, MessageCircle, Network, RefreshCw, Sparkles, Workflow } from "lucide-react"
+import { Activity, ArrowRight, BookOpen, Braces, Check, Copy, Link2, MessageCircle, Network, RefreshCw, Sparkles, Workflow } from "lucide-react"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { buildCodingAgentPrompt, getIntegrationDocUrl, maskApiKey } from "@/lib/agent-integration"
+import { useRevealApiKey } from "@/mutations/use-reveal-api-key"
 import { useActivitySummaryQuery } from "@/queries/use-activity-summary"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useApiKeyQuery } from "@/queries/use-api-key"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
 import { useMcpConnectionsQuery } from "@/queries/use-mcp-connections"
+import { toastSelectors, useToastStore } from "@/stores/toast"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import type { AuthConfig, FeatureWithTools } from "@/types"
 
@@ -185,6 +190,75 @@ const OpportunityCard = ({ title, description, ctaLabel, onClick }: OpportunityC
     </div>
   </div>
 )
+
+const AgentHandoffPanel = () => {
+  const apiKeyQuery = useApiKeyQuery()
+  const revealApiKey = useRevealApiKey()
+  const addToast = useToastStore(toastSelectors.addToast)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyPrompt = async () => {
+    try {
+      const response = await revealApiKey.mutateAsync()
+      await navigator.clipboard.writeText(buildCodingAgentPrompt(response.apiKey))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+      addToast({ title: "Prompt copied", description: "The Warpy handoff prompt is in your clipboard.", variant: "success" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not copy the prompt"
+      addToast({ title: "Copy failed", description: message, variant: "error" })
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-border/70 bg-card/70 p-6" data-testid="overview-agent-handoff">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_148px] xl:items-end">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <h3 className="text-2xl font-semibold tracking-tight">Paste this into your coding agent</h3>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                That is the fastest path. The agent reads your codebase, fetches the Warpy manual, and helps you configure Warpy.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Public manual</p>
+              <a href={getIntegrationDocUrl()} target="_blank" rel="noreferrer" className="block break-all text-sm text-primary underline-offset-4 hover:underline">
+                {getIntegrationDocUrl()}
+              </a>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Warpy API key</p>
+              {apiKeyQuery.isPending ? (
+                <Skeleton className="h-10 w-full rounded-lg" />
+              ) : (
+                <Input readOnly value={apiKeyQuery.data ? maskApiKey(apiKeyQuery.data.apiKeyLast4) : ""} className="font-mono" />
+              )}
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Works with Claude Code, Codex, Cursor, Windsurf, or any AI coding agent.
+          </p>
+        </div>
+        <div className="flex items-start xl:justify-end">
+          <Button
+            type="button"
+            onClick={() => void handleCopyPrompt()}
+            disabled={apiKeyQuery.isPending || revealApiKey.isPending}
+            className="w-[148px] justify-center"
+          >
+            <span className="inline-flex w-4 justify-center">
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </span>
+            <span className="inline-block text-center">{copied ? "Copied" : "Copy prompt"}</span>
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
 
 const getStatusHeader = ({
   hasAgent,
@@ -567,6 +641,7 @@ export const DashboardPanel = () => {
       description="See what your agent should do next and how people are using it."
     >
       <div className="mx-auto max-w-[1540px] space-y-6" data-testid="overview-panel">
+        <AgentHandoffPanel />
         <div className="rounded-2xl border border-border/70 bg-muted/20 p-6" data-testid="overview-status-header">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_auto] xl:items-start">
             <div className="space-y-4">

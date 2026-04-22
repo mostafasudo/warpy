@@ -31,9 +31,9 @@ describe("apiClient", () => {
   })
 
   it("extracts detail from JSON errors", async () => {
-    mockFetch(jsonResponse({ detail: "Generate a widget API key before enabling signed widget tokens." }, 400))
+    mockFetch(jsonResponse({ detail: "Stored API key is invalid" }, 400))
 
-    await expect(apiClient.getConfig()).rejects.toThrow("Generate a widget API key before enabling signed widget tokens.")
+    await expect(apiClient.getConfig()).rejects.toThrow("Stored API key is invalid")
   })
 
   it("falls back to status code when message is empty", async () => {
@@ -289,8 +289,6 @@ describe("apiClient", () => {
         active: {
           requireSignedWidgetToken: false,
           widgetRefreshEndpointPath: "/widget-token",
-          hasApiKey: false,
-          apiKeyLast4: null
         },
         draft: null,
         hasStagedChanges: false
@@ -299,19 +297,14 @@ describe("apiClient", () => {
         active: {
           requireSignedWidgetToken: false,
           widgetRefreshEndpointPath: "/widget-token",
-          hasApiKey: false,
-          apiKeyLast4: null
         },
-        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null, apiKeyLast4: null },
+        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null },
         hasStagedChanges: true
       }),
-      jsonResponse({ apiKey: "wgt_key_1234", apiKeyLast4: "1234" }),
       jsonResponse({
         active: {
           requireSignedWidgetToken: true,
           widgetRefreshEndpointPath: "/widget-token",
-          hasApiKey: true,
-          apiKeyLast4: "1234"
         },
         draft: null,
         hasStagedChanges: false
@@ -320,8 +313,6 @@ describe("apiClient", () => {
         active: {
           requireSignedWidgetToken: false,
           widgetRefreshEndpointPath: "/widget-token",
-          hasApiKey: true,
-          apiKeyLast4: "1234"
         },
         draft: null,
         hasStagedChanges: false
@@ -341,12 +332,6 @@ describe("apiClient", () => {
       expect.objectContaining({ method: "PATCH" })
     )
 
-    await apiClient.createAgentWidgetApiKey()
-    expect(fetchSpy).toHaveBeenCalledWith(
-      new URL("/agent/widget-security/api-key", "http://api.test"),
-      expect.objectContaining({ method: "POST" })
-    )
-
     await apiClient.deployAgentWidgetSecurity()
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/agent/widget-security/deploy", "http://api.test"),
@@ -356,6 +341,33 @@ describe("apiClient", () => {
     await apiClient.discardAgentWidgetSecurityDraft()
     expect(fetchSpy).toHaveBeenCalledWith(
       new URL("/agent/widget-security/discard", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+  })
+
+  it("supports api key operations", async () => {
+    const responses = [
+      jsonResponse({ apiKeyLast4: "1234", createdAt: "2026-04-22T00:00:00Z", rotatedAt: null }),
+      jsonResponse({ apiKey: "wrk_key_1234", apiKeyLast4: "1234", createdAt: "2026-04-22T00:00:00Z", rotatedAt: null }),
+      jsonResponse({ apiKey: "wrk_key_5678", apiKeyLast4: "5678", createdAt: "2026-04-22T00:00:00Z", rotatedAt: "2026-04-22T01:00:00Z" }),
+    ]
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getApiKey()
+    expect(fetchSpy).toHaveBeenCalledWith(new URL("/api-key", "http://api.test"), expect.any(Object))
+
+    await apiClient.revealApiKey()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/api-key/reveal", "http://api.test"),
+      expect.objectContaining({ method: "POST" })
+    )
+
+    await apiClient.rotateApiKey()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      new URL("/api-key/rotate", "http://api.test"),
       expect.objectContaining({ method: "POST" })
     )
   })

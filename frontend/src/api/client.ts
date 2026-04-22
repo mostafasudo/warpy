@@ -7,6 +7,8 @@ import type {
   AgentWidgetConfigUpdate,
   AgentWidgetInstallResponse,
   AgentWidgetInstallUpdate,
+  ApiKeyRevealResponse,
+  ApiKeySummaryResponse,
   BillingCheckoutResponse,
   BillingPortalResponse,
   BillingSummaryResponse,
@@ -36,7 +38,6 @@ import type {
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
-  WidgetApiKeyCreateResponse,
   WidgetSecurityDraftUpdate,
   WidgetSecurityResponse,
 } from "@/types";
@@ -162,6 +163,8 @@ export type {
   AgentWidgetConfigUpdate,
   AgentWidgetInstallResponse,
   AgentWidgetInstallUpdate,
+  ApiKeyRevealResponse,
+  ApiKeySummaryResponse,
   BillingCheckoutResponse,
   BillingPortalResponse,
   BillingSummaryResponse,
@@ -191,7 +194,6 @@ export type {
   PaginatedTools,
   UserRateLimitsResponse,
   UserRateLimitsUpdate,
-  WidgetApiKeyCreateResponse,
   WidgetSecurityDraftUpdate,
   WidgetSecurityResponse,
 } from "@/types";
@@ -304,8 +306,13 @@ export const apiClient = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  createAgentWidgetApiKey: () =>
-    request<WidgetApiKeyCreateResponse>("/agent/widget-security/api-key", {
+  getApiKey: () => request<ApiKeySummaryResponse>("/api-key"),
+  revealApiKey: () =>
+    request<ApiKeyRevealResponse>("/api-key/reveal", {
+      method: "POST",
+    }),
+  rotateApiKey: () =>
+    request<ApiKeyRevealResponse>("/api-key/rotate", {
       method: "POST",
     }),
   deployAgentWidgetSecurity: () =>

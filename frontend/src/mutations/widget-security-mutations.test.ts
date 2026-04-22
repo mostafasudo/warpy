@@ -15,14 +15,12 @@ jest.mock("@tanstack/react-query", () => {
 jest.mock("@/api/client", () => ({
   apiClient: {
     updateAgentWidgetSecurityDraft: jest.fn(),
-    createAgentWidgetApiKey: jest.fn(),
     deployAgentWidgetSecurity: jest.fn(),
     discardAgentWidgetSecurityDraft: jest.fn()
   }
 }))
 
 import { agentWidgetSecurityQueryKey } from "@/queries/use-agent-widget-security"
-import { useCreateAgentWidgetApiKey } from "./use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "./use-deploy-agent-widget-security"
 import { useDiscardAgentWidgetSecurityDraft } from "./use-discard-agent-widget-security-draft"
 import { useUpdateAgentWidgetSecurityDraft } from "./use-update-agent-widget-security-draft"
@@ -35,13 +33,6 @@ describe("widget security mutations", () => {
     setQueryData.mockClear()
   })
 
-  it("invalidates widget security query after api key creation", () => {
-    useCreateAgentWidgetApiKey()
-    const options = (useMutation as unknown as jest.Mock).mock.calls[0]?.[0] as any
-    options.onSuccess?.({ apiKey: "x", apiKeyLast4: "1234" }, undefined, undefined)
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: agentWidgetSecurityQueryKey })
-  })
-
   it("updates cache after draft update", () => {
     useUpdateAgentWidgetSecurityDraft()
     const options = (useMutation as unknown as jest.Mock).mock.calls[0]?.[0] as any
@@ -49,8 +40,6 @@ describe("widget security mutations", () => {
       active: {
         requireSignedWidgetToken: true,
         widgetRefreshEndpointPath: "/widget-token",
-        hasApiKey: true,
-        apiKeyLast4: "1234"
       },
       draft: null,
       hasStagedChanges: false
@@ -67,8 +56,6 @@ describe("widget security mutations", () => {
       active: {
         requireSignedWidgetToken: true,
         widgetRefreshEndpointPath: "/widget-token",
-        hasApiKey: true,
-        apiKeyLast4: "1234"
       },
       draft: null,
       hasStagedChanges: false
@@ -85,8 +72,6 @@ describe("widget security mutations", () => {
       active: {
         requireSignedWidgetToken: false,
         widgetRefreshEndpointPath: "/widget-token",
-        hasApiKey: true,
-        apiKeyLast4: "1234"
       },
       draft: null,
       hasStagedChanges: false

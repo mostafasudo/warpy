@@ -220,6 +220,18 @@ class UserOnboardingState(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class UserApiKey(Base):
+    __tablename__ = "user_api_keys"
+
+    user_id = Column(Text, primary_key=True)
+    key_hash = Column(Text, nullable=False, index=True, unique=True)
+    key_ciphertext = Column(Text, nullable=False)
+    key_last4 = Column(Text, nullable=False)
+    rotated_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class Tool(Base):
     __tablename__ = "tools"
     __table_args__ = (
@@ -271,8 +283,6 @@ class Agent(Base):
     widget_api_key_last4 = Column(Text, nullable=True)
     widget_auth_enabled_draft = Column(Boolean, nullable=True)
     widget_refresh_endpoint_path_draft = Column(Text, nullable=True)
-    widget_api_key_hash_draft = Column(Text, nullable=True)
-    widget_api_key_last4_draft = Column(Text, nullable=True)
     widget_title = Column(Text, nullable=False, server_default="Warpy")
     widget_icon_url = Column(Text, nullable=True)
     widget_appearance_mode = Column(Text, nullable=False, server_default="infer", default="infer")

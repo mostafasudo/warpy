@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     langsmith_api_key: str = Field(default="")
     langsmith_project: str = Field(default="")
     widget_jwt_secret: str = Field(default="")
+    api_key_encryption_secret: str = Field(default="")
     test_widget_token_api_key: str = Field(default="")
     lemon_squeezy_api_key: str = Field(default="")
     lemon_squeezy_store_id: str = Field(default="")

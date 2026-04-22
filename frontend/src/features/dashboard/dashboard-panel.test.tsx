@@ -1,16 +1,38 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import "@testing-library/jest-dom"
 import { DashboardPanel } from "./dashboard-panel"
 import { useActivitySummaryQuery } from "@/queries/use-activity-summary"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useApiKeyQuery } from "@/queries/use-api-key"
 import { useConfigQuery } from "@/queries/use-config"
 import { useFeaturesQuery } from "@/queries/use-features"
+import { useRevealApiKey } from "@/mutations/use-reveal-api-key"
 import { useKnowledgeBaseStatusQuery } from "@/queries/use-knowledge-base-status"
 import { useMcpConnectionsQuery } from "@/queries/use-mcp-connections"
 import { useNavigationStore } from "@/stores/navigation"
+
+jest.mock("@/stores/toast", () => {
+  const addToast = jest.fn()
+  type ToastState = { addToast: jest.Mock }
+  const toastState: ToastState = { addToast }
+  return {
+    useToastStore: <T,>(selector: (state: ToastState) => T) => selector(toastState),
+    toastSelectors: {
+      addToast: (state: ToastState) => state.addToast,
+    },
+  }
+})
+
+jest.mock("@/queries/use-api-key", () => ({
+  useApiKeyQuery: jest.fn(),
+}))
+
+jest.mock("@/mutations/use-reveal-api-key", () => ({
+  useRevealApiKey: jest.fn(),
+}))
 
 jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn(),
@@ -40,6 +62,8 @@ const mockedUseConfigQuery = useConfigQuery as jest.Mock
 const mockedUseFeaturesQuery = useFeaturesQuery as jest.Mock
 const mockedUseActivitySummaryQuery = useActivitySummaryQuery as jest.Mock
 const mockedUseAgentQuery = useAgentQuery as jest.Mock
+const mockedUseApiKeyQuery = useApiKeyQuery as jest.Mock
+const mockedUseRevealApiKey = useRevealApiKey as jest.Mock
 const mockedUseKnowledgeBaseStatusQuery = useKnowledgeBaseStatusQuery as jest.Mock
 const mockedUseMcpConnectionsQuery = useMcpConnectionsQuery as jest.Mock
 
@@ -80,6 +104,7 @@ const setOverviewMocks = ({
     data: { conversationCount: 0, actionCount: 0, hasAnyConversation: false, topActions: [] },
   }),
   agent = makeQuery({ data: { id: "agent-1", userId: "user-1" } }),
+  apiKey = makeQuery({ data: { apiKeyLast4: "1234", createdAt: "2026-04-22T00:00:00Z", rotatedAt: null } }),
   knowledgeBase = makeQuery({ data: { enabled: false, documentCount: 0, readyDocumentCount: 0 } }),
   mcpConnections = makeQuery({ data: [] }),
 }: {
@@ -87,6 +112,7 @@ const setOverviewMocks = ({
   features?: Record<string, unknown>
   activity?: Record<string, unknown>
   agent?: Record<string, unknown>
+  apiKey?: Record<string, unknown>
   knowledgeBase?: Record<string, unknown>
   mcpConnections?: Record<string, unknown>
 } = {}) => {
@@ -94,6 +120,8 @@ const setOverviewMocks = ({
   mockedUseFeaturesQuery.mockReturnValue(features)
   mockedUseActivitySummaryQuery.mockReturnValue(activity)
   mockedUseAgentQuery.mockReturnValue(agent)
+  mockedUseApiKeyQuery.mockReturnValue(apiKey)
+  mockedUseRevealApiKey.mockReturnValue({ mutateAsync: jest.fn(), isPending: false })
   mockedUseKnowledgeBaseStatusQuery.mockReturnValue(knowledgeBase)
   mockedUseMcpConnectionsQuery.mockReturnValue(mcpConnections)
 }
@@ -117,6 +145,7 @@ describe("DashboardPanel", () => {
 
     render(<DashboardPanel />)
 
+    expect(screen.getByTestId("overview-agent-handoff")).not.toBeNull()
     expect(screen.getByText("Set up your agent first")).not.toBeNull()
     expect(screen.getByText("1/4 core steps complete")).not.toBeNull()
     expect(screen.getByTestId("overview-guided-setup")).not.toBeNull()
@@ -128,6 +157,31 @@ describe("DashboardPanel", () => {
 
     await user.click(within(screen.getByTestId("overview-status-header")).getByRole("button", { name: "Open agent" }))
     expect(useNavigationStore.getState().section).toBe("agent")
+  })
+
+  it("copies the overview agent prompt", async () => {
+    const mutateAsync = jest.fn(async () => ({
+      apiKey: "wrk_key_1234",
+      apiKeyLast4: "1234",
+      createdAt: "2026-04-22T00:00:00Z",
+      rotatedAt: null,
+    }))
+    mockedUseRevealApiKey.mockReturnValue({ mutateAsync, isPending: false })
+    const writeText = jest.fn((value: string) => Promise.resolve(value))
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      writable: true,
+      configurable: true,
+    })
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+
+    render(<DashboardPanel />)
+
+    await user.click(screen.getByRole("button", { name: "Copy prompt" }))
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalled()
+      expect(screen.getByRole("button", { name: "Copied" })).not.toBeNull()
+    })
   })
 
   it("pushes environment setup when the agent exists but no base URL is configured", async () => {

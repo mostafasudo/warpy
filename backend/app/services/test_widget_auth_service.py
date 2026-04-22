@@ -4,24 +4,9 @@ import pytest
 
 from app.services.widget_auth_service import (
     WidgetJwtError,
-    generate_widget_api_key,
-    hash_widget_api_key,
     mint_widget_jwt,
     verify_widget_jwt,
 )
-
-
-def test_generate_widget_api_key_has_last4_suffix():
-    api_key, last4 = generate_widget_api_key()
-    assert api_key.endswith(last4)
-    assert len(last4) == 4
-    assert last4.isdigit()
-
-
-def test_hash_widget_api_key_stable():
-    first = hash_widget_api_key("key")
-    second = hash_widget_api_key("key")
-    assert first == second
 
 
 def test_mint_and_verify_widget_jwt_success():

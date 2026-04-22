@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, Copy, Info, RotateCw, Terminal } from "lucide-react"
+import { Check, ChevronDown, Copy, Info } from "lucide-react"
 import clsx from "clsx"
 
 import { DirtyActions, UnsavedBadge } from "@/components/dirty-state"
@@ -15,12 +15,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { getApiUrl } from "@/api/client"
+import { buildWidgetTokenRefreshPrompt, maskApiKey } from "@/lib/agent-integration"
 import { buildScriptSnippet, getWidgetCdnUrl, normalizeCustomerBaseUrl } from "@/lib/widget-install"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useApiKeyQuery } from "@/queries/use-api-key"
 import { useAgentWidgetSecurityQuery } from "@/queries/use-agent-widget-security"
 import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
 import { useConfigQuery } from "@/queries/use-config"
-import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useCreateAgent } from "@/mutations/use-create-agent"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
 import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agent-widget-security-draft"
@@ -29,6 +30,7 @@ import { useUpdateAgentWidgetInstall } from "@/mutations/use-update-agent-widget
 import { useUpdateAgentFrontendCapability } from "@/mutations/use-update-agent-frontend-capability"
 import { useUpdateAgentCustomSystemPrompt } from "@/mutations/use-update-agent-custom-system-prompt"
 import { useUpdateAgentUserRateLimits } from "@/mutations/use-update-agent-user-rate-limits"
+import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { toastSelectors, useToastStore } from "@/stores/toast"
 import type { WidgetInstallFramework, WidgetInstallPackageManager } from "@/types"
 import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
@@ -333,27 +335,7 @@ const WidgetInstallDisplay = ({ agentId, baseUrl }: WidgetInstallDisplayProps) =
   )
 }
 
-const maskApiKey = (last4: string) => `••••••••••••${last4}`
-
 const getAgentServerBaseUrl = (): string => getApiUrl()
-
-const buildWidgetTokenPrompt = (widgetRefreshEndpointPath: string) => {
-  return `You are implementing a secure widget token refresh endpoint.
-
-Goal
-- Create a server-side endpoint at: POST ${widgetRefreshEndpointPath}
-
-Requirements
-
-- Store the Widget API Key in a server-side environment variable (never expose it to the browser).
-- call: POST ${getAgentServerBaseUrl()}/widget-token Authorization: Bearer <WIDGET_API_KEY>
-- Return the upstream JSON exactly as: { token: "<jwt>" }
-- The JWT is short-lived (~5 minutes). Do not cache.
-Notes
-
-- Keep this endpoint protected by your existing dashboard auth/session.
-- The widget will retry token refresh automatically on 401.`.trim()
-}
 
 const ConfigureWidgetPanel = () => <ConfigureWidgetPanelContent />
 
@@ -766,11 +748,12 @@ const UserRateLimitsPanel = () => {
 const AdvancedSecurityPanel = () => {
   const { data, isPending } = useAgentWidgetSecurityQuery()
   const updateDraft = useUpdateAgentWidgetSecurityDraft()
-  const createApiKey = useCreateAgentWidgetApiKey()
+  const [isOpen, setIsOpen] = useState(false)
+  const apiKeyQuery = useApiKeyQuery(isOpen)
   const deployDraft = useDeployAgentWidgetSecurity()
   const discardDraft = useDiscardAgentWidgetSecurityDraft()
+  const setSection = useNavigationStore(navigationSelectors.setSection)
   const addToast = useToastStore(toastSelectors.addToast)
-  const [isOpen, setIsOpen] = useState(false)
 
   const active = data?.active
   const draft = data?.draft
@@ -780,15 +763,11 @@ const AdvancedSecurityPanel = () => {
     draft?.requireSignedWidgetToken ?? active?.requireSignedWidgetToken ?? false
   const effectiveWidgetRefreshEndpointPath =
     draft?.widgetRefreshEndpointPath ?? active?.widgetRefreshEndpointPath ?? "/widget-token"
-  const effectiveApiKeyLast4 = draft?.apiKeyLast4 ?? active?.apiKeyLast4
-
-  const showApiKeyUnsaved = Boolean(draft?.apiKeyLast4)
   const showRefreshEndpointUnsaved = Boolean(draft?.widgetRefreshEndpointPath)
 
   const [widgetRefreshEndpointDraft, setWidgetRefreshEndpointDraft] = useState<string>(
     effectiveWidgetRefreshEndpointPath
   )
-  const [newApiKey, setNewApiKey] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
   useEffect(() => {
@@ -796,19 +775,9 @@ const AdvancedSecurityPanel = () => {
   }, [effectiveWidgetRefreshEndpointPath])
 
   const maskedApiKey = useMemo(() => {
-    if (!effectiveApiKeyLast4) return null
-    return maskApiKey(effectiveApiKeyLast4)
-  }, [effectiveApiKeyLast4])
-
-  const handleCopy = async (value: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(key)
-      setTimeout(() => setCopied(null), 1800)
-    } catch {
-      addToast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "error" })
-    }
-  }
+    if (!apiKeyQuery.data?.apiKeyLast4) return null
+    return maskApiKey(apiKeyQuery.data.apiKeyLast4)
+  }, [apiKeyQuery.data?.apiKeyLast4])
 
   const handleToggle = async (checked: boolean) => {
     try {
@@ -833,20 +802,19 @@ const AdvancedSecurityPanel = () => {
     }
   }
 
-  const handleGenerateOrRotate = async () => {
+  const handleCopy = async (value: string, key: string) => {
     try {
-      const created = await createApiKey.mutateAsync()
-      setNewApiKey(created.apiKey)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not generate API key"
-      addToast({ title: "API key failed", description: message, variant: "error" })
+      await navigator.clipboard.writeText(value)
+      setCopied(key)
+      setTimeout(() => setCopied(null), 1800)
+    } catch {
+      addToast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "error" })
     }
   }
 
   const handleDeploy = async () => {
     try {
       await deployDraft.mutateAsync()
-      setNewApiKey(null)
       addToast({ title: "Deployed", description: "Advanced Security changes deployed.", variant: "success" })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not deploy changes"
@@ -857,7 +825,6 @@ const AdvancedSecurityPanel = () => {
   const handleDiscard = async () => {
     try {
       await discardDraft.mutateAsync()
-      setNewApiKey(null)
       addToast({ title: "Discarded", description: "Unsaved changes discarded.", variant: "success" })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not discard changes"
@@ -942,53 +909,25 @@ const AdvancedSecurityPanel = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-semibold">Widget API Key</Label>
-                    {showApiKeyUnsaved ? (
-                      <UnsavedBadge />
-                    ) : null}
-                  </div>
-                  {newApiKey ? (
-                    <div className="rounded-lg border border-border bg-muted/20 p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold">Copy your API key</p>
-                          <p className="text-sm text-muted-foreground">This key is shown only once.</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleCopy(newApiKey, "apiKey")}
-                          disabled={!newApiKey}
-                        >
-                          {copied === "apiKey" ? "Copied" : "Copy"}
-                        </Button>
-                      </div>
-                      <Textarea className="mt-3 h-10 resize-none font-mono" readOnly rows={1} value={newApiKey} />
-                    </div>
-                  ) : null}
-                  {newApiKey ? null : (
-                    <div className="flex flex-col gap-3 sm:flex-row">
-                      <div className="flex-1">
+                  <Label className="text-sm font-semibold">Warpy API Key</Label>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <div className="flex-1">
+                      {apiKeyQuery.isPending ? (
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                      ) : (
                         <Input
                           readOnly
                           disabled={!maskedApiKey}
                           value={maskedApiKey ?? ""}
-                          placeholder="No API key generated"
+                          placeholder="Open API Config to create the Warpy API key"
                           className="font-mono"
                         />
-                      </div>
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={handleGenerateOrRotate}
-                        disabled={createApiKey.isPending}
-                      >
-                        {maskedApiKey ? <RotateCw className="h-4 w-4" /> : <span className="font-semibold">+</span>}
-                        {maskedApiKey ? "Rotate" : "Generate Key"}
-                      </Button>
+                      )}
                     </div>
-                  )}
+                    <Button type="button" variant="secondary" onClick={() => setSection("api")}>
+                      Manage in API Config
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -1021,7 +960,7 @@ const AdvancedSecurityPanel = () => {
                 <div className="rounded-lg border border-border bg-muted/20 p-4">
                   <h4 className="mb-2 text-sm font-semibold">Setup</h4>
                   <ol className="ml-4 list-decimal space-y-2 text-sm text-muted-foreground">
-                    <li>Store our API key server-side (as an environment variable).</li>
+                    <li>Store your Warpy API key server-side as an environment variable.</li>
                     <li>
                       Implement{" "}
                       <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
@@ -1045,9 +984,14 @@ const AdvancedSecurityPanel = () => {
                     <Button
                       variant="outline"
                       className="gap-2"
-                      onClick={() => handleCopy(buildWidgetTokenPrompt(effectiveWidgetRefreshEndpointPath), "prompt")}
+                      onClick={() =>
+                        void handleCopy(
+                          buildWidgetTokenRefreshPrompt(getAgentServerBaseUrl(), effectiveWidgetRefreshEndpointPath),
+                          "prompt"
+                        )
+                      }
                     >
-                      <Terminal className="h-4 w-4" />
+                      <Copy className="h-4 w-4" />
                       {copied === "prompt" ? "Copied" : "Copy prompt for coding agent"}
                     </Button>
                   </div>

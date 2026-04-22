@@ -24,8 +24,6 @@ class WidgetSecurityActive(BaseModel):
 
     require_signed_widget_token: bool = Field(alias="requireSignedWidgetToken")
     widget_refresh_endpoint_path: str = Field(alias="widgetRefreshEndpointPath")
-    has_api_key: bool = Field(alias="hasApiKey")
-    api_key_last4: str | None = Field(default=None, alias="apiKeyLast4")
 
 
 class WidgetSecurityDraft(BaseModel):
@@ -33,7 +31,6 @@ class WidgetSecurityDraft(BaseModel):
 
     require_signed_widget_token: bool | None = Field(default=None, alias="requireSignedWidgetToken")
     widget_refresh_endpoint_path: str | None = Field(default=None, alias="widgetRefreshEndpointPath")
-    api_key_last4: str | None = Field(default=None, alias="apiKeyLast4")
 
 
 class WidgetSecurityResponse(BaseModel):
@@ -49,13 +46,6 @@ class WidgetSecurityDraftUpdate(BaseModel):
 
     require_signed_widget_token: bool | None = Field(default=None, alias="requireSignedWidgetToken")
     widget_refresh_endpoint_path: str | None = Field(default=None, alias="widgetRefreshEndpointPath")
-
-
-class WidgetApiKeyCreateResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    api_key: str = Field(alias="apiKey")
-    api_key_last4: str = Field(alias="apiKeyLast4")
 
 
 class AgentWidgetConfigResponse(BaseModel):

@@ -93,7 +93,7 @@ sequenceDiagram
 - Warpy-managed widget routes always call Warpy's API origin: `GET /widget/config/{agentId}`, `WS /widget/session`, and `POST /widget/transcribe`.
 - The customer-configured `baseUrl` is only for customer-owned routes:
   - backend tool execution against the host product API
-  - the optional widget token refresh endpoint that returns `{ token }` and then calls Warpy server-to-server
+  - the optional widget token refresh endpoint that returns `{ token }` and then calls Warpy server-to-server with the shared Warpy API Key
 - Do not reuse `baseUrl` for Warpy widget routes even if the customer backend lives on the same domain.
 
 ## Turn identity and ownership

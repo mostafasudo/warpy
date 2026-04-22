@@ -9,7 +9,8 @@ from ..core.database import get_session
 from ..core.logger import log_error, log_info, log_warning
 from ..models import Agent
 from ..schemas.widget_token import WidgetTokenResponse
-from ..services.widget_auth_service import hash_widget_api_key, mint_widget_jwt
+from ..services.api_key_service import get_user_api_key_by_secret, hash_api_key
+from ..services.widget_auth_service import mint_widget_jwt
 
 
 router = APIRouter(tags=["widget-auth"])
@@ -29,8 +30,13 @@ def mint_widget_token(
         if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
-        api_key_hash = hash_widget_api_key(credentials.credentials)
-        agent = session.scalar(select(Agent).where(Agent.widget_api_key_hash == api_key_hash))
+        api_key = get_user_api_key_by_secret(session, credentials.credentials)
+        agent = None
+        if api_key:
+            agent = session.scalar(select(Agent).where(Agent.user_id == api_key.user_id))
+        else:
+            legacy_hash = hash_api_key(credentials.credentials)
+            agent = session.scalar(select(Agent).where(Agent.widget_api_key_hash == legacy_hash))
         if not agent:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 

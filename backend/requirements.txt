@@ -17,5 +17,6 @@ mcp>=1.10.0,<2.0.0
 beautifulsoup4==4.14.2
 playwright==1.55.0
 defusedxml==0.7.1
+cryptography==45.0.7
 python-multipart==0.0.20
 websockets==15.0.1

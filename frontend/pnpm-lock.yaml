@@ -44,6 +44,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.2
         version: 5.90.2(react@19.2.0)
+      '@warpy-ai/widget':
+        specifier: ^2.1.0
+        version: 2.1.0(react@19.2.0)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1715,6 +1718,23 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
+
+  '@warpy-ai/widget@2.1.0':
+    resolution: {integrity: sha512-lRr2gTzVH1Jg8jXY96lzfw9G3S6LV4zmBhs1a+qcvRgYtWRaZDXuD7kzS8j8Pmthkk3WIGLiUnXn0+uD91ZcJw==}
+    peerDependencies:
+      '@angular/core': ^17.0.0
+      react: ^18.0.0
+      svelte: ^4.0.0
+      vue: ^3.3.0
+    peerDependenciesMeta:
+      '@angular/core':
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -5872,6 +5892,10 @@ snapshots:
       vite: 7.1.9(@types/node@24.7.2)(jiti@1.21.7)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
+
+  '@warpy-ai/widget@2.1.0(react@19.2.0)':
+    optionalDependencies:
+      react: 19.2.0
 
   accepts@2.0.0:
     dependencies:

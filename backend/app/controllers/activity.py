@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..core.auth import require_clerk_session
+from ..core.auth import require_dashboard_principal
 from ..core.database import get_session
 from ..core.logger import log_error, log_info
 from ..schemas.activity import (
@@ -18,7 +18,7 @@ from ..schemas.activity import (
     ActivitySummaryResponse,
     ActivityTopAction,
 )
-from ..schemas.auth import ClerkSession
+from ..schemas.auth import DashboardPrincipal
 from ..services.activity_service import (
     action_label,
     get_activity_conversation_detail,
@@ -103,17 +103,17 @@ def get_activity_summary_route(
     start_date: date | None = Query(None, alias="start_date"),
     end_date: date | None = Query(None, alias="end_date"),
     session: Session = Depends(get_session),
-    clerk_session: ClerkSession = Depends(require_clerk_session),
+    principal: DashboardPrincipal = Depends(require_dashboard_principal),
 ) -> ActivitySummaryResponse:
     try:
         start, end = resolve_activity_range(start_date, end_date)
         conversation_count, action_count, top_actions, has_any_conversation = get_activity_summary(
             session,
-            clerk_session.user_id,
+            principal.user_id,
             start=start,
             end=end,
         )
-        log_info("ActivityController", "get_summary", "Activity summary fetched", user_id=clerk_session.user_id)
+        log_info("ActivityController", "get_summary", "Activity summary fetched", user_id=principal.user_id)
         return ActivitySummaryResponse(
             conversationCount=conversation_count,
             actionCount=action_count,
@@ -128,7 +128,7 @@ def get_activity_summary_route(
     except HTTPException:
         raise
     except Exception as error:
-        log_error("ActivityController", "get_summary", "Failed to fetch activity summary", exc=error, user_id=clerk_session.user_id)
+        log_error("ActivityController", "get_summary", "Failed to fetch activity summary", exc=error, user_id=principal.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch activity summary")
 
 
@@ -139,19 +139,19 @@ def list_activity_conversations_route(
     limit: int = Query(50, ge=1, le=100),
     cursor: str | None = Query(None),
     session: Session = Depends(get_session),
-    clerk_session: ClerkSession = Depends(require_clerk_session),
+    principal: DashboardPrincipal = Depends(require_dashboard_principal),
 ) -> ActivityConversationsResponse:
     try:
         start, end = resolve_activity_range(start_date, end_date)
         conversations, user_message_counts, action_counts, next_cursor = list_activity_conversations(
             session,
-            clerk_session.user_id,
+            principal.user_id,
             start=start,
             end=end,
             limit=limit,
             cursor=cursor,
         )
-        log_info("ActivityController", "list_conversations", "Activity conversations fetched", user_id=clerk_session.user_id)
+        log_info("ActivityController", "list_conversations", "Activity conversations fetched", user_id=principal.user_id)
         return ActivityConversationsResponse(
             items=[
                 ActivityConversationRow(
@@ -171,7 +171,7 @@ def list_activity_conversations_route(
     except HTTPException:
         raise
     except Exception as error:
-        log_error("ActivityController", "list_conversations", "Failed to fetch conversations", exc=error, user_id=clerk_session.user_id)
+        log_error("ActivityController", "list_conversations", "Failed to fetch conversations", exc=error, user_id=principal.user_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch conversations")
 
 
@@ -183,12 +183,12 @@ def get_activity_conversation_detail_route(
     action_limit: int = Query(200, ge=1, le=500, alias="action_limit"),
     action_cursor: str | None = Query(None, alias="action_cursor"),
     session: Session = Depends(get_session),
-    clerk_session: ClerkSession = Depends(require_clerk_session),
+    principal: DashboardPrincipal = Depends(require_dashboard_principal),
 ) -> ActivityConversationDetailResponse:
     try:
         conversation, messages, next_message_cursor, actions, next_action_cursor, tools = get_activity_conversation_detail(
             session,
-            clerk_session.user_id,
+            principal.user_id,
             conversation_id,
             message_limit=message_limit,
             message_cursor=message_cursor,
@@ -223,7 +223,7 @@ def get_activity_conversation_detail_route(
             "get_conversation",
             "Failed to fetch conversation detail",
             exc=error,
-            user_id=clerk_session.user_id,
+            user_id=principal.user_id,
             conversation_id=str(conversation_id),
         )
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch conversation detail")

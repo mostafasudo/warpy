@@ -1,12 +1,11 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, jest, beforeEach } from "@jest/globals"
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { AgentPanel } from "./agent-panel"
 import { useCreateAgent } from "@/mutations/use-create-agent"
-import { useCreateAgentWidgetApiKey } from "@/mutations/use-create-agent-widget-api-key"
 import { useDeployAgentWidgetSecurity } from "@/mutations/use-deploy-agent-widget-security"
 import { useDiscardAgentWidgetSecurityDraft } from "@/mutations/use-discard-agent-widget-security-draft"
 import { useUpdateAgentCustomSystemPrompt } from "@/mutations/use-update-agent-custom-system-prompt"
@@ -16,6 +15,7 @@ import { useUpdateAgentWidgetConfig } from "@/mutations/use-update-agent-widget-
 import { useUpdateAgentWidgetSecurityDraft } from "@/mutations/use-update-agent-widget-security-draft"
 import { useAgentCustomSystemPromptQuery } from "@/queries/use-agent-custom-system-prompt"
 import { useAgentQuery } from "@/queries/use-agent"
+import { useApiKeyQuery } from "@/queries/use-api-key"
 import { useAgentFrontendCapabilityQuery } from "@/queries/use-agent-frontend-capability"
 import { useAgentWidgetConfigQuery } from "@/queries/use-agent-widget-config"
 import { useAgentWidgetInstallQuery } from "@/queries/use-agent-widget-install"
@@ -61,6 +61,10 @@ jest.mock("@/queries/use-config", () => ({
   useConfigQuery: jest.fn()
 }))
 
+jest.mock("@/queries/use-api-key", () => ({
+  useApiKeyQuery: jest.fn()
+}))
+
 jest.mock("@/queries/use-agent", () => ({
   useAgentQuery: jest.fn(),
   agentQueryKey: ["agent"]
@@ -84,10 +88,6 @@ jest.mock("@/mutations/use-update-agent-widget-config", () => ({
 
 jest.mock("@/mutations/use-update-agent-widget-install", () => ({
   useUpdateAgentWidgetInstall: jest.fn()
-}))
-
-jest.mock("@/mutations/use-create-agent-widget-api-key", () => ({
-  useCreateAgentWidgetApiKey: jest.fn()
 }))
 
 jest.mock("@/mutations/use-deploy-agent-widget-security", () => ({
@@ -115,11 +115,11 @@ jest.mock("@/mutations/use-update-agent-frontend-capability", () => ({
 const mockedUseConfigQuery = useConfigQuery as unknown as jest.Mock
 const mockedUseAgentQuery = useAgentQuery as unknown as jest.Mock
 const mockedUseCreateAgent = useCreateAgent as unknown as jest.Mock
+const mockedUseApiKeyQuery = useApiKeyQuery as unknown as jest.Mock
 const mockedUseAgentWidgetSecurityQuery = useAgentWidgetSecurityQuery as unknown as jest.Mock
 const mockedUseAgentWidgetConfigQuery = useAgentWidgetConfigQuery as unknown as jest.Mock
 const mockedUseAgentWidgetInstallQuery = useAgentWidgetInstallQuery as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetSecurityDraft = useUpdateAgentWidgetSecurityDraft as unknown as jest.Mock
-const mockedUseCreateAgentWidgetApiKey = useCreateAgentWidgetApiKey as unknown as jest.Mock
 const mockedUseDeployAgentWidgetSecurity = useDeployAgentWidgetSecurity as unknown as jest.Mock
 const mockedUseDiscardAgentWidgetSecurityDraft = useDiscardAgentWidgetSecurityDraft as unknown as jest.Mock
 const mockedUseUpdateAgentWidgetConfig = useUpdateAgentWidgetConfig as unknown as jest.Mock
@@ -149,9 +149,7 @@ const openCustomInstructions = async (user: ReturnType<typeof userEvent.setup>) 
 const baseWidgetSecurity = {
   active: {
     requireSignedWidgetToken: false,
-    widgetRefreshEndpointPath: "/widget-token",
-    hasApiKey: false,
-    apiKeyLast4: null
+    widgetRefreshEndpointPath: "/widget-token"
   },
   draft: null,
   hasStagedChanges: false
@@ -203,11 +201,11 @@ describe("AgentPanel", () => {
       data: baseWidgetSecurity,
       isPending: false
     })
-    mockedUseUpdateAgentWidgetSecurityDraft.mockReturnValue({
-      mutateAsync: jest.fn(),
+    mockedUseApiKeyQuery.mockReturnValue({
+      data: { apiKeyLast4: "9999", createdAt: "2026-04-22T00:00:00Z", rotatedAt: null },
       isPending: false
     })
-    mockedUseCreateAgentWidgetApiKey.mockReturnValue({
+    mockedUseUpdateAgentWidgetSecurityDraft.mockReturnValue({
       mutateAsync: jest.fn(),
       isPending: false
     })
@@ -1087,7 +1085,7 @@ describe("AgentPanel", () => {
 
     const mutateAsync = jest.fn(async () => ({
       ...baseWidgetSecurity,
-      draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null, apiKeyLast4: null },
+      draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null },
       hasStagedChanges: true
     }))
     mockedUseUpdateAgentWidgetSecurityDraft.mockReturnValue({
@@ -1105,7 +1103,7 @@ describe("AgentPanel", () => {
     })
   })
 
-  it("generates api key and shows it once", async () => {
+  it("shows the shared api key and routes management back to api config", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
@@ -1120,25 +1118,9 @@ describe("AgentPanel", () => {
     mockedUseAgentWidgetSecurityQuery.mockReturnValue({
       data: {
         ...baseWidgetSecurity,
-        active: {
-          ...baseWidgetSecurity.active,
-          hasApiKey: true,
-          apiKeyLast4: "9999"
-        }
+        active: { ...baseWidgetSecurity.active }
       },
       isPending: false
-    })
-
-    const mutateAsync = jest.fn(async () => ({ apiKey: "wgt_key_1234", apiKeyLast4: "1234" }))
-    mockedUseCreateAgentWidgetApiKey.mockReturnValue({
-      mutateAsync,
-      isPending: false
-    })
-
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: () => Promise.resolve() },
-      writable: true,
-      configurable: true
     })
 
     const user = userEvent.setup({ pointerEventsCheck: 0 })
@@ -1146,27 +1128,12 @@ describe("AgentPanel", () => {
 
     await openAdvancedSecurity(user)
     expect(await screen.findByDisplayValue("••••••••••••9999")).not.toBeNull()
-    expect(screen.queryByLabelText("Copy masked API key")).toBeNull()
-
-    await user.click(screen.getByRole("button", { name: /rotate/i }))
-    expect(mutateAsync).toHaveBeenCalled()
-
-    const apiKeyTextarea = await screen.findByDisplayValue("wgt_key_1234")
-    expect(apiKeyTextarea).toHaveClass("resize-none")
-    expect(apiKeyTextarea).toHaveClass("h-10")
-    expect(apiKeyTextarea).toHaveAttribute("rows", "1")
-    expect(screen.queryByDisplayValue("••••••••••••9999")).toBeNull()
-    expect(screen.queryByRole("button", { name: /rotate/i })).toBeNull()
-    expect(screen.queryByRole("button", { name: /generate key/i })).toBeNull()
-    const keyHeader = screen.getByText("Copy your API key")
-    const headerContainer = keyHeader.closest("div")
-    expect(headerContainer).not.toBeNull()
-    const flexContainer = headerContainer?.parentElement
-    expect(flexContainer).not.toBeNull()
-    expect(within(flexContainer as HTMLElement).getByRole("button", { name: "Copy" })).not.toBeNull()
+    expect(screen.queryByText("Shared across Warpy")).toBeNull()
+    await user.click(screen.getByRole("button", { name: /manage in api config/i }))
+    expect(useNavigationStore.getState().section).toBe("api")
   })
 
-  it("copies prompt template", async () => {
+  it("restores the widget token helper prompt copy button", async () => {
     mockedUseConfigQuery.mockReturnValue({
       data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
       isPending: false
@@ -1178,65 +1145,20 @@ describe("AgentPanel", () => {
     })
     mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
-    const user = userEvent.setup({ pointerEventsCheck: 0 })
-    const writeText = jest.fn(() => Promise.resolve())
+    const writeText = jest.fn((value: string) => Promise.resolve(value))
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       writable: true,
       configurable: true
     })
-    expect(navigator.clipboard.writeText).toBe(writeText)
-    expect(window.navigator.clipboard.writeText).toBe(writeText)
-
-    render(<AgentPanel />, { wrapper: createWrapper() })
-
-    await openAdvancedSecurity(user)
-    const copyPromptButton = screen.getByRole("button", { name: /copy prompt for coding agent/i })
-    expect(copyPromptButton).not.toBeDisabled()
-    await user.click(copyPromptButton)
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("POST /widget-token"))
-      expect(writeText).toHaveBeenCalledWith(expect.not.stringContaining("{data-base-url}"))
-      expect(getAddToast()).not.toHaveBeenCalled()
-    })
-  })
-
-  it("shows error toast when prompt copy fails", async () => {
-    mockedUseConfigQuery.mockReturnValue({
-      data: { baseUrl: { local: "http://localhost:3000" }, headers: {} },
-      isPending: false
-    })
-    mockedUseAgentQuery.mockReturnValue({
-      data: { id: "agent-123", userId: "user-1" },
-      isPending: false,
-      error: null
-    })
-    mockedUseCreateAgent.mockReturnValue({ mutate: jest.fn(), isPending: false })
 
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    const writeText = jest.fn(() => Promise.reject(new Error("denied")))
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText },
-      writable: true,
-      configurable: true
-    })
-    expect(navigator.clipboard.writeText).toBe(writeText)
-    expect(window.navigator.clipboard.writeText).toBe(writeText)
-
     render(<AgentPanel />, { wrapper: createWrapper() })
 
     await openAdvancedSecurity(user)
-    const copyPromptButton = screen.getByRole("button", { name: /copy prompt for coding agent/i })
-    expect(copyPromptButton).not.toBeDisabled()
-    await user.click(copyPromptButton)
-
+    await user.click(screen.getByRole("button", { name: /copy prompt for coding agent/i }))
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalled()
-      expect(getAddToast()).toHaveBeenCalledWith({
-        title: "Copy failed",
-        description: "Could not copy to clipboard.",
-        variant: "error"
-      })
+      expect(screen.getByRole("button", { name: "Copied" })).not.toBeNull()
     })
   })
 
@@ -1446,7 +1368,7 @@ describe("AgentPanel", () => {
     mockedUseAgentWidgetSecurityQuery.mockReturnValue({
       data: {
         ...baseWidgetSecurity,
-        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null, apiKeyLast4: null },
+        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null },
         hasStagedChanges: true
       },
       isPending: false
@@ -1481,7 +1403,7 @@ describe("AgentPanel", () => {
     mockedUseAgentWidgetSecurityQuery.mockReturnValue({
       data: {
         ...baseWidgetSecurity,
-        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null, apiKeyLast4: null },
+        draft: { requireSignedWidgetToken: true, widgetRefreshEndpointPath: null },
         hasStagedChanges: true
       },
       isPending: false

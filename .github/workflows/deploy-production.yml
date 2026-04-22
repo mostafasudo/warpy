@@ -137,6 +137,7 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
           WIDGET_JWT_SECRET: ${{ secrets.WIDGET_JWT_SECRET }}
+          API_KEY_ENCRYPTION_SECRET: ${{ secrets.API_KEY_ENCRYPTION_SECRET }}
           TEST_WIDGET_TOKEN_API_KEY: ${{ secrets.TEST_WIDGET_TOKEN_API_KEY }}
           LEMON_SQUEEZY_API_KEY: ${{ secrets.LEMON_SQUEEZY_API_KEY }}
           LEMON_SQUEEZY_STORE_ID: ${{ secrets.LEMON_SQUEEZY_STORE_ID }}
@@ -160,6 +161,7 @@ jobs:
             : "${REDIS_URL:?Missing REDIS_URL secret}"
             : "${CLERK_SECRET_KEY:?Missing CLERK_SECRET_KEY secret}"
             : "${OPENAI_API_KEY:?Missing OPENAI_API_KEY secret}"
+            : "${API_KEY_ENCRYPTION_SECRET:?Missing API_KEY_ENCRYPTION_SECRET secret}"
           }
 
           ensure_execution_role() {
@@ -202,6 +204,7 @@ jobs:
               --arg LANGSMITH_API_KEY "${LANGSMITH_API_KEY:-}" \
               --arg LANGSMITH_PROJECT "${LANGSMITH_PROJECT:-}" \
               --arg WIDGET_JWT_SECRET "${WIDGET_JWT_SECRET:-}" \
+              --arg API_KEY_ENCRYPTION_SECRET "${API_KEY_ENCRYPTION_SECRET:-}" \
               --arg TEST_WIDGET_TOKEN_API_KEY "${TEST_WIDGET_TOKEN_API_KEY:-}" \
               --arg LEMON_SQUEEZY_API_KEY "${LEMON_SQUEEZY_API_KEY:-}" \
               --arg LEMON_SQUEEZY_STORE_ID "${LEMON_SQUEEZY_STORE_ID:-}" \
@@ -232,6 +235,7 @@ jobs:
                   + optenv("LANGSMITH_API_KEY"; $LANGSMITH_API_KEY)
                   + optenv("LANGSMITH_PROJECT"; $LANGSMITH_PROJECT)
                   + optenv("WIDGET_JWT_SECRET"; $WIDGET_JWT_SECRET)
+                  + optenv("API_KEY_ENCRYPTION_SECRET"; $API_KEY_ENCRYPTION_SECRET)
                   + optenv("TEST_WIDGET_TOKEN_API_KEY"; $TEST_WIDGET_TOKEN_API_KEY)
                   + optenv("LEMON_SQUEEZY_API_KEY"; $LEMON_SQUEEZY_API_KEY)
                   + optenv("LEMON_SQUEEZY_STORE_ID"; $LEMON_SQUEEZY_STORE_ID)

@@ -1,10 +1,15 @@
 import importlib
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.core.database import session_scope
 from app.main import create_app
+from app.models import Agent
 from app.schemas.auth import ClerkSession
+from app.services.api_key_service import hash_api_key
 from app.services.agent_chain import StepResult
 
 
@@ -16,6 +21,7 @@ def configure_settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
     monkeypatch.setenv("WIDGET_JWT_SECRET", "secret")
+    monkeypatch.setenv("API_KEY_ENCRYPTION_SECRET", "api-key-secret")
     monkeypatch.setenv("TEST_WIDGET_TOKEN_API_KEY", "")
     get_settings.cache_clear()
     importlib.reload(database)
@@ -75,8 +81,8 @@ def create_agent(client: TestClient) -> str:
     return response.json()["id"]
 
 
-def generate_key_draft(client: TestClient) -> str:
-    response = client.post("/agent/widget-security/api-key", headers=auth_headers())
+def reveal_api_key(client: TestClient) -> str:
+    response = client.post("/api-key/reveal", headers=auth_headers())
     assert response.status_code == 200
     return response.json()["apiKey"]
 
@@ -94,50 +100,52 @@ def test_widget_security_initial_state(client: TestClient):
     body = response.json()
     assert body["active"]["requireSignedWidgetToken"] is False
     assert body["active"]["widgetRefreshEndpointPath"] == "/widget-token"
-    assert body["active"]["hasApiKey"] is False
     assert body["hasStagedChanges"] is False
 
 
-def test_widget_security_key_draft_and_deploy(client: TestClient):
+def test_widget_security_deploy_enable_auto_creates_api_key(client: TestClient):
     create_agent(client)
-    api_key = generate_key_draft(client)
-    assert api_key
-
-    draft_state = client.get("/agent/widget-security", headers=auth_headers()).json()
-    assert draft_state["hasStagedChanges"] is True
-    assert draft_state["draft"]["apiKeyLast4"] is not None
-
-    deployed = deploy_draft(client)
-    assert deployed["hasStagedChanges"] is False
-    assert deployed["active"]["hasApiKey"] is True
-    assert deployed["active"]["apiKeyLast4"] is not None
-
-
-def test_widget_security_deploy_enable_requires_key(client: TestClient):
-    create_agent(client)
-    response = client.patch(
+    client.patch(
         "/agent/widget-security/draft",
         json={"requireSignedWidgetToken": True},
         headers=auth_headers(),
     )
-    assert response.status_code == 200
-    deploy = client.post("/agent/widget-security/deploy", headers=auth_headers())
-    assert deploy.status_code == 400
+
+    deployed = deploy_draft(client)
+    assert deployed["active"]["requireSignedWidgetToken"] is True
+
+    api_key = reveal_api_key(client)
+    assert api_key.startswith("wrk_")
 
 
 def test_widget_token_mints_for_deployed_key(client: TestClient):
     create_agent(client)
-    api_key = generate_key_draft(client)
-    deploy_draft(client)
+    api_key = reveal_api_key(client)
 
     token_res = client.post("/widget-token", headers={"Authorization": f"Bearer {api_key}"})
     assert token_res.status_code == 200
     assert "token" in token_res.json()
 
 
+def test_widget_token_accepts_legacy_agent_widget_key(client: TestClient):
+    agent_id = create_agent(client)
+    legacy_key = "wrk_legacy_widget_key_1234"
+
+    with session_scope() as session:
+        agent = session.scalar(select(Agent).where(Agent.id == UUID(agent_id)))
+        assert agent is not None
+        agent.widget_api_key_hash = hash_api_key(legacy_key)
+        agent.widget_api_key_last4 = legacy_key[-4:]
+        session.flush()
+
+    token_res = client.post("/widget-token", headers={"Authorization": f"Bearer {legacy_key}"})
+    assert token_res.status_code == 200
+    assert "token" in token_res.json()
+
+
 def test_widget_auth_required_when_enabled(client: TestClient):
     agent_id = create_agent(client)
-    api_key = generate_key_draft(client)
+    api_key = reveal_api_key(client)
     client.patch(
         "/agent/widget-security/draft",
         json={"requireSignedWidgetToken": True},
@@ -231,8 +239,7 @@ def test_test_widget_token_endpoint_proxies_widget_token(client: TestClient, mon
     from app.core.config import get_settings
 
     create_agent(client)
-    api_key = generate_key_draft(client)
-    deploy_draft(client)
+    api_key = reveal_api_key(client)
 
     monkeypatch.setenv("TEST_WIDGET_TOKEN_API_KEY", api_key)
     get_settings.cache_clear()

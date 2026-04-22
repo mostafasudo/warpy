@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from .controllers.api_key import router as api_key_router
 from .controllers.agent import router as agent_router
 from .controllers.activity import router as activity_router
 from .controllers.billing import router as billing_router
@@ -15,6 +16,7 @@ from .controllers.mcp_connections import router as mcp_connections_router
 from .controllers.onboarding import router as onboarding_router
 from .controllers.products import router as products_router
 from .controllers.session import router as session_router
+from .controllers.static_docs import router as static_docs_router
 from .controllers.widget import router as widget_router
 from .controllers.widget_token import router as widget_token_router
 from .core.config import get_settings
@@ -41,6 +43,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
     configure_cors(app, settings)
     app.include_router(health_router)
+    app.include_router(api_key_router)
     app.include_router(session_router)
     app.include_router(config_router)
     app.include_router(mcp_connections_router)
@@ -55,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_base_router)
     app.include_router(onboarding_router)
     app.include_router(lemon_squeezy_webhook_router)
+    app.include_router(static_docs_router)
 
     return app
 

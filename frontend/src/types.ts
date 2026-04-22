@@ -150,14 +150,11 @@ export type AgentResponse = {
 export type WidgetSecurityActive = {
   requireSignedWidgetToken: boolean;
   widgetRefreshEndpointPath: string;
-  hasApiKey: boolean;
-  apiKeyLast4: string | null;
 };
 
 export type WidgetSecurityDraft = {
   requireSignedWidgetToken: boolean | null;
   widgetRefreshEndpointPath: string | null;
-  apiKeyLast4: string | null;
 };
 
 export type WidgetSecurityResponse = {
@@ -171,9 +168,17 @@ export type WidgetSecurityDraftUpdate = {
   widgetRefreshEndpointPath?: string | null;
 };
 
-export type WidgetApiKeyCreateResponse = {
+export type ApiKeySummaryResponse = {
+  apiKeyLast4: string;
+  createdAt: string;
+  rotatedAt: string | null;
+};
+
+export type ApiKeyRevealResponse = {
   apiKey: string;
   apiKeyLast4: string;
+  createdAt: string;
+  rotatedAt: string | null;
 };
 
 export type WidgetBehavior = "overlay" | "push";

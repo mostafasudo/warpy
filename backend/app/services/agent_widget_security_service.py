@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..core.logger import log_info
 from ..models import Agent
 from ..schemas.agent import WidgetSecurityActive, WidgetSecurityDraft, WidgetSecurityResponse
-from .widget_auth_service import generate_widget_api_key, hash_widget_api_key
+from .api_key_service import ensure_user_api_key
 
 
 DEFAULT_WIDGET_REFRESH_ENDPOINT_PATH = "/widget-token"
@@ -49,20 +49,6 @@ def update_widget_security_draft(
     return _to_widget_security_response(agent)
 
 
-def create_widget_api_key_draft(session: Session, user_id: str) -> tuple[WidgetSecurityResponse, str, str]:
-    agent = session.scalar(
-        select(Agent).where(Agent.user_id == user_id).with_for_update()
-    )
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-    api_key, last4 = generate_widget_api_key()
-    agent.widget_api_key_hash_draft = hash_widget_api_key(api_key)
-    agent.widget_api_key_last4_draft = last4
-    session.flush()
-    log_info("AgentWidgetSecurityService", "create_api_key_draft", "Draft API key created", user_id=user_id)
-    return _to_widget_security_response(agent), api_key, last4
-
-
 def deploy_widget_security_draft(session: Session, user_id: str) -> WidgetSecurityResponse:
     agent = session.scalar(
         select(Agent).where(Agent.user_id == user_id).with_for_update()
@@ -80,23 +66,13 @@ def deploy_widget_security_draft(session: Session, user_id: str) -> WidgetSecuri
         if agent.widget_refresh_endpoint_path_draft is not None
         else agent.widget_refresh_endpoint_path or DEFAULT_WIDGET_REFRESH_ENDPOINT_PATH
     )
-    next_key_hash = agent.widget_api_key_hash_draft if agent.widget_api_key_hash_draft is not None else agent.widget_api_key_hash
-    next_key_last4 = agent.widget_api_key_last4_draft if agent.widget_api_key_last4_draft is not None else agent.widget_api_key_last4
-
-    if next_auth_enabled and not next_key_hash:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Generate a widget API key before enabling signed widget tokens."
-        )
+    if next_auth_enabled:
+        ensure_user_api_key(session, user_id)
 
     agent.widget_auth_enabled = next_auth_enabled
     agent.widget_refresh_endpoint_path = next_refresh_path
-    agent.widget_api_key_hash = next_key_hash
-    agent.widget_api_key_last4 = next_key_last4
     agent.widget_auth_enabled_draft = None
     agent.widget_refresh_endpoint_path_draft = None
-    agent.widget_api_key_hash_draft = None
-    agent.widget_api_key_last4_draft = None
 
     session.flush()
     log_info("AgentWidgetSecurityService", "deploy", "Draft deployed", user_id=user_id)
@@ -112,8 +88,6 @@ def discard_widget_security_draft(session: Session, user_id: str) -> WidgetSecur
 
     agent.widget_auth_enabled_draft = None
     agent.widget_refresh_endpoint_path_draft = None
-    agent.widget_api_key_hash_draft = None
-    agent.widget_api_key_last4_draft = None
 
     session.flush()
     log_info("AgentWidgetSecurityService", "discard", "Draft discarded", user_id=user_id)
@@ -133,7 +107,6 @@ def _has_draft_changes(agent: Agent) -> bool:
     return any([
         agent.widget_auth_enabled_draft is not None,
         agent.widget_refresh_endpoint_path_draft is not None,
-        agent.widget_api_key_hash_draft is not None,
     ])
 
 
@@ -141,14 +114,11 @@ def _to_widget_security_response(agent: Agent) -> WidgetSecurityResponse:
     active = WidgetSecurityActive(
         require_signed_widget_token=agent.widget_auth_enabled,
         widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path or DEFAULT_WIDGET_REFRESH_ENDPOINT_PATH,
-        has_api_key=bool(agent.widget_api_key_hash),
-        api_key_last4=agent.widget_api_key_last4,
     )
     draft = None
     if _has_draft_changes(agent):
         draft = WidgetSecurityDraft(
             require_signed_widget_token=agent.widget_auth_enabled_draft,
             widget_refresh_endpoint_path=agent.widget_refresh_endpoint_path_draft,
-            api_key_last4=agent.widget_api_key_last4_draft,
         )
     return WidgetSecurityResponse(active=active, draft=draft, has_staged_changes=_has_draft_changes(agent))
