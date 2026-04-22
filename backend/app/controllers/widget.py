@@ -148,6 +148,7 @@ def serialize_tool_call(call: Any) -> dict[str, Any]:
         "id": getattr(call, "id", ""),
         "type": getattr(call, "tool_type", "backend"),
         "name": getattr(call, "name", ""),
+        "feature": getattr(call, "feature", None),
         "toolId": str(getattr(call, "tool_id", "") or "") or None,
         "method": getattr(call, "method", None),
         "path": getattr(call, "path", None),

@@ -902,6 +902,7 @@ def test_widget_session_handles_tool_calls_and_final_response(client: TestClient
         tool_id=uuid4(),
         name="get_user",
         tool_type="backend",
+        feature="Billing",
         method="GET",
         path="/users/{id}",
         params={"id": "123"},
@@ -962,6 +963,7 @@ def test_widget_session_handles_tool_calls_and_final_response(client: TestClient
         assert first["type"] == "chat.response"
         assert first["response"]["done"] is False
         assert first["response"]["toolCalls"][0]["name"] == "get_user"
+        assert first["response"]["toolCalls"][0]["feature"] == "Billing"
 
         conversation_id = first["response"]["conversationId"]
         with session_scope() as db_session:
@@ -986,6 +988,53 @@ def test_widget_session_handles_tool_calls_and_final_response(client: TestClient
     with session_scope() as db_session:
         assert get_pending_state(db_session, UUID(conversation_id)) is None
         assert get_tool_context(db_session, UUID(conversation_id)) is not None
+
+
+def test_widget_session_serializes_frontend_tool_feature(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    from app.schemas.widget import ToolCallPayload
+
+    tool_call = ToolCallPayload(
+        id="tc_front_1",
+        tool_id=uuid4(),
+        name="open_drawer",
+        tool_type="frontend",
+        feature="UI",
+        params={"drawer": "orders"},
+    )
+
+    class FakeFrontendSocketExecutor:
+        def __init__(self, session, user_id, conversation_id=None, redis_client=None, **_kwargs):
+            pass
+
+        async def run_step(
+            self,
+            user_message,
+            conversation_history,
+            tool_results=None,
+            pending_messages=None,
+            active_tool_ids=None,
+            pending_input_items=None,
+        ):
+            if tool_results:
+                return StepResult(response="done", done=True, messages=[], active_tool_ids=[])
+            return StepResult(tool_calls=[tool_call], done=False, messages=[], active_tool_ids=[])
+
+    monkeypatch.setattr("app.controllers.widget.AgentExecutor", FakeFrontendSocketExecutor)
+
+    agent = client.post("/agent", headers=auth_headers())
+    agent_id = agent.json()["id"]
+
+    with client.websocket_connect("/widget/session") as websocket:
+        first = send_widget_request(
+            websocket,
+            {"agentId": agent_id, "requestId": "req_front_feature", "message": "start"},
+        )
+
+    assert first["type"] == "chat.response"
+    assert first["response"]["done"] is False
+    assert first["response"]["toolCalls"][0]["name"] == "open_drawer"
+    assert first["response"]["toolCalls"][0]["type"] == "frontend"
+    assert first["response"]["toolCalls"][0]["feature"] == "UI"
 
 
 def test_widget_session_replays_completed_request_without_duplicate_persistence(client: TestClient, monkeypatch: pytest.MonkeyPatch):
@@ -1389,6 +1438,7 @@ def test_widget_session_replayed_tool_results_are_idempotent_for_same_request(cl
         tool_id=tool_id,
         name="get_item",
         tool_type="backend",
+        feature="Catalog",
         method="GET",
         path="/items/{id}",
         params={"id": "1"},
@@ -1470,6 +1520,7 @@ def test_widget_session_replayed_tool_results_are_idempotent_for_same_request(cl
 
     assert replay["response"]["requestId"] == request_id
     assert replay["response"]["done"] is False
+    assert first["response"]["toolCalls"][0]["feature"] == "Catalog"
     assert replay["response"]["toolCalls"] == first["response"]["toolCalls"]
     assert done["response"]["messages"] == [{"role": "assistant", "content": "tool done once"}]
     assert repeated["response"]["messages"] == [{"role": "assistant", "content": "tool done once"}]

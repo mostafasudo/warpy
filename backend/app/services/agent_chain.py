@@ -1032,6 +1032,7 @@ Keep it brief and friendly."""
                             fallback_method = getattr(fallback_tool, "method", None)
                             resolved_method = tool_metadata.get("method") if tool_metadata else (fallback_method.value if fallback_method else None)
                             resolved_path = tool_metadata.get("path") if tool_metadata else getattr(fallback_tool, "path", None)
+                            resolved_feature = tool_metadata.get("feature") if tool_metadata else getattr(getattr(fallback_tool, "feature", None), "name", "") or None
                             serialized = serialize_args(tool_args)
                             filtered = {k: v for k, v in serialized.items() if v is not None}
                             if resolved_tool_type == "frontend":
@@ -1040,6 +1041,7 @@ Keep it brief and friendly."""
                                     type="frontend",
                                     toolId=resolved_tool_id,
                                     name=tool_name,
+                                    feature=resolved_feature,
                                     params=filtered,
                                 ))
                                 continue
@@ -1048,6 +1050,7 @@ Keep it brief and friendly."""
                                 type="backend",
                                 toolId=resolved_tool_id,
                                 name=tool_name,
+                                feature=resolved_feature,
                                 method=resolved_method,
                                 path=resolved_path,
                                 params=filtered.get("params", {}),

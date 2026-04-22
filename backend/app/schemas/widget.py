@@ -93,6 +93,7 @@ class ToolCallPayload(BaseModel):
     id: str
     tool_type: str = Field(default="backend", alias="type")
     name: str
+    feature: str | None = None
     tool_id: UUID | None = Field(default=None, alias="toolId")
     method: str | None = None
     path: str | None = None

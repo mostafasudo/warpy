@@ -25,6 +25,7 @@ class ToolSnapshot:
     name: str
     description: str
     parameters: dict[str, Any]
+    feature: str | None
 
     @classmethod
     def from_record(cls, tool: Tool) -> "ToolSnapshot":
@@ -40,6 +41,7 @@ class ToolSnapshot:
             name=function_spec.get("name", f"tool_{tool.id}"),
             description=function_spec.get("description", f"{default_method} {default_path}"),
             parameters=function_spec.get("parameters", {"type": "object", "properties": {}}),
+            feature=getattr(getattr(tool, "feature", None), "name", "") or None,
         )
 
     def to_metadata(self) -> dict[str, Any]:
@@ -51,6 +53,7 @@ class ToolSnapshot:
             "path": self.path,
             "name": self.name,
             "description": self.description,
+            "feature": self.feature,
         }
 
 
@@ -76,7 +79,7 @@ def _load_agent_tools_from_session(session: Session, user_id: str, tool_ids: lis
             Tool.id.in_(tool_ids),
             Tool.user_id == user_id,
             Tool.agent_enabled.is_(True),
-        )
+        ).options(selectinload(Tool.feature))
     ).all()
 
 

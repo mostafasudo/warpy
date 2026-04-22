@@ -11,6 +11,7 @@ from app.services.agent_tools import (
     create_backend_tool,
     create_find_tools_tool,
     create_find_elements_tool,
+    create_frontend_tool,
     create_js_exec_tool,
     create_read_page_tool,
 )
@@ -129,6 +130,36 @@ def test_create_find_tools_tool_formats_results(monkeypatch: pytest.MonkeyPatch)
     assert response[0]["name"] == "createOrder"
     assert response[0]["description"] == "Create order"
     assert response[0]["feature"] == "Orders"
+
+
+def test_tool_snapshot_preserves_feature_metadata():
+    tool_record = DummyTool(
+        "33333333-3333-3333-3333-333333333333",
+        "/orders/{id}",
+        HttpMethod.get,
+        {"function": {"name": "getOrder", "description": "Fetch order", "parameters": {"type": "object", "properties": {}}}},
+        feature=DummyFeature("Orders"),
+    )
+
+    snapshot = ToolSnapshot.from_record(tool_record)
+
+    assert snapshot.feature == "Orders"
+    assert snapshot.to_metadata()["feature"] == "Orders"
+
+
+def test_create_frontend_tool_attaches_feature_metadata():
+    tool_record = DummyTool(
+        "44444444-4444-4444-4444-444444444444",
+        None,
+        None,
+        {"function": {"name": "openDrawer", "description": "Open drawer", "parameters": {"type": "object", "properties": {}}}},
+        feature=DummyFeature("UI"),
+        tool_type="frontend",
+    )
+
+    tool = create_frontend_tool(tool_record)
+
+    assert tool.metadata["warpy_tool"]["feature"] == "UI"
 
 
 def test_create_find_tools_tool_handles_empty(monkeypatch: pytest.MonkeyPatch):

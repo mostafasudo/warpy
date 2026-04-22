@@ -471,6 +471,14 @@ function getShadowRoot(widget: WidgetDom) {
   return shadowRoot as ShadowRoot
 }
 
+function getActivityTitle(shadowRoot: ShadowRoot) {
+  return (shadowRoot.querySelector(".cta-widget-activity-header span") as HTMLSpanElement | null)?.textContent ?? ""
+}
+
+function getActivitySteps(shadowRoot: ShadowRoot) {
+  return Array.from(shadowRoot.querySelectorAll(".cta-widget-activity-step")) as HTMLDivElement[]
+}
+
 function getComputedControlStyles(el: Element) {
   const styles = getComputedStyle(el as HTMLElement)
   return {
@@ -1342,6 +1350,394 @@ describe("widget desktop resize", () => {
       expect(MockWebSocket.instances).toHaveLength(1)
       expect(MockWebSocket.instances[0]?.sent).toHaveLength(2)
       expect(shadowRoot.textContent).toContain("Finished.")
+    })
+  })
+
+  it("shows readable live activity for a single backend tool call", async () => {
+    let resolveToolCall: (value: ReturnType<typeof createJsonResponse>) => void = () => undefined
+    const toolCallResponse = new Promise<ReturnType<typeof createJsonResponse>>((resolve) => {
+      resolveToolCall = resolve
+    })
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      if (url === "https://customer.example/me") {
+        return toolCallResponse
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-single-backend-activity",
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "backend", feature: "Billing", name: "get_profile", method: "GET", path: "/me" }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.toolResults).toEqual([{ id: "tc_1", statusCode: 200, body: { ok: true } }])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-single-backend-activity",
+          messages: [{ role: "assistant", content: "Profile loaded." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget({}, { baseUrl: "https://customer.example", mockConfigFetch: false })
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Load my profile" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(getActivityTitle(shadowRoot)).toBe("Billing · Get Profile")
+      expect(shadowRoot.textContent).toContain("Working")
+    })
+
+    resolveToolCall(createJsonResponse({ ok: true }))
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Profile loaded.")
+      expect(shadowRoot.textContent).toContain("Done")
+    })
+  })
+
+  it("shows step-by-step progress for parallel backend tool batches while preserving result order", async () => {
+    let resolveProfile: (value: ReturnType<typeof createJsonResponse>) => void = () => undefined
+    let resolveOrders: (value: ReturnType<typeof createJsonResponse>) => void = () => undefined
+    const profileResponse = new Promise<ReturnType<typeof createJsonResponse>>((resolve) => {
+      resolveProfile = resolve
+    })
+    const ordersResponse = new Promise<ReturnType<typeof createJsonResponse>>((resolve) => {
+      resolveOrders = resolve
+    })
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      if (url === "https://customer.example/me") {
+        return profileResponse
+      }
+      if (url === "https://customer.example/orders") {
+        return ordersResponse
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-backend-batch-activity",
+            messages: [],
+            toolCalls: [
+              { id: "tc_1", type: "backend", feature: "Billing", name: "get_profile", method: "GET", path: "/me" },
+              { id: "tc_2", type: "backend", feature: "Orders", name: "list_orders", method: "GET", path: "/orders" },
+            ],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.toolResults).toEqual([
+        { id: "tc_1", statusCode: 200, body: { profile: true } },
+        { id: "tc_2", statusCode: 200, body: { orders: true } },
+      ])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-backend-batch-activity",
+          messages: [{ role: "assistant", content: "Both requests finished." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget({}, { baseUrl: "https://customer.example", mockConfigFetch: false })
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Load everything" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(getActivityTitle(shadowRoot)).toBe("Working through this request")
+      expect(getActivitySteps(shadowRoot)).toHaveLength(2)
+      expect(getActivitySteps(shadowRoot).map((step) => step.dataset.status)).toEqual(["running", "running"])
+    })
+
+    resolveOrders(createJsonResponse({ orders: true }))
+
+    await waitFor(() => {
+      expect(getActivitySteps(shadowRoot).map((step) => step.dataset.status)).toEqual(["running", "done"])
+    })
+
+    resolveProfile(createJsonResponse({ profile: true }))
+
+    await waitFor(() => {
+      expect(getActivitySteps(shadowRoot).map((step) => step.dataset.status)).toEqual(["done", "done"])
+      expect(shadowRoot.textContent).toContain("Both requests finished.")
+    })
+  })
+
+  it("shows readable activity for custom frontend tools and keeps the existing warning behavior", async () => {
+    let resolveFrontendTool: (value: { ok: true }) => void = () => undefined
+    const frontendToolResponse = new Promise<{ ok: true }>((resolve) => {
+      resolveFrontendTool = resolve
+    })
+    const warpyHandler = jest.fn(async (toolName: string, vars: Record<string, unknown>) => {
+      expect(toolName).toBe("open_drawer")
+      expect(vars).toEqual({ drawer: "orders" })
+      return frontendToolResponse
+    })
+    ;(window as typeof window & { warpy?: unknown }).warpy = warpyHandler
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-frontend-tool-activity",
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "frontend", feature: "UI", name: "open_drawer", params: { drawer: "orders" } }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      expect(request.toolResults).toEqual([
+        {
+          id: "tc_1",
+          statusCode: 200,
+          body: expect.objectContaining({
+            kind: "frontend_tool",
+            tool: "open_drawer",
+            vars: { drawer: "orders" },
+            result: { ok: true },
+          }),
+        },
+      ])
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-frontend-tool-activity",
+          messages: [{ role: "assistant", content: "Drawer opened." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Open the drawer" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(getActivityTitle(shadowRoot)).toBe("UI · Open Drawer")
+      expect(shadowRoot.textContent).toContain("The agent is running page actions. Avoid using the dashboard until it finishes.")
+    })
+
+    resolveFrontendTool({ ok: true })
+
+    await waitFor(() => {
+      expect(warpyHandler).toHaveBeenCalledTimes(1)
+      expect(shadowRoot.textContent).toContain("Drawer opened.")
+    })
+  })
+
+  it("shows needs attention for failed customer tool activity and clears the card after the error delay", async () => {
+    jest.useFakeTimers()
+    try {
+      ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+        const url = String(input)
+        if (url.includes("/widget/config/")) {
+          return createJsonResponse(createConfig())
+        }
+        if (url === "https://customer.example/me") {
+          throw new Error("Request failed")
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      })
+
+      MockWebSocket.handler = (socket, message) => {
+        const request = message.request || {}
+        if (request.message) {
+          socket.receive({
+            type: "chat.response",
+            response: {
+              conversationId: "conversation-tool-error-activity",
+              messages: [],
+              toolCalls: [{ id: "tc_1", type: "backend", feature: "Billing", name: "get_profile", method: "GET", path: "/me" }],
+              suggestions: [],
+              done: false,
+              isWidgetHidden: false,
+              actionsRemaining: 5,
+            },
+          })
+          return
+        }
+
+        expect(request.toolResults).toEqual([
+          { id: "tc_1", statusCode: 0, body: null, error: "Request failed" },
+        ])
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-tool-error-activity",
+            messages: [{ role: "assistant", content: "That request failed." }],
+            toolCalls: [],
+            suggestions: [],
+            done: true,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+      }
+
+      const widget = await loadWidget({}, { baseUrl: "https://customer.example", mockConfigFetch: false })
+      await openPanel(widget)
+      const shadowRoot = getShadowRoot(widget)
+      const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+      const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+      fireEvent.change(input, { target: { value: "Fail the request" } })
+      fireEvent.click(send)
+
+      await waitFor(() => {
+        expect(getActivityTitle(shadowRoot)).toBe("Billing · Get Profile")
+        expect(shadowRoot.textContent).toContain("Couldn't complete")
+        expect(shadowRoot.textContent).toContain("That request failed.")
+      })
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1400)
+      })
+
+      await waitFor(() => {
+        expect(shadowRoot.querySelector(".cta-widget-activity")).toBeNull()
+      })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it("falls back to a humanized tool name when feature metadata is missing", async () => {
+    let resolveToolCall: (value: ReturnType<typeof createJsonResponse>) => void = () => undefined
+    const toolCallResponse = new Promise<ReturnType<typeof createJsonResponse>>((resolve) => {
+      resolveToolCall = resolve
+    })
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes("/widget/config/")) {
+        return createJsonResponse(createConfig())
+      }
+      if (url === "https://customer.example/me") {
+        return toolCallResponse
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    MockWebSocket.handler = (socket, message) => {
+      const request = message.request || {}
+      if (request.message) {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-missing-feature-activity",
+            messages: [],
+            toolCalls: [{ id: "tc_1", type: "backend", name: "get_profile", method: "GET", path: "/me" }],
+            suggestions: [],
+            done: false,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+        return
+      }
+
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-missing-feature-activity",
+          messages: [{ role: "assistant", content: "Done." }],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget({}, { baseUrl: "https://customer.example", mockConfigFetch: false })
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    const input = shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement
+    const send = shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement
+
+    fireEvent.change(input, { target: { value: "Load my profile" } })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(getActivityTitle(shadowRoot)).toBe("Get Profile")
+      expect(getActivityTitle(shadowRoot)).not.toContain("·")
+    })
+
+    resolveToolCall(createJsonResponse({ ok: true }))
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Done.")
     })
   })
 

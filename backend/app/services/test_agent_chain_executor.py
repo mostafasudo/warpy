@@ -396,10 +396,16 @@ def test_run_step_routes_frontend_feature_tool_calls(monkeypatch):
     monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
 
+    feature = type("FeatureStub", (), {"name": "UI"})()
     tool_record = type(
         "ToolStub",
         (),
-        {"id": UUID("99999999-9999-9999-9999-999999999999"), "tool_type": "frontend", "agent_enabled": True},
+        {
+            "id": UUID("99999999-9999-9999-9999-999999999999"),
+            "tool_type": "frontend",
+            "agent_enabled": True,
+            "feature": feature,
+        },
     )()
     setattr(executor, "_get_tool_by_name", lambda _name: tool_record)
 
@@ -409,8 +415,48 @@ def test_run_step_routes_frontend_feature_tool_calls(monkeypatch):
     call = result.tool_calls[0]
     assert call.tool_type == "frontend"
     assert call.name == "open_drawer"
+    assert call.feature == "UI"
     assert call.tool_id == tool_record.id
     assert call.params == {"orderId": "ord_1"}
+
+
+def test_run_step_routes_backend_feature_tool_calls(monkeypatch):
+    responses = [
+        AIMessage(content="", tool_calls=[{"id": "call-1", "name": "get_profile", "args": {"query": {"limit": 1}}}]),
+    ]
+    llm = DummyLLM(responses)
+    monkeypatch.setattr("app.services.agent_chain.create_find_tools_tool", lambda *_args, **_kwargs: build_tool("find_tools", "[]"))
+    monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
+    executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
+
+    feature = type("FeatureStub", (), {"name": "Billing"})()
+    method = type("MethodStub", (), {"value": "GET"})()
+    tool_record = type(
+        "ToolStub",
+        (),
+        {
+            "id": UUID("88888888-8888-8888-8888-888888888888"),
+            "tool_type": "backend",
+            "agent_enabled": True,
+            "feature": feature,
+            "method": method,
+            "path": "/me",
+        },
+    )()
+    setattr(executor, "_get_tool_by_name", lambda _name: tool_record)
+
+    result = asyncio.run(executor.run_step("Get profile", []))
+
+    assert result.done is False
+    assert len(result.tool_calls) == 1
+    call = result.tool_calls[0]
+    assert call.tool_type == "backend"
+    assert call.name == "get_profile"
+    assert call.feature == "Billing"
+    assert call.tool_id == tool_record.id
+    assert call.method == "GET"
+    assert call.path == "/me"
+    assert call.query == {"limit": 1}
 
 
 def test_run_handles_frontend_feature_tool_without_widget(monkeypatch):
@@ -423,10 +469,16 @@ def test_run_handles_frontend_feature_tool_without_widget(monkeypatch):
     monkeypatch.setattr("app.services.agent_chain.get_agent_tools", lambda *_a, **_k: [])
     executor = AgentExecutor(session=None, user_id="user", llm_client=llm)
 
+    feature = type("FeatureStub", (), {"name": "UI"})()
     tool_record = type(
         "ToolStub",
         (),
-        {"id": UUID("99999999-9999-9999-9999-999999999999"), "tool_type": "frontend", "agent_enabled": True},
+        {
+            "id": UUID("99999999-9999-9999-9999-999999999999"),
+            "tool_type": "frontend",
+            "agent_enabled": True,
+            "feature": feature,
+        },
     )()
     setattr(executor, "_get_tool_by_name", lambda _name: tool_record)
 

@@ -1184,6 +1184,74 @@
     return normalized;
   }
 
+  function isCustomerFrontendToolCall(toolCall) {
+    return resolveToolType(toolCall) === "frontend" && String(toolCall && toolCall.name || "").trim() !== "frontend";
+  }
+
+  function isCustomerToolCall(toolCall) {
+    return resolveToolType(toolCall) === "backend" || isCustomerFrontendToolCall(toolCall);
+  }
+
+  function humanizeToolName(name) {
+    const raw = String(name || "").trim();
+    if (!raw) return "Tool";
+    const spaced = raw
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return spaced
+      .split(" ")
+      .filter(Boolean)
+      .map(function (part) {
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      })
+      .join(" ");
+  }
+
+  function formatToolExecutionLabel(toolCall) {
+    const feature = String(toolCall && toolCall.feature || "").trim();
+    const toolName = humanizeToolName(toolCall && toolCall.name);
+    return feature ? `${feature} · ${toolName}` : toolName;
+  }
+
+  function cloneActivityState(activity) {
+    if (!activity) return null;
+    return {
+      ...activity,
+      steps: Array.isArray(activity.steps)
+        ? activity.steps.map(function (step) { return { ...step }; })
+        : [],
+    };
+  }
+
+  function toolResultHasError(result) {
+    if (!result) return true;
+    const statusCode = Number(result.statusCode);
+    return Boolean(result.error) || !Number.isFinite(statusCode) || statusCode === 0 || statusCode >= 400;
+  }
+
+  function buildCustomerToolActivity(toolCalls) {
+    const labels = toolCalls.map(formatToolExecutionLabel);
+    if (labels.length === 1) {
+      return { title: labels[0], status: "running", steps: [] };
+    }
+    return {
+      title: "Working through this request",
+      status: "running",
+      steps: labels.map(function (label, index) {
+        return { index, label, status: "pending" };
+      }),
+    };
+  }
+
+  function hasRemainingCustomerToolCalls(toolCalls, startIndex) {
+    for (let i = startIndex; i < toolCalls.length; i += 1) {
+      if (isCustomerToolCall(toolCalls[i])) return true;
+    }
+    return false;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Screen Capture
   // ═══════════════════════════════════════════════════════════════════════════
@@ -5239,6 +5307,7 @@
     let isSecurityPanelOpen = false;
     let frontendActivity = null;
     let frontendActivityTimer = null;
+    let frontendActivityId = 0;
     let chatEpoch = 0;
     let activeRunAbortController = null;
     let frontendWarningText = "";
@@ -5991,6 +6060,9 @@
     // ─── Frontend Activity Tracking ──────────────────────────────────────────
 
     function setFrontendActivity(activity) {
+      if (activity && !activity._activityId) {
+        activity._activityId = `activity_${++frontendActivityId}`;
+      }
       frontendActivity = activity;
       if (!activity && frontendActivityTimer) {
         clearTimeout(frontendActivityTimer);
@@ -6000,10 +6072,16 @@
     }
 
     function scheduleFrontendActivityClear(delayMs) {
+      const currentActivityId = frontendActivity && frontendActivity._activityId;
+      if (!currentActivityId) return;
       if (frontendActivityTimer) {
         clearTimeout(frontendActivityTimer);
       }
       frontendActivityTimer = setTimeout(() => {
+        if (!frontendActivity || frontendActivity._activityId !== currentActivityId) {
+          frontendActivityTimer = null;
+          return;
+        }
         frontendActivity = null;
         frontendActivityTimer = null;
         renderMessages();
@@ -6539,7 +6617,7 @@
       const status = document.createElement("span");
       status.className = "cta-widget-activity-status";
       status.textContent =
-        frontendActivity.status === "done" ? "Done" : frontendActivity.status === "error" ? "Needs attention" : "Working";
+        frontendActivity.status === "done" ? "Done" : frontendActivity.status === "error" ? "Couldn't complete" : "Working";
       header.appendChild(title);
       header.appendChild(status);
       activity.appendChild(header);
@@ -7304,8 +7382,57 @@
       return type === "frontend" || type === "js_exec";
     }
 
+    function pushActivityState(ui, activity) {
+      if (!ui || typeof ui.setActivity !== "function" || !activity) return;
+      ui.setActivity(cloneActivityState(activity));
+    }
+
+    async function executeCustomerBackendBatch(toolCalls, baseUrl, authConfig, headerConfig, sendCookiesWithRequests, ui, signal) {
+      const activity = buildCustomerToolActivity(toolCalls);
+      pushActivityState(ui, activity);
+      try {
+        const results = await Promise.all(toolCalls.map(async function (toolCall, index) {
+          const step = activity.steps[index];
+          if (step) {
+            step.status = "running";
+            pushActivityState(ui, activity);
+          }
+          const result = await executeToolCall(
+            toolCall,
+            baseUrl,
+            authConfig,
+            headerConfig,
+            sendCookiesWithRequests,
+            ui,
+            signal
+          );
+          if (step) {
+            step.status = toolResultHasError(result) ? "error" : "done";
+            pushActivityState(ui, activity);
+          }
+          return result;
+        }));
+        activity.status = results.some(toolResultHasError) ? "error" : "done";
+        pushActivityState(ui, activity);
+        if (ui && typeof ui.scheduleClear === "function") {
+          ui.scheduleClear(activity.status === "done" ? 900 : 1400);
+        }
+        return results;
+      } catch (error) {
+        if (isAbortError(error)) {
+          activity.status = "error";
+          pushActivityState(ui, activity);
+          if (ui && typeof ui.scheduleClear === "function") {
+            ui.scheduleClear(600);
+          }
+        }
+        throw error;
+      }
+    }
+
     async function runToolCalls(toolCalls, signal) {
       throwIfAborted(signal);
+      const customerToolCalls = toolCalls.filter(function (call) { return isCustomerToolCall(call); });
       const hasFrontendActions = toolCalls.some(function (call) { return isActionToolType(resolveToolType(call)); });
       let didPrimeWarning = false;
       try {
@@ -7314,15 +7441,73 @@
           return t === "backend" || t === "read_page" || t === "find_elements";
         });
         if (hasOnlyNonFrontend) {
-          return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, authConfig, headerConfig, sendCookiesWithRequests, frontendUi, signal)));
+          if (customerToolCalls.length === toolCalls.length && customerToolCalls.length > 0) {
+            return executeCustomerBackendBatch(
+              toolCalls,
+              config.baseUrl,
+              authConfig,
+              headerConfig,
+              sendCookiesWithRequests,
+              frontendUi,
+              signal
+            );
+          }
+          if (customerToolCalls.length === 0) {
+            return Promise.all(toolCalls.map((tc) => executeToolCall(tc, config.baseUrl, authConfig, headerConfig, sendCookiesWithRequests, frontendUi, signal)));
+          }
         }
         const results = [];
-        for (const call of toolCalls) {
+        const customerActivity = customerToolCalls.length > 0 ? buildCustomerToolActivity(customerToolCalls) : null;
+        const customerToolIndexes = new Map();
+        let customerHadError = false;
+        customerToolCalls.forEach(function (call, index) {
+          customerToolIndexes.set(call.id, index);
+        });
+        for (let i = 0; i < toolCalls.length; i += 1) {
+          const call = toolCalls[i];
           if (!didPrimeWarning && isActionToolType(resolveToolType(call)) && typeof frontendUi.primeWarning === "function") {
             await frontendUi.primeWarning(signal);
             didPrimeWarning = true;
           }
-          results.push(await executeToolCall(call, config.baseUrl, authConfig, headerConfig, sendCookiesWithRequests, frontendUi, signal));
+          const customerIndex = customerToolIndexes.get(call.id);
+          if (customerActivity && customerIndex !== undefined) {
+            if (customerActivity.steps[customerIndex]) {
+              customerActivity.steps[customerIndex].status = "running";
+            }
+            pushActivityState(frontendUi, customerActivity);
+          }
+          let result;
+          try {
+            result = await executeToolCall(call, config.baseUrl, authConfig, headerConfig, sendCookiesWithRequests, frontendUi, signal);
+          } catch (error) {
+            if (isAbortError(error) && customerActivity && customerIndex !== undefined) {
+              if (customerActivity.steps[customerIndex]) {
+                customerActivity.steps[customerIndex].status = "error";
+              }
+              customerActivity.status = "error";
+              pushActivityState(frontendUi, customerActivity);
+              if (typeof frontendUi.scheduleClear === "function") {
+                frontendUi.scheduleClear(600);
+              }
+            }
+            throw error;
+          }
+          if (customerActivity && customerIndex !== undefined) {
+            const failed = toolResultHasError(result);
+            customerHadError = customerHadError || failed;
+            if (customerActivity.steps[customerIndex]) {
+              customerActivity.steps[customerIndex].status = failed ? "error" : "done";
+            }
+            const isLastCustomerTool = !hasRemainingCustomerToolCalls(toolCalls, i + 1);
+            customerActivity.status = isLastCustomerTool
+              ? customerHadError ? "error" : "done"
+              : "running";
+            pushActivityState(frontendUi, customerActivity);
+            if (isLastCustomerTool && typeof frontendUi.scheduleClear === "function") {
+              frontendUi.scheduleClear(customerHadError ? 1400 : 900);
+            }
+          }
+          results.push(result);
         }
         return results;
       } finally {

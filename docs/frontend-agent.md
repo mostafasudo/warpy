@@ -51,6 +51,11 @@ window.warpy = async (toolName, vars) => {
 - Ref-based targeting: elements discovered via `read_page`/`find_elements` get stable `ref_N` IDs that persist across tool calls within a conversation turn.
 - Selector fallback: actions fall back to CSS selectors when ref IDs are unavailable or stale.
 - UI feedback for page actions: status panel, element highlight, frontend-interaction warning lifecycle.
+- Live execution feedback for customer-defined tools:
+  - backend feature tools reuse the inline activity card while the browser request is running
+  - manual frontend feature tools (`window.warpy(toolName, vars)`) show the same inline activity card plus the existing frontend warning banner
+  - widget labels use `feature.name + tool.name`, humanized in the browser for end-user readability
+  - pure backend-only tool batches stay parallel and surface one activity card with per-tool step state
 - User stop control while runs are in progress (Send becomes Stop).
 - Resumable error handling with a Resume button tied to the failed query (consecutive duplicates collapsed).
 - Optional suggestion chips: starter suggestions for empty chats plus LLM-generated follow-up suggestions after completed replies.
@@ -181,6 +186,7 @@ Example: manual frontend feature tool call
 {
   "id": "call_5",
   "type": "frontend",
+  "feature": "Orders",
   "name": "open_order_drawer",
   "params": {
     "orderId": "ord_123"
