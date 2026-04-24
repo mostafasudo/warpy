@@ -63,8 +63,6 @@ Required Apollo setup:
 - The sequence must run on a dedicated ruleset that halts or skips sends for contacts in `Replied`, `Interested`, `Do Not Contact`, and `Bad Data`.
 - The sequence ruleset must also halt or skip sends for accounts in `Active Opportunity`, `Current Client`, `Do Not Prospect`, and any custom account stage used for AE-owned manual follow-up such as `AE Owned` or `Automation Suppressed`.
 - Apollo contact and account stages should be updated intentionally so the sequence ruleset can enforce the handoff automatically instead of relying only on local state.
-- Before each lead-builder run, confirm the mailbox and domain used by this sequence are healthy in Apollo Deliverability Suite: authenticated, warmed or ready, under sending limits, and free of unresolved critical recommendations.
-- If Apollo deliverability health is degraded, do not import or enroll new contacts until the mailbox issue is fixed.
 - Sequence analytics should be reviewed at the sequence and mailbox level, not just globally. Protect reply rate first, then volume.
 
 ### Automated GTM pipeline
@@ -102,17 +100,15 @@ Pipeline rules:
 - Delete temporary Amplemarket lead lists after the local artifacts are safely written and the Apollo import is verified, or after the run intentionally stops at artifact generation and the local files have been confirmed.
 - Prefer the direct `mcp__amplemarket__*` namespace for Amplemarket work.
 - Do not default to the browser for Amplemarket if the direct MCP can do the job.
-- Lead Builder throughput target is `6 primary leads` per run, with a hard max of `8`, and never force-fill weak accounts just to hit quota.
+- Lead Builder throughput target is `12 primary leads` per run, with a hard max of `16`, and never force-fill weak accounts just to hit quota.
 - Before each Lead Builder run, check open pending manual tasks in Apollo for `Warpy Founder-Led SDR Sequence`.
-- Before each Lead Builder run, also check Apollo mailbox health and available sending headroom for the mailbox tied to this sequence.
-- If Apollo has more than `20` open manual tasks, import `0` new primaries in that run.
-- If Apollo has `10-20` open manual tasks, cap the run at `4` new primaries.
-- The final import cap is the lowest of the backlog cap, the available mailbox headroom, and the number of high-quality verified-email accounts in the batch.
+- Apollo task backlog is context for operator awareness, not a lead-builder import gate.
+- The final import cap is the lower of the hard max (`16`) and the number of accepted primary leads in the batch that have verified work emails.
 - Task execution must be idempotent. Keep a persistent local action ledger so a retry never re-sends the same LinkedIn, X, or email action if the browser action succeeded but Apollo task completion failed.
 - Persistent GTM state lives under `/Users/levw/.codex/state/warpy-gtm/`.
 - Temporary CSV artifacts live under `/Users/levw/.codex/tmp/warpy-gtm/`.
 - When due-task volume is high, prioritize tasks that move conversations forward: manual emails, multithread steps, earned DMs, asset sends, connection requests, then low-friction social touches.
-- The task executor must respect both per-run caps and daily caps for social actions so an hourly cron never over-saturates LinkedIn or X.
+- The task executor should keep moving through due tasks instead of stopping on arbitrary per-run or daily channel caps.
 - The task executor must never automate reply handling, objection handling, or live back-and-forth. Those remain AE-owned in Apollo.
 
 Lead-builder split by execution layer:
@@ -169,7 +165,7 @@ Pick the best-fit primary lead first, then add 1 adjacent lead only if the accou
 | 17 | Email | Primary or adjacent lead | Pure value touch: ungated resource, breakdown, benchmark, or useful note. No hard CTA. | This is the “give” touch. Lead with adoption and product usage, not support ops. |
 | 21 | Email | Primary lead | Close-the-loop email: "seems like this isnt a priority right now or i missed the mark" | Polite breakup. Leaves the door open. Keep it lowercase and informal, and point back to helping users get more done in the dashboard. |
 
-Best-practice rules baked into this sequence: warm intro first, protect deliverability before adding volume, use Apollo-native stage and ruleset guardrails, multithread only when the account still justifies it, every touch adds a new angle, X only if the buyer is clearly active, and founder-led outreach is preferred for Warpy.
+Best-practice rules baked into this sequence: warm intro first, protect list quality before adding volume, use Apollo-native stage and ruleset guardrails, multithread only when the account still justifies it, every touch adds a new angle, X only if the buyer is clearly active, and founder-led outreach is preferred for Warpy.
 
 ## Marketing GTM engine
 

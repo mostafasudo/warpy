@@ -56,16 +56,13 @@ unless the direct `amplemarket` MCP is unavailable.
 11. Import only `primary` leads into Apollo during the lead-builder run unless a separate adjacent-holding path has already been proven reliable.
 12. Amplemarket list names must be neutral and must not contain `Warpy`.
 13. Amplemarket lead lists are temporary and should be deleted when no longer needed.
-14. Default throughput target is `6 primary leads` per run.
-15. Hard cap is `8 primary leads` per run.
+14. Default throughput target is `12 primary leads` per run.
+15. Hard cap is `16 primary leads` per run.
 16. Never lower the quality bar to hit the target.
-17. Before importing anything into Apollo, check open pending manual tasks for `Warpy Founder-Led SDR Sequence`.
-18. Before importing anything into Apollo, check the mailbox and domain used by this sequence in Apollo Deliverability Suite. If the mailbox is not ready, warmed, authenticated, or has unresolved critical issues, import `0` new primaries and stop after artifact generation.
-19. If Apollo has more than `20` open pending manual tasks, import `0` new primaries and stop after artifact generation.
-20. If Apollo has `10-20` open pending manual tasks, cap the run at `4` new primaries.
-21. The final import cap is the lowest of the backlog cap, the mailbox sending headroom, and the count of high-fit verified-email primaries in the batch.
-22. Do not import any account that is already in AE-owned reply handling, has an open opportunity, is in an Apollo exclusion stage, or has a recent positive reply in Apollo.
-23. If an account has an explicit negative reply, unsubscribe, or clear rejection signal, suppress new automated outreach to that account for at least `60 days` unless manually overridden.
+17. Before importing anything into Apollo, check open pending manual tasks for `Warpy Founder-Led SDR Sequence` for operator context, but do not use backlog as an import gate.
+18. The final import cap is the lower of the hard max (`16`) and the count of accepted primary leads that have verified work emails.
+19. Do not import any account that is already in AE-owned reply handling, has an open opportunity, is in an Apollo exclusion stage, or has a recent positive reply in Apollo.
+20. If an account has an explicit negative reply, unsubscribe, or clear rejection signal, suppress new automated outreach to that account for at least `60 days` unless manually overridden.
 
 ## Persistent State Contract
 
@@ -136,7 +133,6 @@ Required sequence controls:
 - Exclude contacts in `Replied`, `Interested`, `Do Not Contact`, and `Bad Data`.
 - Exclude accounts in `Active Opportunity`, `Current Client`, `Do Not Prospect`, and any custom AE handoff stage such as `AE Owned` or `Automation Suppressed`.
 - Keep contact and account stages synchronized with the automation decisions so Apollo can stop sends even if the local manifest is stale.
-- Treat deliverability readiness as a hard gate before import and enrollment, not as a reporting afterthought.
 
 ## Amplemarket MCP Search Profile
 
@@ -268,7 +264,7 @@ Import order:
 
 - import highest `fit_score` first
 - break ties by stronger trigger and better channel surface
-- if backlog caps the run, keep lower-ranked accepted accounts in the manifest state but do not import them
+- if the hard max caps the run, keep lower-ranked accepted accounts in the manifest state but do not import them
 
 ## Batch Naming Convention
 
@@ -356,7 +352,6 @@ Import behavior requirements:
 - use Apollo-native field names so imports auto-map cleanly
 - prefer update-existing-record behavior when Apollo offers it instead of creating near-duplicate people
 - verify the contact and account stage remain sequence-eligible before enrollment
-- do not enroll any contact until the mailbox tied to the sequence has healthy sending status
 
 Do not map GTM context into Apollo by default.
 
@@ -372,7 +367,6 @@ The live test run established these rules:
 - Existing Apollo custom fields must be type-checked before use. A picklist field is not acceptable for GTM context blobs.
 - Verify import success by checking imported contacts in Apollo People or by using the sequence enrollment flow, not by watching a list row count.
 - Apollo stages and sequence rulesets should be part of the protection layer, not just reporting metadata.
-- Apollo mailbox health must be green enough to add new leads. Do not trade deliverability for volume.
 
 ## Amplemarket Cleanup Contract
 
@@ -472,11 +466,9 @@ Cooldown rules:
 6. Create an Amplemarket lead list using the direct MCP and the Amplemarket naming convention.
 7. Add all accepted leads to that lead list through the direct MCP.
 8. Fetch the final lead list metadata through the direct MCP for audit and ownership confirmation.
-9. Check open pending manual tasks in Apollo for `Warpy Founder-Led SDR Sequence`, review Apollo deliverability readiness for the sending mailbox, and compute the run cap:
-   - `0` primaries if backlog is greater than `20`
-   - up to `4` primaries if backlog is `10-20`
-   - target `6`, hard max `8`, if backlog is below `10`
-   - lower the cap further if mailbox headroom or healthy verified-email supply is smaller
+9. Check open pending manual tasks in Apollo for `Warpy Founder-Led SDR Sequence`, keep the backlog visible for operator awareness, and compute the run cap:
+   - target `12`, hard max `16`
+   - if fewer than `12`-`16` accepted primary leads have verified work emails, use that smaller verified count as the cap
 10. Generate local artifacts:
    - `<batch-name>-manifest.json` as the authoritative GTM source of truth
    - `<batch-name>-full.csv` for audit and inspection
@@ -486,10 +478,10 @@ Cooldown rules:
    - `/Users/levw/.codex/state/warpy-gtm/manifests/`
    - `/Users/levw/.codex/state/warpy-gtm/manifest-index.json`
    - `/Users/levw/.codex/tmp/warpy-gtm/`
-12. If the computed run cap is `0`, stop after artifact generation, update the manifest index, log the backlog blocker, and delete the temporary Amplemarket lead list under the cleanup contract.
+12. If the computed run cap is `0`, stop after artifact generation, update the manifest index, log the reason, and delete the temporary Amplemarket lead list under the cleanup contract.
 13. Open Apollo in the browser and import only the capped primary CSV subset.
 14. Verify that the primary contacts exist in Apollo by searching for their imported emails in Apollo People and confirming they are still in sequence-eligible contact and account stages.
-15. Enroll only the verified primary contacts that pass the Apollo ruleset and mailbox-health checks into `Warpy Founder-Led SDR Sequence`.
+15. Enroll only the verified primary contacts that pass the Apollo ruleset into `Warpy Founder-Led SDR Sequence`.
 16. Update the per-batch manifest and the persistent manifest index with Apollo import and sequence status, fit score, priority tier, email verification state, and any account suppression or stage state found in Apollo.
 17. Keep adjacent leads in the persistent manifest and adjacent CSV until the multithread step actually needs them.
 18. Delete the temporary Amplemarket lead list once the run no longer needs it under the cleanup contract above.
@@ -536,7 +528,7 @@ The run is successful only if:
 9. adjacent leads remain available in the persistent manifest state and adjacent import file for future multithreading
 10. the Amplemarket lead list exists and matches the accepted batch
 11. the Apollo primary import file is ready without manual cleanup
-12. the run respects the backlog-based and mailbox-health-based import cap
+12. the run respects the `12` target and `16` hard max, only withholding lower-ranked overflow accounts when the batch is larger than the cap
 13. imported accounts are the highest-fit eligible accounts in the accepted batch
 14. no suppressed, AE-owned, reply-active, or stage-blocked account is imported
 
@@ -565,7 +557,6 @@ For each run, log:
 - number of adjacent leads reserved
 - open Apollo manual task backlog at run start
 - computed primary import cap
-- mailbox health status and any deliverability blocker
 - average `fit_score`
 - number of accounts skipped for suppression or AE ownership
 - number of accounts skipped for stage blocks or unverified email

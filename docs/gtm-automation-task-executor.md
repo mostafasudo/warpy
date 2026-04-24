@@ -29,14 +29,13 @@ namespace over browser navigation for Amplemarket.
 ## Systems
 
 - Apollo: task queue and sequence context
-- Apollo Deliverability Suite and stage model: send safety and handoff guardrails
+- Apollo stage model: send safety and handoff guardrails
 - LinkedIn: social engagement, connection requests, DMs
 - X / Twitter: optional social touch when the lead is active there
 - Chrome CDP: execution layer for Apollo, LinkedIn, and X
 - Direct Amplemarket MCP: optional read-only enrichment and context lookup only
 - Persistent manifest index and manifests in `/Users/levw/.codex/state/warpy-gtm/`: source of truth for trigger, pain, proof, persona, adjacent lead lookup, and import state
 - Persistent task-action ledger in `/Users/levw/.codex/state/warpy-gtm/task-action-ledger.jsonl`: idempotency layer for all browser actions
-- Persistent daily rate counters in `/Users/levw/.codex/state/warpy-gtm/daily-rate-counters.json`: daily social and manual-email safety caps
 
 ## GTM Context Source Of Truth
 
@@ -95,7 +94,6 @@ Required controls:
 
 - The sequence ruleset must exclude contacts in `Replied`, `Interested`, `Do Not Contact`, and `Bad Data`.
 - The sequence ruleset must exclude accounts in `Active Opportunity`, `Current Client`, `Do Not Prospect`, and any custom AE handoff stage such as `AE Owned` or `Automation Suppressed`.
-- Before sending a manual email task, confirm the mailbox used by the sequence is healthy in Apollo Deliverability Suite and not blocked by sending-limit or critical-recommendation issues.
 - If Apollo stage state and local manifest state disagree, treat the safer interpretation as the truth and skip the outbound action until reconciled.
 
 ## Idempotency Contract
@@ -146,11 +144,9 @@ Execution rules:
 6. No connection-note pitch by default.
 7. If confidence is low, skip the action instead of forcing low-quality outreach.
 8. If X is not clearly appropriate, use LinkedIn instead.
-9. Respect per-run rate limits.
-10. Only act on tasks that are already due in Apollo.
-11. Trust Apollo due time as the primary timing gate, not the machine clock alone.
-12. Check the idempotency ledger before every outbound action.
-13. For email tasks, protect deliverability before throughput. If mailbox health is degraded, do not send.
+9. Only act on tasks that are already due in Apollo.
+10. Trust Apollo due time as the primary timing gate, not the machine clock alone.
+11. Check the idempotency ledger before every outbound action.
 
 ## Working Window
 
@@ -165,33 +161,9 @@ Secondary safety rule for social actions:
 
 The cron may run more often than the actual send cadence. Apollo due state is the real schedule boundary.
 
-## Per-Run Rate Limits
-
-Cap each run at:
-
-- `8` LinkedIn comments or reactions
-- `8` connection requests
-- `8` LinkedIn DMs
-- `5` X replies or DMs
-- `10` manual email sends
-
-If there are more pending tasks, continue on the next run.
-
-## Daily Rate Limits
-
-Cap each day at:
-
-- `20` LinkedIn comments or reactions
-- `20` connection requests
-- `15` LinkedIn DMs
-- `8` X replies or DMs
-- `20` manual email sends
-
-Persist counters locally and do not exceed them even if the cron keeps running.
-
 ## Backlog Priority
 
-When due-task volume exceeds per-run capacity, process in this order:
+When due-task volume is high, process in this order:
 
 1. manual emails
 2. multithread tasks
@@ -229,7 +201,6 @@ Rules:
 - keep the tone in the lowercase informal house style even after polishing
 - if Apollo shows a meaningful prior engagement signal such as opens, clicks, profile views, or recent connection acceptance, bias the message toward a specific breakdown or useful observation instead of a generic ask
 - do not send if the contact or account is in an Apollo stage that should block the sequence
-- do not send if the sending mailbox has unresolved deliverability blockers
 - send as-is if it is already clean
 - lightly polish only if the live task body is clearly off-strategy
 
@@ -366,23 +337,21 @@ Rules:
 2. Filter to pending tasks for the Warpy outbound motion.
 3. Filter to tasks that are already due.
 4. Sort oldest due first.
-5. Load the persistent manifest index, the task-action ledger, and the daily rate counters.
-6. Apply backlog priority if due-task volume is larger than the current per-run capacity.
+5. Load the persistent manifest index and the task-action ledger.
+6. Apply backlog priority if due-task volume is high.
 7. Process tasks one by one.
 8. For each task:
    - read the Apollo note and contact context
    - load the matching persistent manifest context by email or account
-   - check for reply ownership, meeting state, open opportunity, suppression, blocked stage, or deliverability blocker before generating copy
+   - check for reply ownership, meeting state, open opportunity, suppression, or blocked stage before generating copy
    - if the account is AE-owned, suppressed, or stage-blocked, do not act and update the manifest index accordingly
    - read the sequence step context from `GTM.md`
    - inspect the lead's LinkedIn or X profile if needed
    - generate the exact copy using the marketing skills
    - compute the `action_key` and check the ledger
-   - check the daily counters before taking any browser action
    - if the ledger already shows `sent`, `completion_pending`, or `completed`, do not resend
    - execute the action in the live browser
    - write `sent` to the ledger immediately after the browser action succeeds
-   - increment the relevant daily counter
    - complete the task in Apollo
    - write `completed` only after Apollo completion is confirmed
 9. If the browser action succeeds but Apollo completion fails, write `completion_pending` and retry only the Apollo completion on the next run.
@@ -410,9 +379,7 @@ Skip the action if:
 - the account is currently AE-owned or in a reply-driven human conversation
 - the account is in a suppression or cooldown window
 - the contact or account is in an Apollo stage that should block automation
-- the step requires email and the mailbox health or sending limit makes the send unsafe
 - the step requires email and the lead no longer has a verified work email status
-- the relevant daily cap has already been reached
 
 ## Logging
 
@@ -423,11 +390,10 @@ For each run, log:
 - number skipped
 - skip reasons
 - accounts moved into AE-owned or suppressed status
-- accounts blocked by Apollo stage or deliverability health
+- accounts blocked by Apollo stage
 - links to the posts or profiles acted on
 - the exact copy used for each outbound action
 - ledger path and any `completion_pending` items
-- daily counter state at the end of the run
 
 ## Success Criteria
 
@@ -440,5 +406,4 @@ The run is successful only if:
 5. Apollo reflects the completed task state at the end of the run
 6. no outbound action is sent twice because of a retry or partial failure
 7. no action is taken on an AE-owned, replied, or suppressed account
-8. daily social volume stays within the defined caps
-9. manual emails are never sent when Apollo stages or deliverability health say the sequence should stop
+8. tasks continue to be processed without arbitrary per-run or daily cap stops
