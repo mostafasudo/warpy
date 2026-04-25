@@ -2,324 +2,207 @@
 
 ## Objective
 
-Turn fresh product and tech signals into smart, human draft posts for LinkedIn and X without becoming a news bot or a cringe founder-content machine.
+Turn fresh product and tech signals into smart, human LinkedIn and X drafts without becoming a news bot or a generic founder-content machine.
 
-This automation exists to keep a steady founder-led point of view in market while preserving quality, taste, and voice.
+This automation keeps a steady founder-led point of view in market while preserving taste, specificity, and Warpy's voice.
 
 ## Source Of Truth
 
-Always read these first:
+Read first:
 
 1. `GTM.md`
 2. `docs/gtm-automation-marketing-engine.md`
 
-Use these skills while working:
+Relevant marketing skills:
 
-- [$social-content](/Users/levw/Desktop/Levw/warpy/.codex/skills/marketing/social-content/SKILL.md)
-- [$content-strategy](/Users/levw/Desktop/Levw/warpy/.codex/skills/marketing/content-strategy/SKILL.md)
-- [$copy-editing](/Users/levw/Desktop/Levw/warpy/.codex/skills/marketing/copy-editing/SKILL.md)
-
-Use Buffer MCP for post lookup and draft creation.
-
-Use Chrome CDP for reference browsing and taste checks.
+- `.codex/skills/marketing/social-content/SKILL.md`
+- `.codex/skills/marketing/content-strategy/SKILL.md`
+- `.codex/skills/marketing/copy-editing/SKILL.md`
 
 ## Systems
 
-- Buffer MCP: draft creation, channel lookup, recent-post lookup
-- Chrome CDP: browse reference accounts, source pages, and live platform context
-- Smart source intake: HN, TechCrunch Latest, and source product pages or release posts when needed
-- Persistent local marketing state in `/Users/levw/.codex/state/warpy-marketing-gtm/`
-- Reference-account calibration loop: recent GTM-creator posts plus extracted taste notes
+- Buffer MCP: channel lookup, recent-post lookup, draft creation
+- Chrome CDP: source browsing, reference-account browsing, taste checks
+- Smart source intake: HN, TechCrunch, product pages, release posts, founder/operator posts, and other relevant current sources
+- Persistent marketing state: `/Users/levw/.codex/state/warpy-marketing-gtm/`
 
-## Buffer MCP Setup
+Do not store Buffer tokens in repo files. Use `BUFFER_MCP_TOKEN` locally.
 
-Do not store the Buffer token in repo files.
+## Non-Blocking Operating Rule
 
-Use a local env var:
+Do not impose fixed output quotas, topic quotas, channel quotas, schedule gates, or duplicate-window limits that prevent useful drafting.
 
-- `BUFFER_MCP_TOKEN`
-
-Local setup command:
-
-```bash
-codex mcp add buffer --url https://mcp.buffer.com/mcp --bearer-token-env-var BUFFER_MCP_TOKEN
-```
-
-Verification command:
-
-```bash
-codex mcp list
-```
-
-Expected result:
-
-- `buffer` appears as an enabled MCP
-- auth mode uses `Bearer token`
+Create as many strong drafts as the available ideas justify for the configured channels. If a source, channel, or tool is unavailable, use the next viable source or produce a local draft artifact with a clear log entry instead of stopping the whole run.
 
 ## Channels
 
-Default v1 channels:
+Default channels:
 
 - LinkedIn: Abdel personal LinkedIn
 - X: `LevwTech`
 
-The automation should treat these as separate writing surfaces, not as a copy-paste pair.
+Treat each channel as its own writing surface. Do not copy-paste the same text across channels.
 
-## Scheduling Contract
+Publishing behavior belongs to the automation or Buffer configuration. This doc assumes draft creation unless a separate explicit publish workflow exists.
 
-Default automation:
-
-- name: `Warpy Marketing Engine`
-- schedule: weekdays at `3:00 PM` `Africa/Cairo`
-- output: `1` core idea pair only
-- publish mode: Buffer drafts only
-
-Per-run output contract:
-
-- either `0` drafts with a logged skip reason
-- or exactly `2` drafts from `1` shared thesis:
-  - `1` LinkedIn draft
-  - `1` X draft
-
-Do not auto-queue posts in v1.
-
-## Persistent State Contract
+## Persistent State
 
 Use:
 
-- `/Users/levw/.codex/state/warpy-marketing-gtm/post-ledger.jsonl`
-- `/Users/levw/.codex/state/warpy-marketing-gtm/topic-memory.json`
-- `/Users/levw/.codex/state/warpy-marketing-gtm/reference-notes.json`
+- `post-ledger.jsonl`
+- `topic-memory.json`
+- `reference-notes.json`
 
-`post-ledger.jsonl` is the run-by-run record. Each accepted draft pair should log:
+`post-ledger.jsonl` records:
 
 - `created_at`
 - `core_thesis`
 - `topic_fingerprint`
 - `source_urls`
-- `linkedin_copy`
-- `x_copy`
-- `buffer_linkedin_post_id`
-- `buffer_x_post_id`
+- channel copy
+- Buffer post ids or local artifact paths
 - `status`
 
-`topic-memory.json` is the anti-duplication layer. It should keep the last meaningful angles, companies, launches, and theses that were already used.
+`topic-memory.json` tracks prior angles, companies, launches, and theses to reduce repetition.
 
-`reference-notes.json` is the self-improving taste layer. It should keep distilled pattern notes from strong operators, not copied copy.
+`reference-notes.json` stores distilled taste patterns from strong operators. Store patterns, not copied lines.
 
-## Source Intake Rules
+## Source Intake
 
-Start with smart, current sources:
+Start with current product and tech signals:
 
-1. `https://news.ycombinator.com/`
-2. `https://techcrunch.com/latest/`
+- `https://news.ycombinator.com/`
+- `https://techcrunch.com/latest/`
+- original product, company, or release pages when they sharpen the take
+- relevant founder/operator posts or linked articles
 
-Then open the original product, company, or release page only when needed to sharpen the take.
-
-Use Chrome CDP for reference browsing and taste grounding, especially these reference accounts:
+Reference accounts for taste calibration:
 
 - `https://x.com/LoganTGott`
 - `https://x.com/AdamrahmanGTM`
 - `https://x.com/itsalexvacca`
 - `https://x.com/paolo_scales`
 
-Also open linked articles or posts from those accounts when they add real substance to the take.
+Use reference accounts to calibrate hook sharpness, specificity, and human framing. Do not mimic their rhythm, reuse their lines, or let them override Warpy's voice.
 
-Do not blindly mirror those creators. Use them only to calibrate hook sharpness, clarity, specificity, and what feels human.
-
-Do not use reference creators as permission to write louder than the evidence supports.
-
-## Self-Improving Taste Loop
-
-At the start of each run, before picking a topic:
-
-1. check recent posts from the reference accounts
-2. extract what felt sharp or worth noticing
-3. write distilled notes into `reference-notes.json`
-4. use those notes to raise the quality bar for this run
-
-This step is optional.
-
-If there is nothing meaningfully new, sharper, or worth preserving from the reference scan:
-
-- do not add any new note
-- do not update local reference notes just to show activity
-- do not invent a new rule for the sake of saying the system is self-improving
-
-What to extract:
-
-- how they frame a market shift into one clear thought
-- how specific the hook is
-- whether the post gives a save-worthy takeaway
-- whether the post has a real opinion instead of a recap
-- how they support the opinion with examples, specifics, or observed behavior
-- which structures feel human vs templated
-
-What not to do:
-
-- do not paraphrase their post into yours
-- do not mimic one creator's rhythm too closely
-- do not reuse their examples unless the source itself is the thing you are commenting on
-- do not let reference content override the Warpy voice
-
-## Topic Selection Rules
-
-The system is hybrid by default:
-
-- mostly broader tech, AI, product, and UI shifts
-- Warpy appears only when the bridge is natural
-- if the bridge is weak, keep the post broad instead of forcing a Warpy angle
-- broad source stories get at most one light extrapolation into software behavior. they do not get turned into a disguised Warpy pitch
-- default to no product mention unless the source is directly about dashboards, embedded AI actions, product UX, or a buyer objection Warpy clearly addresses
+## Topic Selection
 
 Good topic zones:
 
 - products adding conversational input to complex dashboards without replacing the existing UI
-- launches that show software capturing intent faster while keeping the product UI as the output layer
+- launches that show software capturing intent faster while keeping the UI as the output layer
 - patterns that reveal low feature adoption in complex tools
-- examples of software doing the task for the user instead of explaining the task
-- product shifts, objections, or real buyer questions that point to how software is changing
+- software that does the task for the user instead of only explaining it
+- real buyer questions, objections, or product shifts around embedded AI, action-taking agents, or dashboard adoption
 
 Weak topic zones:
 
-- funding posts with no actual product angle
+- funding posts with no product angle
 - generic AI news with no product implication
 - viral drama with no useful takeaway
-- anything that could be reposted without adding a thought
+- anything that only restates the news
+- any angle that mainly exists to sneak in a Warpy pitch
 
-## Scoring And Quality Bar
+Choose ideas with:
 
-Before drafting, pull recent Buffer posts across both channels and check local memory.
+- a concrete observation
+- a reason Warpy has standing to comment
+- enough evidence for the confidence level of the claim
+- a new angle relative to recent posts and local memory
 
-Reject any idea that:
+If the Warpy bridge is weak, keep the post broad or choose a better idea.
 
-- overlaps materially with the last `45 days` of Buffer posts
-- repeats a macro take already used in the last `90 days` without a real new event
-- has no concrete opinion, pattern, or takeaway
-- only restates the news
-- feels too derivative of a recent reference-account post
-- makes a strong claim without enough support
-- needs a forced Warpy bridge to feel relevant
-- mainly exists to restate Warpy positioning through a weak source hook
-- fails the swap test: any generic AI company could post it unchanged and pretend it is about them
+## Voice
 
-Choose the top idea only if it passes all three tests:
+All copy follows `GTM.md`.
 
-1. it is relevant to product, AI, dashboards, UX, or software behavior
-2. it is meaningfully new relative to recent posts
-3. it has an actual human thought in it
+Hard reminders:
 
-If no topic passes, do not post.
-
-## Voice Rules
-
-All recipient-facing copy must follow `GTM.md`.
-
-Hard rules:
-
-- default to lowercase
-- keep it informal and a little rough
-- do not over-clean punctuation
-- never use em dashes
-- never use semicolons
-- do not sound corporate, polished, or sales-trained
-- do not sound cocky, arrogant, or overly certain
-- keep it short, direct, and human
-- prefer humble framing like `i think`, `i keep noticing`, `it seems like`, or `one pattern i keep seeing` when making an argument
-- support the thought with a real source, example, product pattern, or observed behavior whenever possible
-- do not force a Warpy mention
-- do not force a Warpy analogy, product tie-in, or disguised pitch onto a broadly interesting story
-- broad commentary posts should stand on their own even if Warpy is never mentioned
+- lowercase by default
+- informal and a little rough
+- no em dashes or semicolons
+- no corporate thought-leadership cadence
+- no arrogant certainty
+- humble framing for opinions
+- concrete examples or observed patterns when possible
+- no forced Warpy mention
 - never frame chat as replacing the product UI
-- when the concept comes up, frame chat as the input layer and the existing UI as the output layer today
-- if mentioning the long-term product direction, describe it as a more dynamic UI, not a plain chat window replacing the app
+- when relevant, frame chat as the input layer and the existing UI as the output surface
 
 ## Drafting Rules
 
-Every post must say something.
+Every post must say something specific.
 
-LinkedIn rules:
+LinkedIn:
 
-- value-first opening, not bait
-- `3-6` short paragraphs
-- no link in the body
-- one clear thought, pattern, or observation
-- avoid sounding like you are announcing the future as fact
-- if the claim is broad, make the support visible in the post
-- write for saves, thoughtful comments, and DMs
-- for broad market commentary, stop one step earlier than the product pitch
+- lead with the thought or pattern, not bait
+- use short paragraphs
+- avoid links in the body unless intentional
+- make the support visible when the claim is broad
+- stop one step before the product pitch on broad commentary
 
-X rules:
+X:
 
-- adapt the same thesis into a sharper, shorter version
-- single post by default
-- no thread unless the idea genuinely needs it
-- do not copy the LinkedIn draft line for line
-- keep the confidence level proportional to the evidence
-- do not squeeze product positioning into a short post just because the source touched AI
+- adapt the thesis into a sharper, shorter surface
+- use a single post or thread based on what the idea needs
+- keep confidence proportional to the evidence
+- do not force product positioning into a short post
 
-Non-cringe filters:
+## Self-Improving Taste Loop
 
-- no bland news summaries
-- no "this changes everything" phrasing
-- no generic thought-leadership cadence
-- no hot takes written with more certainty than the evidence deserves
-- no smug or superior framing
-- no forced Warpy plug
-- no empty inspirational ending
-- no CTA if the post does not earn one
+When useful, scan reference accounts and record only distilled patterns:
+
+- hook shape
+- specificity
+- evidence quality
+- how they turn market movement into a human point of view
+- what felt save-worthy, useful, or too templated
+
+Do not update reference notes just to show activity.
 
 ## Workflow
 
 1. Read `GTM.md` and this file.
-2. Pull recent Buffer posts across LinkedIn and X.
+2. Pull recent Buffer posts when available.
 3. Read local memory from `topic-memory.json`.
-4. Check recent posts from the reference accounts and update `reference-notes.json`.
-5. Fetch latest HN and TechCrunch signals.
-6. Open source product pages or release pages only when needed.
-7. Use Chrome CDP for taste checks and reference browsing when useful.
-8. Build a shortlist of candidate topics.
-9. Reject duplicates, stale angles, weak takes, and derivative takes.
-10. Reject any draft angle that sounds louder or more certain than the supporting evidence allows.
-11. Choose exactly `1` idea only if it clears the quality bar.
-12. Write:
-    - `1` LinkedIn draft
-    - `1` X draft
-13. Sanity-check both drafts for humility, evidence, and tone before saving.
-14. Save both drafts to Buffer.
-15. Write the result to `post-ledger.jsonl`.
-16. Update `topic-memory.json`.
+4. Check reference accounts when useful.
+5. Fetch current product and tech signals.
+6. Open original sources where needed.
+7. Build a shortlist of candidate topics.
+8. Remove stale, repetitive, unsupported, derivative, or forced-Warpy angles.
+9. Draft channel-native copy for the strongest ideas.
+10. Sanity-check each draft for evidence, humility, and voice.
+11. Save drafts to Buffer when available, or write local draft artifacts if Buffer is unavailable.
+12. Update `post-ledger.jsonl`, `topic-memory.json`, and `reference-notes.json` as appropriate.
 
-## Manual Habits That Stay Outside Automation
+## Manual Work Outside Automation
 
-These stay manual in v1:
+These stay human-owned unless a separate workflow explicitly changes that:
 
-- replying to comments in the first hour after a post goes live
-- thoughtful daily commenting on other relevant posts
-- inbound DM handling
-- deciding when a draft deserves a PDF carousel or deeper asset
+- replies to comments
+- inbound DMs
+- deciding when a draft deserves a PDF carousel or larger asset
+- live conversations created by a post
+
+## Logging
+
+For each run, log:
+
+- sources checked
+- topics considered
+- drafts created by channel
+- drafts saved to Buffer or local artifact path
+- topics rejected and why
+- reference notes added
+- tool or source failures with fallback used
 
 ## Success Criteria
 
-A good run:
+A successful run:
 
-- creates exactly `2` Buffer drafts or intentionally creates none
-- avoids duplicate news and duplicate takes
-- gets sharper over time because reference-account notes raise the standard without turning the posts into copies
-- produces non-identical LinkedIn and X drafts from the same thesis
-- stays inside the Warpy voice
-- makes claims with the right confidence level and visible support
-- says something concrete enough to earn a save, share, comment, or DM
-
-## Failure / Skip Rules
-
-Skip the run if:
-
-- Buffer MCP is unavailable
-- the source intake fails
-- recent-post history cannot be checked
-- no topic clears the quality bar
-- the generated copy sounds like news recap sludge, corporate content, or forced product promotion
-- the generated copy sounds too arrogant, too certain, or under-supported for the strength of the claim
-
-When skipping, log the reason in the local state instead of forcing a weak draft.
+- creates strong channel-native drafts without fixed output caps
+- avoids duplicate takes and disguised product pitches
+- stays inside Warpy's voice
+- supports claims with appropriate evidence
+- records local memory so the next run gets sharper
+- falls back gracefully when one source or tool is unavailable
