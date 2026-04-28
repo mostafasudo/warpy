@@ -28,11 +28,17 @@ Relevant marketing skills:
 
 Do not store Buffer tokens in repo files. Use `BUFFER_MCP_TOKEN` locally.
 
+## Programmatic Tool Fallback
+
+Use Buffer MCP and other non-browser tooling when they can complete the exact step. If any MCP, connector, direct API, script, agent tool, or source-fetching path is unavailable, limited, unsupported for the needed action, stale, unauthenticated, or failing, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser before marking the step blocked.
+
+For Buffer, use the live Buffer UI through Chrome CDP when MCP channel lookup, recent-post lookup, or draft creation is limited or failing. If both MCP and Chrome CDP cannot safely complete draft creation, write a local draft artifact and log the browser blocker.
+
 ## Non-Blocking Operating Rule
 
 Do not impose fixed output quotas, topic quotas, channel quotas, schedule gates, or duplicate-window limits that prevent useful drafting.
 
-Create as many strong drafts as the available ideas justify for the configured channels. If a source, channel, or tool is unavailable, use the next viable source or produce a local draft artifact with a clear log entry instead of stopping the whole run.
+Create as many strong drafts as the available ideas justify for the configured channels. If a source, channel, or tool is unavailable, first try the Chrome CDP browser fallback for that external surface, then use the next viable source or produce a local draft artifact with a clear log entry instead of stopping the whole run.
 
 ## Channels
 
@@ -163,7 +169,7 @@ Do not update reference notes just to show activity.
 ## Workflow
 
 1. Read `GTM.md` and this file.
-2. Pull recent Buffer posts when available.
+2. Pull recent Buffer posts when available, falling back to Chrome CDP if Buffer MCP lookup is limited or failing.
 3. Read local memory from `topic-memory.json`.
 4. Check reference accounts when useful.
 5. Fetch current product and tech signals.
@@ -172,7 +178,7 @@ Do not update reference notes just to show activity.
 8. Remove stale, repetitive, unsupported, derivative, or forced-Warpy angles.
 9. Draft channel-native copy for the strongest ideas.
 10. Sanity-check each draft for evidence, humility, and voice.
-11. Save drafts to Buffer when available, or write local draft artifacts if Buffer is unavailable.
+11. Save drafts to Buffer when available, falling back from Buffer MCP to the Chrome CDP Buffer UI when needed, or write local draft artifacts if Buffer cannot be safely reached.
 12. Update `post-ledger.jsonl`, `topic-memory.json`, and `reference-notes.json` as appropriate.
 
 ## Manual Work Outside Automation

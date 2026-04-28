@@ -10,6 +10,14 @@ Automation source docs:
 - [Task Executor](docs/gtm-automation-task-executor.md)
 - [Marketing Engine](docs/gtm-automation-marketing-engine.md)
 
+## Chrome CDP Fallback Rule
+
+For all three GTM automations, the user's Chrome CDP browser is the universal fallback for external GTM systems.
+
+Non-browser paths are allowed when they can complete the exact step: MCPs, direct MCP namespaces, connectors, CLIs, scripts, direct APIs, or other programmatic tools. If any non-browser path is unavailable, unauthenticated, limited, missing an operation, unsupported by the MCP/API, stale, rate-limited, or fails in a way that blocks the step, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser for that step.
+
+Do this before declaring the step blocked. This applies to Amplemarket, Apollo, Buffer, LinkedIn, X, source browsing, and similar external GTM surfaces. Local state files and generated artifacts remain local filesystem work.
+
 ## What Warpy Is
 
 Warpy is a drop-in AI execution layer for complex B2B dashboards. Customers embed a lightweight widget into their product, expose approved APIs and UI actions, and let end users ask for work in plain language.

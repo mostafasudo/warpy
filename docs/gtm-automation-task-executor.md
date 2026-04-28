@@ -20,7 +20,7 @@ Relevant marketing skills:
 - `.codex/skills/marketing/sales-enablement/SKILL.md`
 - `.codex/skills/marketing/revops/SKILL.md`
 
-If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only lookup over browser navigation.
+If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only lookup when it can answer the exact question. If that lookup is unavailable, limited, unsupported, stale, or failing, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser.
 
 ## Systems
 
@@ -30,6 +30,12 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 - X: optional social touch when the lead is active there
 - Local GTM state: `/Users/levw/.codex/state/warpy-gtm/`
 - Task ledger: `/Users/levw/.codex/state/warpy-gtm/task-action-ledger.jsonl`
+
+## Programmatic Tool Fallback
+
+Chrome CDP is the fallback path for every external GTM surface. If an MCP, direct MCP, connector, direct API, script, agent tool, or other non-browser path is unavailable, limited, unsupported for the needed action, stale, or failing, use the Chrome CDP user browser for that step before marking the task blocked.
+
+This applies to read-only context lookup as well as execution surfaces. Local state and the task ledger remain local filesystem work.
 
 ## Non-Blocking Operating Rule
 
@@ -44,7 +50,7 @@ When a task needs message context, use:
 1. `manifest-index.json` and the referenced batch manifest
 2. `GTM.md`
 3. the live Apollo sequence step and task note
-4. direct Amplemarket read-only lookup when needed
+4. direct Amplemarket read-only lookup when needed, with Chrome CDP fallback when MCP lookup is limited or failing
 5. live LinkedIn or X context
 
 Do not assume Apollo custom fields contain full GTM research context.
@@ -196,7 +202,7 @@ Within each bucket, work oldest due first. Priority guides order only. It is not
    - read Apollo note, contact context, and sequence step
    - load matching manifest context
    - check handoff, suppression, duplicate, and stage state
-   - inspect LinkedIn or X only when needed for the task
+   - inspect LinkedIn or X only when needed for the task, using Chrome CDP when any non-browser lookup cannot provide the needed context
    - generate or edit the exact copy
    - compute `action_key` and check the ledger
    - execute the browser action when safe

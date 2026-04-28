@@ -19,7 +19,7 @@ Relevant marketing skills:
 - `.codex/skills/marketing/cold-email/SKILL.md`
 - `.codex/skills/marketing/social-content/SKILL.md`
 
-Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it can do the job.
+Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it can do the exact job. If the MCP is unavailable, limited, unsupported for the needed operation, stale, or failing, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser for that Amplemarket step.
 
 ## Systems
 
@@ -27,7 +27,13 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 - Local state: authoritative manifests and account-level control state
 - Local artifacts: Apollo import CSVs and audit CSVs
 - Apollo browser flow: import, verification, sequence enrollment, and adjacent import when multithreading is useful
-- Chrome CDP: Apollo work, optional X lookup, and Amplemarket cleanup when direct MCP cannot delete a temporary list
+- Chrome CDP: Apollo work, optional X lookup, and any Amplemarket step where direct MCP cannot complete the exact operation
+
+## Programmatic Tool Fallback
+
+Direct MCP is an acceleration path, not a blocker. For every external-system step that uses MCP, direct MCP, a connector, direct API, script, or other non-browser tooling, always fall back to the Chrome CDP user browser when that programmatic path is unavailable, limited, unsupported, missing the needed action, stale, or failing.
+
+Do not stop the run just because an MCP cannot perform a step. Use Chrome CDP for the live Amplemarket or Apollo UI when the browser can complete the work. Local manifests, CSVs, and audit artifacts remain local filesystem work.
 
 ## Non-Blocking Operating Rule
 
@@ -97,7 +103,7 @@ Use direct MCP for:
 - `list_lead_lists`
 - `get_lead_list`
 
-Use browser fallback only when direct MCP cannot complete the required Amplemarket step.
+Always use Chrome CDP browser fallback when direct MCP cannot complete the required Amplemarket step, including unsupported actions such as a missing delete operation.
 
 ## Search Profile
 
@@ -212,13 +218,13 @@ Amplemarket lead lists are temporary batch containers.
 ## Workflow
 
 1. Load `manifest-index.json` and Apollo exclusion context.
-2. Search people and companies with direct Amplemarket MCP.
+2. Search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
 3. Review candidates account by account.
 4. Select primary and adjacent leads where useful.
 5. Enrich accepted leads and reveal verified work emails for accepted primaries.
 6. Add optional X context only when confidence is high.
 7. Write trigger, pain hypothesis, proof point, fit score, and priority tier.
-8. Create the temporary Amplemarket list and add accepted leads.
+8. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
 9. Fetch final list metadata for audit.
 10. Generate manifest and CSV artifacts.
 11. Apply the Lead Builder cap and import the highest-fit accepted primaries into Apollo.
@@ -226,7 +232,7 @@ Amplemarket lead lists are temporary batch containers.
 13. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
 14. Update the batch manifest and manifest index.
 15. Keep adjacent leads in local state for future multithreading.
-16. Delete the temporary Amplemarket list when safe.
+16. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion.
 
 ## Logging
 
