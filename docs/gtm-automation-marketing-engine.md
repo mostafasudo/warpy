@@ -51,6 +51,8 @@ Treat each channel as its own writing surface. Do not copy-paste the same text a
 
 Publishing behavior belongs to the automation or Buffer configuration. This doc assumes draft creation unless a separate explicit publish workflow exists.
 
+Do not use this workflow to leave public LinkedIn comments. LinkedIn work here is draft/post creation only unless a separate like-only engagement task exists. X/Twitter public comments are allowed only when a separate engagement workflow explicitly calls for them.
+
 ## Persistent State
 
 Use:

@@ -26,8 +26,8 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 
 - Apollo: task queue, sequence context, contact/account stage state
 - Chrome CDP: execution layer for Apollo, LinkedIn, and X
-- LinkedIn: social engagement, connection requests, DMs
-- X: optional social touch when the lead is active there
+- LinkedIn: likes-only public social engagement, connection requests, DMs
+- X: optional social touch, including public comments, when the lead is active there
 - Local GTM state: `/Users/levw/.codex/state/warpy-gtm/`
 - Task ledger: `/Users/levw/.codex/state/warpy-gtm/task-action-ledger.jsonl`
 
@@ -149,6 +149,14 @@ Within each bucket, work oldest due first. Priority guides order only. It is not
 - prefer a recent relevant post from the lead
 - use a company or adjacent leadership post when that is the better context
 - like the post
+- do not leave public LinkedIn comments for now
+- if a task explicitly asks for a LinkedIn comment, either complete it as a like-only touch when the task allows public engagement alternatives, or skip it with the paused-comment reason
+- no generic praise, fake familiarity, CTA, or product pitch
+
+### X Post Interaction
+
+- use only when the lead is clearly active there and the post is relevant
+- likes and public comments/replies are allowed
 - comment only when there is a real observation to add
 - no generic praise, fake familiarity, CTA, or product pitch
 
@@ -168,7 +176,7 @@ Within each bucket, work oldest due first. Priority guides order only. It is not
 ### Second Social Touch
 
 - use X only when the lead is clearly active there and the post is relevant
-- otherwise use LinkedIn
+- otherwise use LinkedIn as a like-only public touch
 - keep it lighter than a DM
 - no hard CTA
 

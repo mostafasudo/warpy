@@ -28,7 +28,7 @@ The core GTM promise is dashboard adoption: more users reaching value, using adv
 
 ## Voice
 
-For outbound emails, LinkedIn messages, X posts, comments, and follow-up copy:
+For outbound emails, LinkedIn messages, X posts, X/Twitter comments, and follow-up copy:
 
 - default to lowercase
 - keep it informal and a little rough
@@ -83,6 +83,7 @@ Pipeline rules:
 - each accepted account needs a persona, trigger, pain hypothesis, proof point, `fit_score`, and `priority_tier`
 - use verified work email for email sequencing and do not send to generic aliases, personal free-mail, or risky guesses
 - LinkedIn is the main social context surface. X is useful only when the buyer is clearly active there
+- public LinkedIn engagement is likes only for now. Do not leave LinkedIn public comments. X/Twitter public comments are allowed when relevant, specific, and non-pitchy
 - do not automate outreach to contacts or accounts in Apollo states that indicate reply ownership, active opportunity, current customer, do-not-contact, bad data, or manual AE ownership
 - keep Apollo stages and local GTM state synchronized so either system can prevent unsafe sends
 
@@ -95,10 +96,10 @@ Pick the best-fit primary lead first. Use the adjacent lead only when the accoun
 | Day | Channel | Lead | Intent |
 | --- | --- | --- | --- |
 | 0 | Research / intro | Primary + adjacent context | Find a real trigger, pain hypothesis, proof point, and possible warm intro. |
-| 1 | LinkedIn | Primary | Like or comment on a recent relevant post. No pitch. |
+| 1 | LinkedIn | Primary | Like a recent relevant post. Do not comment publicly on LinkedIn. No pitch. |
 | 2 | Email 1 | Primary | Short trigger-led email. Ask if they want a quick breakdown. |
 | 3 | LinkedIn | Primary | Send a blank or highly specific connection request. No generic pitch note. |
-| 5 | LinkedIn / X | Primary | Light second social touch on the channel that fits their activity. |
+| 5 | LinkedIn / X | Primary | Light second social touch on the channel that fits their activity: LinkedIn like only, or X like/comment when relevant. |
 | 6 | Email 2 | Primary | New persona angle: adoption, support deflection, or AI-native product experience. |
 | 7 | LinkedIn DM | Primary if connected | Short permission-based DM tied to the trigger. |
 | 8 | Email / LinkedIn | Adjacent if justified | Multithread with a different KPI angle only if the account is still eligible. |
