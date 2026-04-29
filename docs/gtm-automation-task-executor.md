@@ -31,6 +31,10 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 - Local GTM state: `/Users/levw/.codex/state/warpy-gtm/`
 - Task ledger: `/Users/levw/.codex/state/warpy-gtm/task-action-ledger.jsonl`
 
+## Cadence
+
+Run every two hours on weekdays so the executor keeps Apollo moving without rechecking the same task queue too frequently.
+
 ## Programmatic Tool Fallback
 
 Chrome CDP is the fallback path for every external GTM surface. If an MCP, direct MCP, connector, direct API, script, agent tool, or other non-browser path is unavailable, limited, unsupported for the needed action, stale, or failing, use the Chrome CDP user browser for that step before marking the task blocked.
