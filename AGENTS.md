@@ -70,6 +70,7 @@ LLM agent skills are stored in `.codex/skills/` (the canonical location). The ac
 - **When the instruction says "ship it", that means:**  
   run all tests, then commit and push the changes (excluding any changes to `frontend/index.html`).  
   After you push, monitor the deployment until it completes, and keep checking the health of the deployment to ensure it is healthy.
+- For simple markdown or static documentation-only updates, do **not** monitor deployment after pushing unless the user explicitly asks. Verify the diff, commit, and push; stop there. Deployment monitoring is for runtime, frontend, backend, widget, infra, configuration, dependency, workflow, or production-behavior changes.
 - **pnpm** for all JS tasks.
 - **React + TS:** use **shadcdn** components everywhere; compose classes with **clsx**; never hard-code colors/tokens.
 - Frontend theme tokens live in `frontend/src/index.css`; adjust CSS variables there only.
