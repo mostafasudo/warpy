@@ -207,6 +207,8 @@ Import behavior:
 - do not rely on Apollo list row counts as the verification surface
 - confirm contact and account stages remain sequence-eligible before enrollment
 
+The lead builder may import contacts and enroll sequence-eligible primaries, but it must not execute, complete, or pull forward Apollo sequence tasks. After enrollment, leave all generated Apollo tasks untouched for the task executor. Sequence timing is controlled by Apollo due dates, and the executor may act only on overdue tasks or tasks due on the current local date.
+
 ## Cleanup Contract
 
 Amplemarket lead lists are temporary batch containers.

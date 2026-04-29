@@ -43,9 +43,30 @@ This applies to read-only context lookup as well as execution surfaces. Local st
 
 ## Non-Blocking Operating Rule
 
-Keep processing actionable Apollo tasks until the queue has no safe work left. Do not introduce per-run, per-channel, per-day, schedule-window, or daily-volume caps.
+Keep processing eligible Apollo tasks until the due-today and overdue queue has no safe work left. Do not introduce arbitrary per-channel, daily-volume, deliverability, or throughput caps beyond the due-window and recipient safety gates.
 
-If a specific task is unsafe, unclear, duplicate-prone, or missing context, mark that task with a reason and continue to the next actionable task.
+## Due-Window Enforcement
+
+The executor must preserve Apollo sequence timing. A task is eligible only when all of these are true:
+
+- it belongs to the Warpy outbound motion / `Warpy Founder-Led SDR Sequence`
+- Apollo status is open or pending, not completed, dismissed, paused, or skipped
+- Apollo due date is before the current local date, or due on the current local date
+- Apollo due date is verified from Apollo before any external action
+- the task was present in the due/overdue execution snapshot built at the start of the run
+- no outbound touch has already been sent to the same contact during the current executor run
+
+Do not execute future-dated Apollo tasks. Do not pull forward later sequence steps to clear visible backlog. Do not use Apollo views that mix future tasks with due work unless each task's due date is independently verified before action.
+
+Build the execution queue once at run start. Do not refresh the queue after completing a task in order to pick up newly generated sequence tasks. If Apollo creates or reveals another task after completion, leave it for a later executor run and log it as deferred. This prevents back-to-back sequence steps caused by task completion side effects.
+
+Never send more than one outbound touch to the same contact in a single executor run. If multiple due or overdue tasks exist for the same contact in the run-start snapshot, choose the oldest due task after applying safety checks and defer the rest with `skip_reason: "same_run_contact_cadence_guard"`. This is a recipient safety rule, not a throughput cap.
+
+If Apollo exposes queue filters, use only due/overdue and today's-task filters for execution. Never execute from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
+
+If a task has no visible due date, a malformed due date, an ambiguous timezone, or conflicting list/detail due-state, skip it with `skip_reason: "due_date_unverified"` and continue to the next eligible task. The only exception is retrying Apollo completion for an existing `completion_pending` ledger item after the external action has already succeeded; that retry must not send any new outbound touch.
+
+If a specific eligible task is unsafe, unclear, duplicate-prone, or missing context, mark that task with a reason and continue to the next eligible task.
 
 ## Context Order
 
@@ -105,6 +126,9 @@ Ledger fields:
 
 - `action_key`
 - `apollo_task_id`
+- `apollo_due_date`
+- `apollo_due_state`
+- `run_started_at`
 - `channel`
 - `step_type`
 - `contact_email`
@@ -135,7 +159,7 @@ When due-task volume is high, prioritize tasks that move conversations forward:
 5. connection requests
 6. social touches
 
-Within each bucket, work oldest due first. Priority guides order only. It is not a cap.
+Within each bucket, work overdue tasks first, oldest due first, then tasks due today oldest due first. Priority guides order only. It is not a cap and never makes future-dated tasks eligible.
 
 ## Task Playbook
 
@@ -207,10 +231,17 @@ Within each bucket, work oldest due first. Priority guides order only. It is not
 
 ## Workflow
 
-1. Open Apollo tasks for the Warpy outbound motion.
-2. Load the manifest index and task ledger.
-3. Sort actionable pending tasks oldest due first, with the priority order above when volume is high.
-4. For each task:
+1. Establish the current local date.
+2. Open Apollo tasks for the Warpy outbound motion using due/overdue and today's-task filters only.
+3. Load the manifest index and task ledger.
+4. Build the execution queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
+5. Freeze that run-start queue. Do not add tasks that appear after another task is completed.
+6. Sort eligible pending tasks oldest due first, with the priority order above when volume is high.
+7. For each eligible task:
+   - record `run_started_at`
+   - record `apollo_due_date` and `apollo_due_state`
+   - re-check that the task is not future-dated before any external action
+   - re-check that no outbound touch has already been sent to the same contact in this run
    - read Apollo note, contact context, and sequence step
    - load matching manifest context
    - check handoff, suppression, duplicate, and stage state
@@ -221,8 +252,8 @@ Within each bucket, work oldest due first. Priority guides order only. It is not
    - write `sent` immediately after the external action succeeds
    - complete the Apollo task
    - write `completed` only after Apollo confirms completion
-5. If Apollo completion fails after the action succeeds, write `completion_pending` and retry only completion next time.
-6. If a task cannot be completed safely, log the reason and keep moving.
+8. If Apollo completion fails after the action succeeds, write `completion_pending` and retry only completion next time.
+9. If a task cannot be completed safely, log the reason and keep moving.
 
 ## Logging
 
@@ -231,17 +262,25 @@ For each run, log:
 - tasks reviewed
 - tasks completed
 - tasks skipped with reasons
+- future-dated tasks observed and skipped
+- same-run contact cadence deferrals
+- tasks skipped because due date could not be verified
 - accounts moved into AE-owned, suppressed, or blocked state
 - Apollo/local state mismatches
 - links to profiles or posts acted on
 - exact copy used
+- Apollo due date/state for every acted task
 - ledger path and `completion_pending` items
 
 ## Success Criteria
 
 A successful run:
 
-- completes actionable tasks without arbitrary caps
+- completes eligible due/overdue tasks without arbitrary throughput caps
+- executes only overdue tasks and tasks due on the current local date
+- skips every future-dated or due-date-unverified task without outbound action
+- never sends two outbound touches to the same contact in one executor run
+- does not execute tasks that appear only after another task is completed in the same run
 - keeps copy aligned with `GTM.md`
 - avoids duplicate sends across retries
 - leaves replies and live conversations to the AE
