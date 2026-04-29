@@ -47,16 +47,21 @@ Keep processing eligible Apollo tasks until the due-today and overdue queue has 
 
 ## Due-Window Enforcement
 
-The executor must preserve Apollo sequence timing. A task is eligible only when all of these are true:
+The executor must preserve Apollo sequence timing and per-contact sequence order. A task is eligible only when all of these are true:
 
 - it belongs to the Warpy outbound motion / `Warpy Founder-Led SDR Sequence`
 - Apollo status is open or pending, not completed, dismissed, paused, or skipped
 - Apollo due date is before the current local date, or due on the current local date
 - Apollo due date is verified from Apollo before any external action
+- all earlier Apollo sequence steps for the same contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo
 - the task was present in the due/overdue execution snapshot built at the start of the run
 - no outbound touch has already been sent to the same contact during the current executor run
 
 Do not execute future-dated Apollo tasks. Do not pull forward later sequence steps to clear visible backlog. Do not use Apollo views that mix future tasks with due work unless each task's due date is independently verified before action.
+
+Do not execute sequence steps out of order for a contact. Before any outbound action, inspect Apollo task detail, sequence context, and visible contact task history enough to verify that no earlier sequence step is still open, pending, future-dated, `completion_pending`, blocked by a transient execution error, or unresolved. If an earlier step is unresolved or its state cannot be verified, skip the later task with `skip_reason: "prior_sequence_step_unresolved"` and continue to the next eligible task.
+
+Terminal no-action skips are allowed only when the earlier step should not produce an outbound action, such as no recent relevant social post, connection not accepted for a DM task, suppressed contact/account state, AE-owned handoff, unsubscribe, do-not-contact, bad data, duplicate prevention, or Apollo indicating the step is no longer applicable. Browser errors, unresolved placeholders, due-date uncertainty, future-dated tasks, and completion failures are not terminal no-action reasons and must block later steps for that contact until resolved.
 
 Build the execution queue once at run start. Do not refresh the queue after completing a task in order to pick up newly generated sequence tasks. If Apollo creates or reveals another task after completion, leave it for a later executor run and log it as deferred. This prevents back-to-back sequence steps caused by task completion side effects.
 
@@ -128,6 +133,8 @@ Ledger fields:
 - `apollo_task_id`
 - `apollo_due_date`
 - `apollo_due_state`
+- `apollo_sequence_step`
+- `prior_sequence_step_state`
 - `run_started_at`
 - `channel`
 - `step_type`
@@ -159,7 +166,7 @@ When due-task volume is high, prioritize tasks that move conversations forward:
 5. connection requests
 6. social touches
 
-Within each bucket, work overdue tasks first, oldest due first, then tasks due today oldest due first. Priority guides order only. It is not a cap and never makes future-dated tasks eligible.
+Within each bucket, work overdue tasks first, oldest due first, then tasks due today oldest due first. Priority guides order only. It is not a cap, never makes future-dated tasks eligible, and never overrides per-contact sequence order.
 
 ## Task Playbook
 
@@ -240,7 +247,9 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 7. For each eligible task:
    - record `run_started_at`
    - record `apollo_due_date` and `apollo_due_state`
+   - record `apollo_sequence_step` and `prior_sequence_step_state`
    - re-check that the task is not future-dated before any external action
+   - re-check that all earlier Apollo sequence steps for the contact are completed, safely terminal-skipped, or no longer applicable
    - re-check that no outbound touch has already been sent to the same contact in this run
    - read Apollo note, contact context, and sequence step
    - load matching manifest context
@@ -263,6 +272,7 @@ For each run, log:
 - tasks completed
 - tasks skipped with reasons
 - future-dated tasks observed and skipped
+- later sequence steps skipped because a prior step was unresolved
 - same-run contact cadence deferrals
 - tasks skipped because due date could not be verified
 - accounts moved into AE-owned, suppressed, or blocked state
@@ -270,6 +280,7 @@ For each run, log:
 - links to profiles or posts acted on
 - exact copy used
 - Apollo due date/state for every acted task
+- Apollo sequence step and prior-step state for every acted task
 - ledger path and `completion_pending` items
 
 ## Success Criteria
@@ -279,6 +290,7 @@ A successful run:
 - completes eligible due/overdue tasks without arbitrary throughput caps
 - executes only overdue tasks and tasks due on the current local date
 - skips every future-dated or due-date-unverified task without outbound action
+- never executes a later sequence step before earlier steps for the same contact are completed, safely terminal-skipped, or no longer applicable
 - never sends two outbound touches to the same contact in one executor run
 - does not execute tasks that appear only after another task is completed in the same run
 - keeps copy aligned with `GTM.md`

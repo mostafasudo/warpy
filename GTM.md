@@ -75,7 +75,7 @@ Apollo is the outbound execution control plane. The live sequence is [`Warpy Fou
 
 Amplemarket is the sourcing and enrichment layer. Codex automations move clean leads into Apollo and execute due or overdue Apollo tasks through the live browser. The AE owns replies, objections, live conversations, and opportunities.
 
-The task executor must preserve Apollo sequence timing. It may execute only Apollo tasks from the Warpy sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before an outbound action, skip the task and log the blocker. Build the executable queue once at run start; do not execute tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
+The task executor must preserve Apollo sequence timing and per-contact step order. It may execute only Apollo tasks from the Warpy sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before an outbound action, skip the task and log the blocker. For a given contact, never execute a later sequence step until all earlier Apollo sequence steps for that contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo. Build the executable queue once at run start; do not execute tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
 
 Pipeline rules:
 
@@ -89,7 +89,7 @@ Pipeline rules:
 - do not automate outreach to contacts or accounts in Apollo states that indicate reply ownership, active opportunity, current customer, do-not-contact, bad data, or manual AE ownership
 - keep Apollo stages and local GTM state synchronized so either system can prevent unsafe sends
 
-The only enforced throughput cap in the GTM automation system is the Lead Builder cap: target `12` accepted primary leads and import/enrich no more than `16` accepted primary leads per run. Do not add other per-run, per-day, per-channel, topic, or task-volume limits that could stop the three automations from continuing their work. The task executor due-window, run-start snapshot, and same-contact cadence rules are recipient safety gates, not throughput caps.
+The only enforced throughput cap in the GTM automation system is the Lead Builder cap: target `12` accepted primary leads and import/enrich no more than `16` accepted primary leads per run. Do not add other per-run, per-day, per-channel, topic, or task-volume limits that could stop the three automations from continuing their work. The task executor due-window, sequence-order, run-start snapshot, and same-contact cadence rules are recipient safety gates, not throughput caps.
 
 ## Sequence Strategy
 
