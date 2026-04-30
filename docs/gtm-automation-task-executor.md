@@ -67,7 +67,11 @@ Build the execution queue once at run start. Do not refresh the queue after comp
 
 Never send more than one outbound touch to the same contact in a single executor run. If multiple due or overdue tasks exist for the same contact in the run-start snapshot, choose the oldest due task after applying safety checks and defer the rest with `skip_reason: "same_run_contact_cadence_guard"`. This is a recipient safety rule, not a throughput cap.
 
-If Apollo exposes queue filters, use only due/overdue and today's-task filters for execution. Never execute from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
+Use Apollo's task queue as the entry point:
+
+`https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`
+
+After opening the task page, apply the necessary Apollo filters so the execution view contains only due/overdue or today's tasks for the Warpy outbound motion, sorted by due date ascending. Treat the URL as a starting view, not proof of eligibility. Never execute from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
 
 If a task has no visible due date, a malformed due date, an ambiguous timezone, or conflicting list/detail due-state, skip it with `skip_reason: "due_date_unverified"` and continue to the next eligible task. The only exception is retrying Apollo completion for an existing `completion_pending` ledger item after the external action has already succeeded; that retry must not send any new outbound touch.
 
@@ -239,7 +243,7 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 ## Workflow
 
 1. Establish the current local date.
-2. Open Apollo tasks for the Warpy outbound motion using due/overdue and today's-task filters only.
+2. Open Apollo tasks at `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`, then apply due/overdue and today's-task filters for the Warpy outbound motion only.
 3. Load the manifest index and task ledger.
 4. Build the execution queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
 5. Freeze that run-start queue. Do not add tasks that appear after another task is completed.
