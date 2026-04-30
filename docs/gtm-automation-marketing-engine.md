@@ -34,6 +34,24 @@ Relevant marketing skills:
 
 Do not store Buffer tokens in repo files. Use `BUFFER_MCP_TOKEN` locally.
 
+## Run Concurrency Guard
+
+Before doing any other workflow step, claim the automation run lock:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-marketing-engine
+```
+
+If the guard returns `decision: "blocked"`, do not read sources, open GTM platforms, or update local marketing state. Open only a short skipped inbox item that says an older `warpy-marketing-engine` run is already active, then stop.
+
+If the guard returns `decision: "claimed"`, keep the returned `owner_token` for the whole run. As the final tool action before the final inbox report, release the lock:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-marketing-engine --owner-token <owner_token>
+```
+
+Different GTM automations may run at the same time. Only another active `warpy-marketing-engine` run blocks this automation.
+
 ## Programmatic Tool Fallback
 
 Use Buffer MCP and other non-browser tooling when they can complete the exact GTM content step. If any MCP, connector, direct API, script, agent tool, or source-fetching path is unavailable, limited, unsupported for the needed platform-allowed step, stale, unauthenticated, or failing, load `docs/chrome-cdp.md` and use the Chrome CDP workflow for the user's authenticated GTM browser session before marking the step blocked.
@@ -176,18 +194,20 @@ Do not update reference notes just to show activity.
 
 ## Workflow
 
-1. Read `GTM.md` and this file.
-2. Pull recent Buffer posts when available, falling back to Chrome CDP if Buffer MCP lookup is limited or failing.
-3. Read local memory from `topic-memory.json`.
-4. Check reference accounts when useful.
-5. Fetch current product and tech signals.
-6. Open original sources where needed.
-7. Build a shortlist of candidate topics.
-8. Remove stale, repetitive, unsupported, derivative, or forced-Warpy angles.
-9. Draft channel-native copy for the strongest ideas.
-10. Sanity-check each draft for evidence, humility, and voice.
-11. Save drafts to Buffer when available, falling back from Buffer MCP to the Chrome CDP Buffer UI when needed, or write local draft artifacts if Buffer cannot be safely reached.
-12. Update `post-ledger.jsonl`, `topic-memory.json`, and `reference-notes.json` as appropriate.
+1. Claim the run concurrency guard for `warpy-marketing-engine`.
+2. Read `GTM.md` and this file.
+3. Pull recent Buffer posts when available, falling back to Chrome CDP if Buffer MCP lookup is limited or failing.
+4. Read local memory from `topic-memory.json`.
+5. Check reference accounts when useful.
+6. Fetch current product and tech signals.
+7. Open original sources where needed.
+8. Build a shortlist of candidate topics.
+9. Remove stale, repetitive, unsupported, derivative, or forced-Warpy angles.
+10. Draft channel-native copy for the strongest ideas.
+11. Sanity-check each draft for evidence, humility, and voice.
+12. Save drafts to Buffer when available, falling back from Buffer MCP to the Chrome CDP Buffer UI when needed, or write local draft artifacts if Buffer cannot be safely reached.
+13. Update `post-ledger.jsonl`, `topic-memory.json`, and `reference-notes.json` as appropriate.
+14. Release the run concurrency guard before the final inbox report.
 
 ## Manual Work Outside Automation
 

@@ -35,6 +35,24 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 - Apollo authenticated GTM browser workflow: import, verification, sequence enrollment, and adjacent import when multithreading is useful
 - Chrome CDP workflow for the user's authenticated GTM browser session: Apollo work, optional X lookup, and any Amplemarket step where direct MCP cannot complete the exact operation
 
+## Run Concurrency Guard
+
+Before doing any other workflow step, claim the automation run lock:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-lead-builder
+```
+
+If the guard returns `decision: "blocked"`, do not read source systems, open GTM platforms, create lists, import leads, or update local GTM state. Open only a short skipped inbox item that says an older `warpy-gtm-lead-builder` run is already active, then stop.
+
+If the guard returns `decision: "claimed"`, keep the returned `owner_token` for the whole run. As the final tool action before the final inbox report, release the lock:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-gtm-lead-builder --owner-token <owner_token>
+```
+
+Different GTM automations may run at the same time. Only another active `warpy-gtm-lead-builder` run blocks this automation.
+
 ## Programmatic Tool Fallback
 
 Direct MCP is an acceleration path, not a blocker. For every approved GTM platform step that uses MCP, direct MCP, a connector, direct API, script, or other non-browser tooling, use the Chrome CDP workflow for the user's authenticated GTM browser session when that programmatic path is unavailable, limited, unsupported, missing the needed action, stale, or failing.
@@ -225,22 +243,24 @@ Amplemarket lead lists are temporary batch containers.
 
 ## Workflow
 
-1. Load `manifest-index.json` and Apollo exclusion context.
-2. Search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
-3. Review candidates account by account.
-4. Select primary and adjacent leads where useful.
-5. Enrich accepted leads and look up verified business emails for accepted primaries.
-6. Add optional X context only when confidence is high.
-7. Write trigger, pain hypothesis, proof point, fit score, and priority tier.
-8. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
-9. Fetch final list metadata for audit.
-10. Generate manifest and CSV artifacts.
-11. Apply the Lead Builder cap and import the highest-fit accepted primaries into Apollo.
-12. Verify imported contacts in Apollo.
-13. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
-14. Update the batch manifest and manifest index.
-15. Keep adjacent leads in local state for future multithreading.
-16. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion.
+1. Claim the run concurrency guard for `warpy-gtm-lead-builder`.
+2. Load `manifest-index.json` and Apollo exclusion context.
+3. Search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
+4. Review candidates account by account.
+5. Select primary and adjacent leads where useful.
+6. Enrich accepted leads and look up verified business emails for accepted primaries.
+7. Add optional X context only when confidence is high.
+8. Write trigger, pain hypothesis, proof point, fit score, and priority tier.
+9. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
+10. Fetch final list metadata for audit.
+11. Generate manifest and CSV artifacts.
+12. Apply the Lead Builder cap and import the highest-fit accepted primaries into Apollo.
+13. Verify imported contacts in Apollo.
+14. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
+15. Update the batch manifest and manifest index.
+16. Keep adjacent leads in local state for future multithreading.
+17. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion.
+18. Release the run concurrency guard before the final inbox report.
 
 ## Logging
 

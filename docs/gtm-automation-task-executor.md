@@ -40,6 +40,24 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 - Recipient-safety ledger index: `/Users/levw/.codex/state/warpy-gtm/task-guard-index.json`
 - Recipient-safety ledger claims: `/Users/levw/.codex/state/warpy-gtm/task-guard-claims/`
 
+## Run Concurrency Guard
+
+Before doing any other workflow step, claim the automation run lock:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-task-executor
+```
+
+If the guard returns `decision: "blocked"`, do not read Apollo, open GTM platforms, claim recipient ledger entries, or update local GTM state. Open only a short skipped inbox item that says an older `warpy-gtm-task-executor` run is already active, then stop.
+
+If the guard returns `decision: "claimed"`, keep the returned `owner_token` for the whole run. As the final tool action before the final inbox report, release the lock:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-gtm-task-executor --owner-token <owner_token>
+```
+
+Different GTM automations may run at the same time. Only another active `warpy-gtm-task-executor` run blocks this automation.
+
 ## Cadence
 
 Run every two hours on weekdays so the executor keeps Apollo moving without rechecking the same task queue too frequently.
@@ -302,14 +320,15 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 
 ## Workflow
 
-1. Establish the current local date.
-2. Open Apollo tasks at `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`, then apply due/overdue and today's-task filters for the Warpy outbound motion only.
-3. Load the manifest index and task ledger.
-4. Rebuild the recipient-safety ledger index with `node scripts/gtm-task-guard.mjs rebuild-index`.
-5. Build the eligible task queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
-6. Freeze that run-start queue. Do not add tasks that appear after another task is completed.
-7. Sort eligible pending tasks oldest due first, with the priority order above when volume is high.
-8. For each eligible task:
+1. Claim the run concurrency guard for `warpy-gtm-task-executor`.
+2. Establish the current local date.
+3. Open Apollo tasks at `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`, then apply due/overdue and today's-task filters for the Warpy outbound motion only.
+4. Load the manifest index and task ledger.
+5. Rebuild the recipient-safety ledger index with `node scripts/gtm-task-guard.mjs rebuild-index`.
+6. Build the eligible task queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
+7. Freeze that run-start queue. Do not add tasks that appear after another task is completed.
+8. Sort eligible pending tasks oldest due first, with the priority order above when volume is high.
+9. For each eligible task:
    - record `run_started_at`
    - record `apollo_due_date` and `apollo_due_state`
    - record `apollo_sequence_step` and `prior_sequence_step_state`
@@ -329,8 +348,9 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
    - complete the Apollo task
    - mark ledger status `completed` only after Apollo confirms completion
    - write `completed` only after Apollo confirms completion
-9. If Apollo completion fails after the recipient-visible platform step succeeds, mark ledger status `completion_pending`, write `completion_pending`, and retry only completion next time.
-10. If a task cannot be completed safely, log the reason and keep moving.
+10. If Apollo completion fails after the recipient-visible platform step succeeds, mark ledger status `completion_pending`, write `completion_pending`, and retry only completion next time.
+11. If a task cannot be completed safely, log the reason and keep moving.
+12. Release the run concurrency guard before the final inbox report.
 
 ## Logging
 
