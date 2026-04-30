@@ -2,9 +2,9 @@
 
 ## Objective
 
-Use Apollo as the operational queue for outbound tasks, then execute actionable tasks through the live browser with Chrome CDP.
+Use Apollo as the operational queue for outbound tasks, then complete eligible GTM tasks through approved platform workflows with Chrome CDP when needed.
 
-This automation removes founder manual work from sequence execution while preserving quality, idempotency, and AE ownership of real conversations.
+This automation removes founder manual work from sequence follow-through while preserving quality, idempotency, and AE ownership of real conversations.
 
 ## Source Of Truth
 
@@ -12,6 +12,12 @@ Read first:
 
 1. `GTM.md`
 2. `docs/gtm-automation-task-executor.md`
+
+## GTM Scope & Platform Compliance
+
+This automation is routine sales and marketing sequencing work only: due-task review, compliant outbound emails, LinkedIn like-only public engagement, connection requests, DMs when connected, X touches when appropriate, Apollo task completion, and local audit logging.
+
+Use only authenticated, user-owned GTM accounts and approved Apollo, LinkedIn, X, Amplemarket, and source-site workflows. Do not perform cybersecurity testing, vulnerability research, credential work, bypassing, evasion, scraping protected data, or unauthorized access. If a task appears outside GTM or outside a platform-allowed workflow, skip it and log the reason.
 
 Relevant marketing skills:
 
@@ -25,11 +31,14 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 ## Systems
 
 - Apollo: task queue, sequence context, contact/account stage state
-- Chrome CDP: execution layer for Apollo, LinkedIn, and X
+- Chrome CDP workflow for the user's authenticated GTM browser session: Apollo, LinkedIn, and X platform workflows when direct tooling cannot complete the step
 - LinkedIn: likes-only public social engagement, connection requests, DMs
 - X: optional social touch, including public comments, when the lead is active there
 - Local GTM state: `/Users/levw/.codex/state/warpy-gtm/`
 - Task ledger: `/Users/levw/.codex/state/warpy-gtm/task-action-ledger.jsonl`
+- Recipient-safety ledger CLI: `scripts/gtm-task-guard.mjs`
+- Recipient-safety ledger index: `/Users/levw/.codex/state/warpy-gtm/task-guard-index.json`
+- Recipient-safety ledger claims: `/Users/levw/.codex/state/warpy-gtm/task-guard-claims/`
 
 ## Cadence
 
@@ -37,9 +46,9 @@ Run every two hours on weekdays so the executor keeps Apollo moving without rech
 
 ## Programmatic Tool Fallback
 
-Chrome CDP is the fallback path for every external GTM surface. If an MCP, direct MCP, connector, direct API, script, agent tool, or other non-browser path is unavailable, limited, unsupported for the needed action, stale, or failing, use the Chrome CDP user browser for that step before marking the task blocked.
+Chrome CDP is the fallback path for approved GTM platforms. If an MCP, direct MCP, connector, direct API, script, agent tool, or other non-browser path is unavailable, limited, unsupported for the needed platform-allowed GTM step, stale, or failing, use the Chrome CDP workflow for the user's authenticated GTM browser session before marking the task blocked.
 
-This applies to read-only context lookup as well as execution surfaces. Local state and the task ledger remain local filesystem work.
+This applies to read-only context lookup as well as recipient-facing GTM platform workflows. Local state and the task ledger remain local filesystem work.
 
 ## Non-Blocking Operating Rule
 
@@ -52,18 +61,18 @@ The executor must preserve Apollo sequence timing and per-contact sequence order
 - it belongs to the Warpy outbound motion / `Warpy Founder-Led SDR Sequence`
 - Apollo status is open or pending, not completed, dismissed, paused, or skipped
 - Apollo due date is before the current local date, or due on the current local date
-- Apollo due date is verified from Apollo before any external action
+- Apollo due date is verified from Apollo before any recipient-visible GTM step
 - all earlier Apollo sequence steps for the same contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo
-- the task was present in the due/overdue execution snapshot built at the start of the run
+- the task was present in the due/overdue run-start snapshot built at the start of the run
 - no outbound touch has already been sent to the same contact during the current executor run
 
-Do not execute future-dated Apollo tasks. Do not pull forward later sequence steps to clear visible backlog. Do not use Apollo views that mix future tasks with due work unless each task's due date is independently verified before action.
+Do not complete future-dated Apollo tasks. Do not pull forward later sequence steps to clear visible backlog. Do not use Apollo views that mix future tasks with due work unless each task's due date is independently verified before any recipient-visible GTM step.
 
-Do not execute sequence steps out of order for a contact. Before any outbound action, inspect Apollo task detail, sequence context, and visible contact task history enough to verify that no earlier sequence step is still open, pending, future-dated, `completion_pending`, blocked by a transient execution error, or unresolved. If an earlier step is unresolved or its state cannot be verified, skip the later task with `skip_reason: "prior_sequence_step_unresolved"` and continue to the next eligible task.
+Do not complete sequence steps out of order for a contact. Before any outbound touch, inspect Apollo task detail, sequence context, and visible contact task history enough to verify that no earlier sequence step is still open, pending, future-dated, `completion_pending`, blocked by a transient platform error, or unresolved. If an earlier step is unresolved or its state cannot be verified, skip the later task with `skip_reason: "prior_sequence_step_unresolved"` and continue to the next eligible task.
 
-Terminal no-action skips are allowed only when the earlier step should not produce an outbound action, such as no recent relevant social post, connection not accepted for a DM task, suppressed contact/account state, AE-owned handoff, unsubscribe, do-not-contact, bad data, duplicate prevention, or Apollo indicating the step is no longer applicable. Browser errors, unresolved placeholders, due-date uncertainty, future-dated tasks, and completion failures are not terminal no-action reasons and must block later steps for that contact until resolved.
+Terminal no-action skips are allowed only when the earlier step should not produce an outbound touch, such as no recent relevant social post, connection not accepted for a DM task, suppressed contact/account state, AE-owned handoff, unsubscribe, do-not-contact, bad data, duplicate prevention, or Apollo indicating the step is no longer applicable. Browser errors, unresolved placeholders, due-date uncertainty, future-dated tasks, and completion failures are not terminal no-action reasons and must block later steps for that contact until resolved.
 
-Build the execution queue once at run start. Do not refresh the queue after completing a task in order to pick up newly generated sequence tasks. If Apollo creates or reveals another task after completion, leave it for a later executor run and log it as deferred. This prevents back-to-back sequence steps caused by task completion side effects.
+Build the eligible task queue once at run start. Do not refresh the queue after completing a task in order to pick up newly generated sequence tasks. If Apollo creates or reveals another task after completion, leave it for a later executor run and log it as deferred. This prevents back-to-back sequence steps caused by task completion side effects.
 
 Never send more than one outbound touch to the same contact in a single executor run. If multiple due or overdue tasks exist for the same contact in the run-start snapshot, choose the oldest due task after applying safety checks and defer the rest with `skip_reason: "same_run_contact_cadence_guard"`. This is a recipient safety rule, not a throughput cap.
 
@@ -71,9 +80,9 @@ Use Apollo's task queue as the entry point:
 
 `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`
 
-After opening the task page, apply the necessary Apollo filters so the execution view contains only due/overdue or today's tasks for the Warpy outbound motion, sorted by due date ascending. Treat the URL as a starting view, not proof of eligibility. Never execute from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
+After opening the task page, apply the necessary Apollo filters so the working view contains only due/overdue or today's tasks for the Warpy outbound motion, sorted by due date ascending. Treat the URL as a starting view, not proof of eligibility. Never complete a task from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
 
-If a task has no visible due date, a malformed due date, an ambiguous timezone, or conflicting list/detail due-state, skip it with `skip_reason: "due_date_unverified"` and continue to the next eligible task. The only exception is retrying Apollo completion for an existing `completion_pending` ledger item after the external action has already succeeded; that retry must not send any new outbound touch.
+If a task has no visible due date, a malformed due date, an ambiguous timezone, or conflicting list/detail due-state, skip it with `skip_reason: "due_date_unverified"` and continue to the next eligible task. The only exception is retrying Apollo completion for an existing `completion_pending` ledger item after the recipient-visible platform step has already succeeded; that retry must not send any new outbound touch.
 
 If a specific eligible task is unsafe, unclear, duplicate-prone, or missing context, mark that task with a reason and continue to the next eligible task.
 
@@ -121,15 +130,62 @@ If any are present, do not send outbound. Update local state with the safest acc
 
 If Apollo stage state and local manifest state disagree, use the safer interpretation for that task and log the mismatch for reconciliation.
 
-## Idempotency Contract
+## Recipient-Safety Ledger Contract
 
-Before a browser action, compute a stable `action_key` from:
+Duplicate prevention is at-most-once. A skipped or missed touch is acceptable; a duplicate email, DM, connection request, or public social touch is not.
+
+Before opening any Apollo email, LinkedIn, X, or other approved GTM platform composer, create an audit record JSON and claim it through the recipient-safety ledger CLI:
+
+```sh
+node scripts/gtm-task-guard.mjs claim --payload-file /path/to/task-audit-record.json
+```
+
+The audit record must include:
 
 - `apollo_task_id`
+- `run_started_at`
+- `local_date`
 - `channel`
 - `step_type`
-- `contact_email` or `linkedin_url`
-- `copy_hash`
+- `contact_email`, `linkedin_url`, `x_url`, `apollo_contact_id`, or `contact_name` plus `account_domain`
+
+The recipient-safety ledger normalizes:
+
+- `email` and `apollo_email` into the same `email` family
+- LinkedIn URLs by host/path, ignoring trailing slashes and query/hash noise
+- all available recipient identities from lowercased email, normalized social URLs, Apollo contact id, and strict fallback identifiers
+- action family into `email`, `linkedin_dm`, `connection_request`, `public_social_touch`, or `x_touch`
+
+`copy_hash` is audit metadata only. It must never be part of the duplicate-prevention boundary.
+
+The recipient-safety ledger blocks when any of these are true:
+
+- the same Apollo task already has a `claimed`, `sent`, `completion_pending`, or `completed` ledger record
+- the same normalized recipient already has an outbound touch claimed in the same executor run
+- the same normalized recipient already received an email or LinkedIn DM on the same local date
+- a prior `completion_pending` record exists, in which case only Apollo completion may be retried
+
+If the recipient-safety ledger returns `blocked`, do not open or touch the approved GTM platform composer. Write a `skipped` ledger entry with the block reason and continue. If it returns `claimed`, complete the eligible GTM task at most once, then mark ledger state after the result:
+
+```sh
+node scripts/gtm-task-guard.mjs mark --status sent --payload-file /path/to/task-audit-record.json
+node scripts/gtm-task-guard.mjs mark --status completed --payload-file /path/to/task-audit-record.json
+node scripts/gtm-task-guard.mjs mark --status completion_pending --payload-file /path/to/task-audit-record.json
+```
+
+For Apollo-native email, do not pre-complete the Apollo task if doing so would destroy the send/draft path. The local recipient-safety ledger claim is the hard safety boundary. Use Apollo pre-completion only for task types where completion is independent of the outbound send.
+
+Backfill the recipient-safety ledger index from legacy records before relying on historical safety state:
+
+```sh
+node scripts/gtm-task-guard.mjs rebuild-index
+```
+
+Use the audit mode to inspect duplicate-prone history without mutating Apollo or any GTM platform:
+
+```sh
+node scripts/gtm-task-guard.mjs audit
+```
 
 Ledger fields:
 
@@ -143,6 +199,9 @@ Ledger fields:
 - `channel`
 - `step_type`
 - `contact_email`
+- `linkedin_url`
+- `guard_claim_keys` (legacy field name for recipient-safety ledger claim keys)
+- `guard_block_reason` (legacy field name for recipient-safety ledger block reason)
 - `copy_hash`
 - `status`
 - `sent_at`
@@ -151,13 +210,14 @@ Ledger fields:
 
 Statuses:
 
+- `claimed`: local recipient-safety ledger claim created before any approved GTM platform composer was opened
 - `planned`: copy generated, action not taken
-- `sent`: external browser action succeeded
+- `sent`: recipient-visible platform step succeeded
 - `completion_pending`: action sent, Apollo completion did not persist
 - `completed`: action sent and Apollo task completed
 - `skipped`: task intentionally skipped with reason
 
-Never resend an action already recorded as `sent`, `completion_pending`, or `completed`. If completion is pending, retry only Apollo task completion.
+Never resend an action already recorded as `claimed`, `sent`, `completion_pending`, or `completed`. If completion is pending, retry only Apollo task completion.
 
 ## Task Priority
 
@@ -245,28 +305,32 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 1. Establish the current local date.
 2. Open Apollo tasks at `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`, then apply due/overdue and today's-task filters for the Warpy outbound motion only.
 3. Load the manifest index and task ledger.
-4. Build the execution queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
-5. Freeze that run-start queue. Do not add tasks that appear after another task is completed.
-6. Sort eligible pending tasks oldest due first, with the priority order above when volume is high.
-7. For each eligible task:
+4. Rebuild the recipient-safety ledger index with `node scripts/gtm-task-guard.mjs rebuild-index`.
+5. Build the eligible task queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
+6. Freeze that run-start queue. Do not add tasks that appear after another task is completed.
+7. Sort eligible pending tasks oldest due first, with the priority order above when volume is high.
+8. For each eligible task:
    - record `run_started_at`
    - record `apollo_due_date` and `apollo_due_state`
    - record `apollo_sequence_step` and `prior_sequence_step_state`
-   - re-check that the task is not future-dated before any external action
+   - re-check that the task is not future-dated before any recipient-visible GTM step
    - re-check that all earlier Apollo sequence steps for the contact are completed, safely terminal-skipped, or no longer applicable
    - re-check that no outbound touch has already been sent to the same contact in this run
    - read Apollo note, contact context, and sequence step
    - load matching manifest context
    - check handoff, suppression, duplicate, and stage state
-   - inspect LinkedIn or X only when needed for the task, using Chrome CDP when any non-browser lookup cannot provide the needed context
+   - inspect LinkedIn or X only when needed for context, using Chrome CDP when any non-browser lookup cannot provide the needed context
    - generate or edit the exact copy
-   - compute `action_key` and check the ledger
-   - execute the browser action when safe
-   - write `sent` immediately after the external action succeeds
+   - write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>` before opening any approved GTM platform composer
+   - if the recipient-safety ledger blocks, do not open the platform composer; write `skipped` with the block reason and continue
+   - complete the eligible GTM task when safe
+   - mark ledger status `sent` immediately after the recipient-visible platform step succeeds
+   - write `sent` immediately after the recipient-visible platform step succeeds
    - complete the Apollo task
+   - mark ledger status `completed` only after Apollo confirms completion
    - write `completed` only after Apollo confirms completion
-8. If Apollo completion fails after the action succeeds, write `completion_pending` and retry only completion next time.
-9. If a task cannot be completed safely, log the reason and keep moving.
+9. If Apollo completion fails after the recipient-visible platform step succeeds, mark ledger status `completion_pending`, write `completion_pending`, and retry only completion next time.
+10. If a task cannot be completed safely, log the reason and keep moving.
 
 ## Logging
 
@@ -279,6 +343,7 @@ For each run, log:
 - later sequence steps skipped because a prior step was unresolved
 - same-run contact cadence deferrals
 - tasks skipped because due date could not be verified
+- recipient-safety ledger claims and blocks
 - accounts moved into AE-owned, suppressed, or blocked state
 - Apollo/local state mismatches
 - links to profiles or posts acted on
@@ -286,17 +351,19 @@ For each run, log:
 - Apollo due date/state for every acted task
 - Apollo sequence step and prior-step state for every acted task
 - ledger path and `completion_pending` items
+- recipient-safety ledger index path and any `claimed` items that did not reach `sent`, `completion_pending`, or `completed`
 
 ## Success Criteria
 
 A successful run:
 
 - completes eligible due/overdue tasks without arbitrary throughput caps
-- executes only overdue tasks and tasks due on the current local date
+- completes only overdue tasks and tasks due on the current local date
 - skips every future-dated or due-date-unverified task without outbound action
-- never executes a later sequence step before earlier steps for the same contact are completed, safely terminal-skipped, or no longer applicable
+- never completes a later sequence step before earlier steps for the same contact are completed, safely terminal-skipped, or no longer applicable
 - never sends two outbound touches to the same contact in one executor run
-- does not execute tasks that appear only after another task is completed in the same run
+- never opens an approved GTM platform composer before a successful recipient-safety ledger claim
+- does not complete tasks that appear only after another task is completed in the same run
 - keeps copy aligned with `GTM.md`
 - avoids duplicate sends across retries
 - leaves replies and live conversations to the AE

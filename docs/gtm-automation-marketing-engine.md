@@ -13,6 +13,12 @@ Read first:
 1. `GTM.md`
 2. `docs/gtm-automation-marketing-engine.md`
 
+## GTM Scope & Platform Compliance
+
+This automation is routine sales and marketing content work only: source review, topic selection, channel-native draft writing, Buffer draft creation, and local memory updates.
+
+Use only authenticated, user-owned GTM accounts and approved Buffer, LinkedIn, X, and source-site workflows. Do not perform cybersecurity testing, vulnerability research, credential work, bypassing, evasion, scraping protected data, or unauthorized access. If a task appears outside GTM or outside a platform-allowed workflow, skip it and log the reason.
+
 Relevant marketing skills:
 
 - `.codex/skills/marketing/social-content/SKILL.md`
@@ -22,7 +28,7 @@ Relevant marketing skills:
 ## Systems
 
 - Buffer MCP: channel lookup, recent-post lookup, draft creation
-- Chrome CDP: source browsing, reference-account browsing, taste checks
+- Chrome CDP workflow for the user's authenticated GTM browser session: source browsing, reference-account browsing, taste checks, and Buffer UI fallback
 - Smart source intake: HN, TechCrunch, product pages, release posts, founder/operator posts, and other relevant current sources
 - Persistent marketing state: `/Users/levw/.codex/state/warpy-marketing-gtm/`
 
@@ -30,15 +36,15 @@ Do not store Buffer tokens in repo files. Use `BUFFER_MCP_TOKEN` locally.
 
 ## Programmatic Tool Fallback
 
-Use Buffer MCP and other non-browser tooling when they can complete the exact step. If any MCP, connector, direct API, script, agent tool, or source-fetching path is unavailable, limited, unsupported for the needed action, stale, unauthenticated, or failing, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser before marking the step blocked.
+Use Buffer MCP and other non-browser tooling when they can complete the exact GTM content step. If any MCP, connector, direct API, script, agent tool, or source-fetching path is unavailable, limited, unsupported for the needed platform-allowed step, stale, unauthenticated, or failing, load `docs/chrome-cdp.md` and use the Chrome CDP workflow for the user's authenticated GTM browser session before marking the step blocked.
 
-For Buffer, use the live Buffer UI through Chrome CDP when MCP channel lookup, recent-post lookup, or draft creation is limited or failing. If both MCP and Chrome CDP cannot safely complete draft creation, write a local draft artifact and log the browser blocker.
+For Buffer, use the live Buffer UI through Chrome CDP when MCP channel lookup, recent-post lookup, or draft creation is limited or failing. If both MCP and Chrome CDP cannot safely complete draft creation, write a local draft artifact and log the platform access blocker.
 
 ## Non-Blocking Operating Rule
 
 Do not impose fixed output quotas, topic quotas, channel quotas, schedule gates, or duplicate-window limits that prevent useful drafting.
 
-Create as many strong drafts as the available ideas justify for the configured channels. If a source, channel, or tool is unavailable, first try the Chrome CDP browser fallback for that external surface, then use the next viable source or produce a local draft artifact with a clear log entry instead of stopping the whole run.
+Create as many strong drafts as the available ideas justify for the configured channels. If a source, channel, or tool is unavailable, first try the Chrome CDP authenticated GTM browser workflow for that approved source or GTM platform, then use the next viable source or produce a local draft artifact with a clear log entry instead of stopping the whole run.
 
 ## Channels
 
@@ -49,9 +55,9 @@ Default channels:
 
 Treat each channel as its own writing surface. Do not copy-paste the same text across channels.
 
-Publishing behavior belongs to the automation or Buffer configuration. This doc assumes draft creation unless a separate explicit publish workflow exists.
+This workflow creates Buffer drafts by default. Publishing behavior belongs to Buffer configuration or a separate explicit publish workflow.
 
-Do not use this workflow to leave public LinkedIn comments. LinkedIn work here is draft/post creation only unless a separate like-only engagement task exists. X/Twitter public comments are allowed only when a separate engagement workflow explicitly calls for them.
+Do not use this workflow to leave public LinkedIn comments. LinkedIn work here is draft/post creation only unless a separate like-only engagement task exists. X/Twitter public comments are allowed only when a separate engagement workflow explicitly calls for them. Replies to comments, inbound DMs, objections, negotiations, and live conversations are not automated here.
 
 ## Persistent State
 

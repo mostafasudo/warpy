@@ -4,6 +4,12 @@
 
 For any sales, marketing, or GTM task, read this file first, then check the marketing skills pack in `.codex/skills/marketing/`.
 
+## GTM Scope & Platform Compliance
+
+Warpy GTM automations are routine sales, marketing, sourcing, sequencing, and content-drafting workflows only. They use authenticated, user-owned GTM accounts and the approved workflows exposed by Apollo, Amplemarket, Buffer, LinkedIn, X, and source websites.
+
+They must not perform cybersecurity testing, vulnerability research, credential work, bypassing, evasion, scraping protected data, or unauthorized access. If a task appears outside GTM, outside the user's authenticated account permissions, or outside a platform-allowed workflow, skip it and log the reason instead of continuing.
+
 Automation source docs:
 
 - [Lead Builder](docs/gtm-automation-lead-builder.md)
@@ -12,11 +18,11 @@ Automation source docs:
 
 ## Chrome CDP Fallback Rule
 
-For all three GTM automations, the user's Chrome CDP browser is the universal fallback for external GTM systems.
+For all three GTM automations, the user's Chrome CDP browser is the fallback for approved GTM platforms when direct tooling cannot complete a platform-allowed GTM workflow.
 
-Non-browser paths are allowed when they can complete the exact step: MCPs, direct MCP namespaces, connectors, CLIs, scripts, direct APIs, or other programmatic tools. If any non-browser path is unavailable, unauthenticated, limited, missing an operation, unsupported by the MCP/API, stale, rate-limited, or fails in a way that blocks the step, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser for that step.
+Non-browser paths are allowed when they can complete the exact GTM step: MCPs, direct MCP namespaces, connectors, CLIs, scripts, direct APIs, or other programmatic tools. If any non-browser path is unavailable, unauthenticated, limited, missing an operation, unsupported by the MCP/API, stale, rate-limited, or fails in a way that blocks the step, load `docs/chrome-cdp.md` and use the Chrome CDP workflow for the user's authenticated GTM browser session.
 
-Do this before declaring the step blocked. This applies to Amplemarket, Apollo, Buffer, LinkedIn, X, source browsing, and similar external GTM surfaces. Local state files and generated artifacts remain local filesystem work.
+Do this before declaring the step blocked. This applies to Amplemarket, Apollo, Buffer, LinkedIn, X, source browsing, and similar approved GTM platforms. Local state files and generated artifacts remain local filesystem work.
 
 ## What Warpy Is
 
@@ -71,11 +77,13 @@ Use [Crow AI](https://usecrow.ai) as the default direct competitor reference for
 
 ## Outbound System
 
-Apollo is the outbound execution control plane. The live sequence is [`Warpy Founder-Led SDR Sequence`](https://app.apollo.io/#/sequences/69d153277282c2001550d75f).
+Apollo is the outbound workflow control plane. The live sequence is [`Warpy Founder-Led SDR Sequence`](https://app.apollo.io/#/sequences/69d153277282c2001550d75f).
 
-Amplemarket is the sourcing and enrichment layer. Codex automations move clean leads into Apollo and execute due or overdue Apollo tasks through the live browser. The AE owns replies, objections, live conversations, and opportunities.
+Amplemarket is the sourcing and enrichment layer. Codex automations move clean leads into Apollo and complete eligible due or overdue Apollo tasks through approved GTM platform workflows. The AE owns replies, objections, live conversations, and opportunities.
 
-The task executor must preserve Apollo sequence timing and per-contact step order. It may execute only Apollo tasks from the Warpy sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before an outbound action, skip the task and log the blocker. For a given contact, never execute a later sequence step until all earlier Apollo sequence steps for that contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo. Build the executable queue once at run start; do not execute tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
+The task executor must preserve Apollo sequence timing and per-contact step order. It may complete only Apollo tasks from the Warpy sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before a recipient-visible GTM step, skip the task and log the blocker. For a given contact, never complete a later sequence step until all earlier Apollo sequence steps for that contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo. Build the eligible queue once at run start; do not complete tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
+
+Before opening any Apollo email, LinkedIn, X, or other approved GTM platform composer, the task executor must write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>`. This local recipient-safety ledger is the duplicate-prevention boundary. If it blocks the claim, skip without touching the platform composer. `copy_hash` is audit metadata only and must never be used for duplicate prevention. Existing `sent`, `completion_pending`, `completed`, or `claimed` ledger state wins over Apollo backlog pressure. A missed touch is acceptable; a duplicate email, DM, connection request, or public social touch is not.
 
 Pipeline rules:
 
