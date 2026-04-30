@@ -60,7 +60,7 @@ Different GTM automations may run at the same time. Only another active `warpy-g
 
 ## Cadence
 
-Run every two hours on weekdays so the executor keeps Apollo moving without rechecking the same task queue too frequently.
+Run hourly on weekdays so the executor keeps Apollo moving without waiting too long on newly due tasks.
 
 ## Programmatic Tool Fallback
 
