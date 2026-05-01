@@ -45,7 +45,7 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 Before doing any other workflow step, claim the automation run lock:
 
 ```sh
-node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-task-executor
+node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-task-executor --stale-after-ms 7200000
 ```
 
 If the guard returns `decision: "blocked"`, do not read Apollo, open GTM platforms, claim recipient ledger entries, or update local GTM state. Open only a short skipped inbox item that says an older `warpy-gtm-task-executor` run is already active, then stop.
@@ -57,6 +57,23 @@ node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-gtm-task
 ```
 
 Different GTM automations may run at the same time. Only another active `warpy-gtm-task-executor` run blocks this automation.
+
+## Context Budget And Checkpoints
+
+Follow the shared context-budget rules in `GTM.md`.
+
+Persistent run checkpoints:
+
+- directory: `/Users/levw/.codex/state/warpy-gtm/task-executor-runs/`
+- filename: `<run-start-iso>.json`
+
+Update the checkpoint after the Apollo run-start queue snapshot, recipient-safety index rebuild, each recipient-visible action attempt, each Apollo completion verification, and final queue/blocker reconciliation. Run a guard heartbeat after each checkpoint:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-gtm-task-executor --owner-token <owner_token>
+```
+
+Do not keep raw Apollo task payloads, page extraction dumps, task-history dumps, LinkedIn/X page captures, screenshots, or full ledger excerpts in the live transcript. Write them to artifacts and summarize only reviewed/completed/skipped counts, recipient-safety claim/block counts, task IDs acted on, exact copy used for sent actions, blocker reasons, and paths.
 
 ## Cadence
 

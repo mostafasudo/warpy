@@ -137,6 +137,82 @@ test('stale abandoned lock is reclaimed by a newer run', () => {
   }
 });
 
+test('heartbeat extends the stale window for an active run', () => {
+  const state = tempState();
+  try {
+    __test__.claim({
+      automationId: 'warpy-gtm-lead-builder',
+      stateDir: state.stateDir,
+      ownerToken: 'owner-1',
+      staleAfterMs: 10,
+      nowMs: 1000,
+    });
+
+    const heartbeat = __test__.heartbeat({
+      automationId: 'warpy-gtm-lead-builder',
+      stateDir: state.stateDir,
+      ownerToken: 'owner-1',
+      staleAfterMs: 10,
+      nowMs: 1009,
+    });
+    const blocked = __test__.claim({
+      automationId: 'warpy-gtm-lead-builder',
+      stateDir: state.stateDir,
+      ownerToken: 'owner-2',
+      staleAfterMs: 10,
+      nowMs: 1018,
+    });
+    const reclaimed = __test__.claim({
+      automationId: 'warpy-gtm-lead-builder',
+      stateDir: state.stateDir,
+      ownerToken: 'owner-3',
+      staleAfterMs: 10,
+      nowMs: 1019,
+    });
+
+    assert.equal(heartbeat.decision, 'heartbeat');
+    assert.equal(heartbeat.expires_at, new Date(1019).toISOString());
+    assert.equal(blocked.decision, 'blocked');
+    assert.equal(blocked.active_owner.idle_ms, 9);
+    assert.equal(reclaimed.decision, 'claimed');
+    assert.equal(reclaimed.reclaimed, true);
+    assert.equal(reclaimed.previous_owner.last_heartbeat_at_ms, 1009);
+  } finally {
+    state.cleanup();
+  }
+});
+
+test('heartbeat with wrong token fails and keeps the older lock', () => {
+  const state = tempState();
+  try {
+    __test__.claim({
+      automationId: 'warpy-marketing-engine',
+      stateDir: state.stateDir,
+      ownerToken: 'owner-1',
+      nowMs: 1000,
+    });
+
+    const heartbeat = __test__.heartbeat({
+      automationId: 'warpy-marketing-engine',
+      stateDir: state.stateDir,
+      ownerToken: 'owner-2',
+      nowMs: 2000,
+    });
+    const status = __test__.status({
+      automationId: 'warpy-marketing-engine',
+      stateDir: state.stateDir,
+      nowMs: 2000,
+    });
+
+    assert.equal(heartbeat.decision, 'heartbeat_denied');
+    assert.equal(heartbeat.reason, 'owner_token_mismatch');
+    assert.equal(status.active_owner.owner_token, 'owner-1');
+    assert.equal(status.active_owner.last_heartbeat_at_ms, 1000);
+  } finally {
+    state.cleanup();
+  }
+});
+
 test('different automation ids do not block each other', () => {
   const state = tempState();
   try {

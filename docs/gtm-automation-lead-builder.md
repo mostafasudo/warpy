@@ -40,7 +40,7 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 Before doing any other workflow step, claim the automation run lock:
 
 ```sh
-node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-lead-builder
+node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-lead-builder --stale-after-ms 7200000
 ```
 
 If the guard returns `decision: "blocked"`, do not read source systems, open GTM platforms, create lists, import leads, or update local GTM state. Open only a short skipped inbox item that says an older `warpy-gtm-lead-builder` run is already active, then stop.
@@ -52,6 +52,23 @@ node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-gtm-lead
 ```
 
 Different GTM automations may run at the same time. Only another active `warpy-gtm-lead-builder` run blocks this automation.
+
+## Context Budget And Checkpoints
+
+Follow the shared context-budget rules in `GTM.md`.
+
+Persistent run checkpoints:
+
+- directory: `/Users/levw/.codex/state/warpy-gtm/lead-builder-runs/`
+- filename: `<batch-name>-run.json`
+
+Update the checkpoint after candidate shortlist selection, enrichment, Amplemarket list creation, artifact generation, Apollo import verification, sequence enrollment verification, manifest/index update, and cleanup. Run a guard heartbeat after each checkpoint:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-gtm-lead-builder --owner-token <owner_token>
+```
+
+Do not keep raw Amplemarket search results, enrichment payloads, Apollo page extraction dumps, screenshots, CSV contents, or full candidate tables in the live transcript. Write them to artifacts and summarize only counts, accepted domains, rejected counts by reason, platform IDs, and paths.
 
 ## Programmatic Tool Fallback
 

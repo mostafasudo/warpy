@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_STATE_DIR = resolve(homedir(), '.codex/state/warpy-automation-locks');
-const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 const RECLAIM_STALE_AFTER_MS = 5 * 60 * 1000;
 const OWNER_FILE = 'owner.json';
 
@@ -86,6 +86,11 @@ function ownerClaimedAtMs(owner, lockDir) {
   return statSync(lockDir).mtimeMs;
 }
 
+function ownerLastHeartbeatAtMs(owner, lockDir) {
+  if (Number.isFinite(owner?.last_heartbeat_at_ms)) return owner.last_heartbeat_at_ms;
+  return ownerClaimedAtMs(owner, lockDir);
+}
+
 function ownerStaleAfterMs(owner, fallbackStaleAfterMs) {
   if (Number.isSafeInteger(owner?.stale_after_ms) && owner.stale_after_ms > 0) {
     return owner.stale_after_ms;
@@ -95,20 +100,24 @@ function ownerStaleAfterMs(owner, fallbackStaleAfterMs) {
 
 function summarizeOwner(owner, lockDir, nowMs, fallbackStaleAfterMs) {
   const claimedAtMs = ownerClaimedAtMs(owner, lockDir);
+  const lastHeartbeatAtMs = ownerLastHeartbeatAtMs(owner, lockDir);
   const staleAfterMs = ownerStaleAfterMs(owner, fallbackStaleAfterMs);
   return {
     owner_token: owner?.owner_token ?? null,
     claimed_at: owner?.claimed_at ?? iso(claimedAtMs),
     claimed_at_ms: claimedAtMs,
+    last_heartbeat_at: owner?.last_heartbeat_at ?? iso(lastHeartbeatAtMs),
+    last_heartbeat_at_ms: lastHeartbeatAtMs,
     stale_after_ms: staleAfterMs,
-    expires_at: iso(claimedAtMs + staleAfterMs),
+    expires_at: iso(lastHeartbeatAtMs + staleAfterMs),
     age_ms: Math.max(0, nowMs - claimedAtMs),
+    idle_ms: Math.max(0, nowMs - lastHeartbeatAtMs),
   };
 }
 
 function isOwnerStale(owner, lockDir, nowMs, fallbackStaleAfterMs) {
   const summary = summarizeOwner(owner, lockDir, nowMs, fallbackStaleAfterMs);
-  return nowMs - summary.claimed_at_ms >= summary.stale_after_ms;
+  return nowMs - summary.last_heartbeat_at_ms >= summary.stale_after_ms;
 }
 
 function writeOwner(lockDir, owner) {
@@ -125,6 +134,8 @@ function buildOwner({ automationId, ownerToken, staleAfterMs, nowMs }) {
     owner_token: ownerToken,
     claimed_at: iso(nowMs),
     claimed_at_ms: nowMs,
+    last_heartbeat_at: iso(nowMs),
+    last_heartbeat_at_ms: nowMs,
     stale_after_ms: staleAfterMs,
     expires_at: iso(nowMs + staleAfterMs),
     pid: process.pid,
@@ -273,6 +284,57 @@ function claim(options) {
   return reclaimStaleLock({ automationId, ownerToken, stateDir, staleAfterMs, nowMs });
 }
 
+function heartbeat(options) {
+  const automationId = normalizeAutomationId(options.automationId);
+  const stateDir = resolve(options.stateDir ?? DEFAULT_STATE_DIR);
+  const fallbackStaleAfterMs = normalizePositiveInteger(options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS, 'stale_after_ms');
+  const ownerToken = String(options.ownerToken ?? '').trim();
+  if (!ownerToken) throw new Error('heartbeat requires owner_token.');
+
+  const nowMs = options.nowMs ?? Date.now();
+  const lockDir = lockDirPath(stateDir, automationId);
+  if (!existsSync(lockDir)) {
+    return {
+      ok: false,
+      decision: 'heartbeat_missing',
+      reason: 'lock_missing',
+      automation_id: automationId,
+    };
+  }
+
+  const owner = readOwner(lockDir);
+  if (owner?.owner_token !== ownerToken) {
+    return {
+      ok: false,
+      decision: 'heartbeat_denied',
+      reason: 'owner_token_mismatch',
+      automation_id: automationId,
+      active_owner_token: owner?.owner_token ?? null,
+    };
+  }
+
+  const staleAfterMs = ownerStaleAfterMs(owner, fallbackStaleAfterMs);
+  const updatedOwner = {
+    ...owner,
+    stale_after_ms: staleAfterMs,
+    last_heartbeat_at: iso(nowMs),
+    last_heartbeat_at_ms: nowMs,
+    expires_at: iso(nowMs + staleAfterMs),
+  };
+  writeOwner(lockDir, updatedOwner);
+
+  return {
+    ok: true,
+    decision: 'heartbeat',
+    automation_id: automationId,
+    owner_token: ownerToken,
+    lock_path: lockDir,
+    last_heartbeat_at: updatedOwner.last_heartbeat_at,
+    expires_at: updatedOwner.expires_at,
+    stale_after_ms: staleAfterMs,
+  };
+}
+
 function release(options) {
   const automationId = normalizeAutomationId(options.automationId);
   const stateDir = resolve(options.stateDir ?? DEFAULT_STATE_DIR);
@@ -364,6 +426,7 @@ function parseArgs(argv) {
 function usage() {
   return `Usage:
   node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-gtm-task-executor
+  node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-gtm-task-executor --owner-token <token>
   node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-gtm-task-executor --owner-token <token>
   node scripts/gtm-automation-run-guard.mjs status --automation-id warpy-gtm-task-executor
 
@@ -381,6 +444,7 @@ async function main() {
 
   let result;
   if (options.command === 'claim') result = claim(options);
+  else if (options.command === 'heartbeat') result = heartbeat(options);
   else if (options.command === 'release') result = release(options);
   else if (options.command === 'status') result = status(options);
   else throw new Error(`Unknown command: ${options.command}`);
@@ -399,6 +463,7 @@ export const __test__ = {
   DEFAULT_STATE_DIR,
   DEFAULT_STALE_AFTER_MS,
   claim,
+  heartbeat,
   lockDirPath,
   normalizeAutomationId,
   parseArgs,

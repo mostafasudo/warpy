@@ -39,7 +39,7 @@ Do not store Buffer tokens in repo files. Use `BUFFER_MCP_TOKEN` locally.
 Before doing any other workflow step, claim the automation run lock:
 
 ```sh
-node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-marketing-engine
+node scripts/gtm-automation-run-guard.mjs claim --automation-id warpy-marketing-engine --stale-after-ms 7200000
 ```
 
 If the guard returns `decision: "blocked"`, do not read sources, open GTM platforms, or update local marketing state. Open only a short skipped inbox item that says an older `warpy-marketing-engine` run is already active, then stop.
@@ -51,6 +51,23 @@ node scripts/gtm-automation-run-guard.mjs release --automation-id warpy-marketin
 ```
 
 Different GTM automations may run at the same time. Only another active `warpy-marketing-engine` run blocks this automation.
+
+## Context Budget And Checkpoints
+
+Follow the shared context-budget rules in `GTM.md`.
+
+Persistent run checkpoints:
+
+- directory: `/Users/levw/.codex/state/warpy-marketing-gtm/runs/`
+- filename: `<run-start-iso>.json`
+
+Update the checkpoint after recent-post lookup, topic-memory review, source shortlist selection, draft selection, Buffer/local draft creation, and local state updates. Run a guard heartbeat after each checkpoint:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-marketing-engine --owner-token <owner_token>
+```
+
+Do not keep raw source pages, reference-account captures, Buffer payloads, screenshots, or full draft exploration in the live transcript. Write research notes and rejected ideas to artifacts and summarize only source URLs, chosen thesis, rejected topic counts/reasons, Buffer IDs or local paths, and blockers.
 
 ## Programmatic Tool Fallback
 

@@ -24,6 +24,45 @@ Non-browser paths are allowed when they can complete the exact GTM step: MCPs, d
 
 Do this before declaring the step blocked. This applies to Amplemarket, Apollo, Buffer, LinkedIn, X, source browsing, and similar approved GTM platforms. Local state files and generated artifacts remain local filesystem work.
 
+## Automation Reliability And Context Budget
+
+All three Codex GTM automations must finish with a compact live transcript. Long-running GTM work should store detailed state on disk and keep only decisions, counts, artifact paths, and blockers in the model context.
+
+Run guard claim commands should use the shared two-hour stale window unless a workflow doc explicitly overrides it:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs claim --automation-id <automation-id> --stale-after-ms 7200000
+```
+
+After a successful claim, run a heartbeat after every major phase, before and after any long Chrome CDP/platform phase, and at least every 15 tool actions:
+
+```sh
+node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id <automation-id> --owner-token <owner_token>
+```
+
+Keep raw or bulky data out of the live conversation:
+
+- write candidate lists, enrichment payloads, browser extraction JSON, screenshots, CSVs, and audit details to `/Users/levw/.codex/tmp/` or `/Users/levw/.codex/state/`
+- summarize large artifacts with counts, accepted IDs/domains, status, and paths only
+- use filters, projections, `jq`, `head`, and small purpose-built summaries instead of printing full JSON, DOM snapshots, bundled JS, CSVs, or long tool payloads
+- avoid screenshots unless they prove a required platform state; when needed, save the file and mention only the path plus the observed result
+- before any step likely to produce many rows or browser output, decide what exact fields are needed and request only those fields when the tool supports it
+
+Each run must keep a resume checkpoint in the automation's persistent state directory. Update it after every side-effecting phase with:
+
+- `automation_id`
+- `owner_token`
+- current phase
+- completed side effects
+- pending steps
+- artifact paths
+- platform IDs touched
+- cleanup status
+- blockers
+- last heartbeat time
+
+If the context starts getting large, stop exploratory work, update the checkpoint, reread only the checkpoint plus the relevant workflow doc, and continue from the checkpoint. Do not repeat sourcing, imports, sends, draft creation, or other side effects that the checkpoint marks complete.
+
 ## What Warpy Is
 
 Warpy is a drop-in AI execution layer for complex B2B dashboards. Customers embed a lightweight widget into their product, expose approved APIs and UI actions, and let end users ask for work in plain language.
