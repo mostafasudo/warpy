@@ -75,6 +75,8 @@ node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-gtm-ta
 
 Do not keep raw Apollo task payloads, page extraction dumps, task-history dumps, LinkedIn/X page captures, screenshots, or full ledger excerpts in the live transcript. Write them to artifacts and summarize only reviewed/completed/skipped counts, recipient-safety claim/block counts, task IDs acted on, exact copy used for sent actions, blocker reasons, and paths.
 
+Do not run bulk task, history, lead-list, page, or table reads unless the tool can return a compact projection. If a platform surface cannot be limited, capture only the visible fields needed through Chrome CDP or checkpoint and stop.
+
 ## Cadence
 
 Run hourly on weekdays so the executor keeps Apollo moving without waiting too long on newly due tasks.
@@ -128,7 +130,7 @@ When a task needs message context, use:
 1. `manifest-index.json` and the referenced batch manifest
 2. `GTM.md`
 3. the live Apollo sequence step and task note
-4. direct Amplemarket read-only lookup when needed, with Chrome CDP fallback when MCP lookup is limited or failing
+4. direct Amplemarket read-only lookup when needed, limited to the specific person/company fields required, with Chrome CDP fallback when MCP lookup is limited, bulky, or failing
 5. live LinkedIn or X context
 
 Do not assume Apollo custom fields contain full GTM research context.

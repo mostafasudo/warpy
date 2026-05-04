@@ -29,7 +29,7 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 
 ## Systems
 
-- Direct Amplemarket MCP: search, enrichment, verified business email lookup, lead-list creation, lead-list retrieval
+- Direct Amplemarket MCP: search, enrichment, verified business email lookup, lead-list creation, and compact lead-list metadata when supported
 - Local state: authoritative manifests and account-level control state
 - Local artifacts: Apollo import CSVs and audit CSVs
 - Apollo authenticated GTM browser workflow: import, verification, sequence enrollment, and adjacent import when multithreading is useful
@@ -70,6 +70,8 @@ node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-gtm-le
 
 Do not keep raw Amplemarket search results, enrichment payloads, Apollo page extraction dumps, screenshots, CSV contents, or full candidate tables in the live transcript. Write them to artifacts and summarize only counts, accepted domains, rejected counts by reason, platform IDs, and paths.
 
+Do not call Amplemarket `get_lead_list` for cleanup or resume after the manifest exists. It is a bulk read. Use the checkpointed list ID/name in Chrome CDP, or leave a cleanup blocker if deletion cannot be reached safely.
+
 ## Programmatic Tool Fallback
 
 Direct MCP is an acceleration path, not a blocker. For every approved GTM platform step that uses MCP, direct MCP, a connector, direct API, script, or other non-browser tooling, use the Chrome CDP workflow for the user's authenticated GTM browser session when that programmatic path is unavailable, limited, unsupported, missing the needed action, stale, or failing.
@@ -82,10 +84,14 @@ Keep the automation moving. Do not add backlog gates, schedule gates, arbitrary 
 
 The only enforced throughput cap is:
 
-- target `12` accepted primary leads per run
-- hard max `16` accepted primary leads enriched/imported from Amplemarket per run
+- target `6` accepted primary leads per run
+- hard max `8` accepted primary leads enriched/imported from Amplemarket per run
 
-If fewer than 12 accepted primaries are available, use the smaller number. Do not fill the batch with weak accounts.
+If fewer than 6 accepted primaries are available, use the smaller number. Do not fill the batch with weak accounts.
+
+## Cadence
+
+Run twice on weekdays. Smaller batches reduce per-run MCP, browser, import, and cleanup context while preserving comparable daily sourcing capacity.
 
 ## Lead And Account Rules
 
@@ -142,7 +148,7 @@ Use direct MCP for:
 - `create_lead_list`
 - `add_leads_to_lead_list`
 - `list_lead_lists`
-- `get_lead_list`
+- `get_lead_list` only when a compact field/row projection is available and the result is required before side effects; never for cleanup or resume verification
 
 Always use the Chrome CDP authenticated GTM browser workflow when direct MCP cannot complete the required Amplemarket step, including unsupported actions such as a missing delete operation.
 
@@ -269,14 +275,14 @@ Amplemarket lead lists are temporary batch containers.
 7. Add optional X context only when confidence is high.
 8. Write trigger, pain hypothesis, proof point, fit score, and priority tier.
 9. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
-10. Fetch final list metadata for audit.
+10. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
 11. Generate manifest and CSV artifacts.
 12. Apply the Lead Builder cap and import the highest-fit accepted primaries into Apollo.
 13. Verify imported contacts in Apollo.
 14. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
 15. Update the batch manifest and manifest index.
 16. Keep adjacent leads in local state for future multithreading.
-17. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion.
+17. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
 18. Release the run concurrency guard before the final inbox report.
 
 ## Logging
@@ -300,7 +306,7 @@ For each run, log:
 A successful run:
 
 - imports only ICP-fit, sequence-ready primary leads
-- respects the `12` target and `16` hard max for accepted primaries
+- respects the `6` target and `8` hard max for accepted primaries
 - preserves full GTM context locally
 - keeps adjacent leads available without prematurely sequencing them
 - verifies Apollo import and enrollment state

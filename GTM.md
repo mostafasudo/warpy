@@ -48,6 +48,10 @@ Keep raw or bulky data out of the live conversation:
 - avoid screenshots unless they prove a required platform state; when needed, save the file and mention only the path plus the observed result
 - before any step likely to produce many rows or browser output, decide what exact fields are needed and request only those fields when the tool supports it
 
+Direct tool responses still enter the live transcript before they can be written to disk. Do not call MCP, browser, connector, or API list/detail tools against bulk GTM objects unless the tool can limit rows and fields. High-risk examples include Amplemarket full lead-list reads, Apollo page/API dumps, Buffer history dumps, source-page captures, and browser DOM/table extraction.
+
+After any context-window failure, resume from a fresh automation run or fresh thread that reads only the checkpoint, relevant workflow doc, and needed local artifacts. Do not continue the failed, already-bloated transcript unless the remaining step is a trivial local command.
+
 Each run must keep a resume checkpoint in the automation's persistent state directory. Update it after every side-effecting phase with:
 
 - `automation_id`
@@ -136,7 +140,7 @@ Pipeline rules:
 - do not automate outreach to contacts or accounts in Apollo states that indicate reply ownership, active opportunity, current customer, do-not-contact, bad data, or manual AE ownership
 - keep Apollo stages and local GTM state synchronized so either system can prevent unsafe sends
 
-The only enforced throughput cap in the GTM automation system is the Lead Builder cap: target `12` accepted primary leads and import/enrich no more than `16` accepted primary leads per run. Do not add other per-run, per-day, per-channel, topic, or task-volume limits that could stop the three automations from continuing their work. The task executor due-window, sequence-order, run-start snapshot, and same-contact cadence rules are recipient safety gates, not throughput caps.
+The only enforced throughput cap in the GTM automation system is the Lead Builder cap: target `6` accepted primary leads and import/enrich no more than `8` accepted primary leads per run. The Lead Builder runs twice per weekday so daily sourcing capacity stays comparable while each run remains smaller and more reliable. Do not add other per-run, per-day, per-channel, topic, or task-volume limits that could stop the three automations from continuing their work. The task executor due-window, sequence-order, run-start snapshot, and same-contact cadence rules are recipient safety gates, not throughput caps.
 
 ## Sequence Strategy
 

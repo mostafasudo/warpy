@@ -69,6 +69,8 @@ node scripts/gtm-automation-run-guard.mjs heartbeat --automation-id warpy-market
 
 Do not keep raw source pages, reference-account captures, Buffer payloads, screenshots, or full draft exploration in the live transcript. Write research notes and rejected ideas to artifacts and summarize only source URLs, chosen thesis, rejected topic counts/reasons, Buffer IDs or local paths, and blockers.
 
+Do not run bulk Buffer history, source-page, reference-account, browser DOM, or timeline reads unless the tool can return a compact projection. Capture only titles, URLs, dates, claims, draft IDs, and blockers in the live transcript.
+
 ## Programmatic Tool Fallback
 
 Use Buffer MCP and other non-browser tooling when they can complete the exact GTM content step. If any MCP, connector, direct API, script, agent tool, or source-fetching path is unavailable, limited, unsupported for the needed platform-allowed step, stale, unauthenticated, or failing, load `docs/chrome-cdp.md` and use the Chrome CDP workflow for the user's authenticated GTM browser session before marking the step blocked.
