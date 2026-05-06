@@ -79,7 +79,7 @@ Do not run bulk task, history, lead-list, page, or table reads unless the tool c
 
 ## Cadence
 
-Run hourly on weekdays so the executor keeps Apollo moving without waiting too long on newly due tasks.
+Run every two hours on weekdays so the executor keeps Apollo moving without creating unnecessary hourly backlog churn.
 
 ## Programmatic Tool Fallback
 
