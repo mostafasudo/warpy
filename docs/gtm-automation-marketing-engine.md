@@ -178,7 +178,7 @@ Hard reminders:
 - concrete examples or observed patterns when possible
 - no forced Warpy mention
 - never frame chat as replacing the product UI
-- when relevant, frame chat as the input layer and the existing UI as the output surface
+- when relevant, frame chat as the input layer and structured UI as the output layer, either inside the widget or through native app components
 
 ## Drafting Rules
 

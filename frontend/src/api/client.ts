@@ -40,6 +40,9 @@ import type {
   UserRateLimitsUpdate,
   WidgetSecurityDraftUpdate,
   WidgetSecurityResponse,
+  WidgetUiComponentPayload,
+  WidgetUiComponentResponse,
+  WidgetUiComponentsResponse,
 } from "@/types";
 
 type RequestOptions = Omit<RequestInit, "signal"> & {
@@ -328,6 +331,21 @@ export const apiClient = {
     request<AgentWidgetConfigResponse>("/agent/widget-config", {
       method: "PUT",
       body: JSON.stringify(payload),
+    }),
+  getWidgetComponents: () => request<WidgetUiComponentsResponse>("/widget-components"),
+  createWidgetComponent: (payload: WidgetUiComponentPayload) =>
+    request<WidgetUiComponentResponse>("/widget-components", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateWidgetComponent: (id: string, payload: WidgetUiComponentPayload) =>
+    request<WidgetUiComponentResponse>(`/widget-components/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteWidgetComponent: (id: string) =>
+    request<void>(`/widget-components/${id}`, {
+      method: "DELETE",
     }),
   getAgentWidgetInstall: () => request<AgentWidgetInstallResponse>("/agent/widget-install"),
   updateAgentWidgetInstall: (payload: AgentWidgetInstallUpdate) =>

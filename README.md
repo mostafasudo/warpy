@@ -58,6 +58,13 @@ The widget loader package is published as `@warpy-ai/widget`. Source lives in th
 
 - Publish a new version: bump `package.json` version in `widget/`, then `pnpm publish --access public`.
 
+Widget replies support three response modes:
+- `markdown`: plain text and markdown.
+- `warpy_components`: the default for new agents. The backend stores a validated render payload and the vanilla widget renders narrow, responsive output components with a complete markdown fallback.
+- `native_components`: advanced mode. Customers register their own output renderers through `@warpy-ai/widget` or `window.warpy.registerComponents`, while `/widget-components` stores the component contracts the agent can use.
+
+Dynamic UI is output-only. Suggestions and approved tools remain the action surface. Every dynamic response must keep `messages.content` as the complete markdown fallback so history, Activity, accessibility fallback, and unsupported renderers stay reliable.
+
 ## Adding an environment variable
 
 Backend/worker env vars are sourced from GitHub Secrets in production (ECS task definitions get synced on deploy).

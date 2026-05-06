@@ -286,6 +286,7 @@ class Agent(Base):
     widget_title = Column(Text, nullable=False, server_default="Warpy")
     widget_icon_url = Column(Text, nullable=True)
     widget_appearance_mode = Column(Text, nullable=False, server_default="infer", default="infer")
+    widget_response_mode = Column(Text, nullable=False, server_default="warpy_components", default="warpy_components")
     widget_theme = Column(json_type, nullable=True)
     widget_behavior = Column(Text, nullable=False, server_default="overlay", default="overlay")
     widget_empty_title = Column(Text, nullable=False, server_default="What would you like to do?")
@@ -315,6 +316,28 @@ class Agent(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     conversations = relationship("Conversation", back_populates="agent", cascade="all, delete-orphan")
+
+
+class WidgetUiComponent(Base):
+    __tablename__ = "widget_ui_components"
+    __table_args__ = (
+        UniqueConstraint("user_id", "component_key", "version", name="uq_widget_ui_components_user_key_version"),
+        Index("ix_widget_ui_components_user_active", "user_id", "active"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Text, nullable=False, index=True)
+    component_key = Column(Text, nullable=False)
+    version = Column(Text, nullable=False, server_default="1", default="1")
+    display_name = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
+    framework = Column(Text, nullable=False, server_default="react", default="react")
+    props_schema = Column(json_type, nullable=False)
+    suitability = Column(Text, nullable=False)
+    constraints = Column(json_type, nullable=False, server_default=text("'{}'"), default=dict)
+    active = Column(Boolean, nullable=False, server_default=func.true(), default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class Conversation(Base):
@@ -372,6 +395,7 @@ class Message(Base):
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
+    render_payload = Column(json_type, nullable=True)
     sequence = Column(Integer, nullable=False, server_default="0", default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

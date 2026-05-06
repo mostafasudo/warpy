@@ -59,6 +59,69 @@ def test_agent_create_and_get_flow(client: TestClient):
     assert fetched.json()["id"] == agent["id"]
 
 
+def test_widget_components_crud(client: TestClient):
+    payload = {
+        "key": "invoice_summary",
+        "version": "1",
+        "displayName": "Invoice Summary",
+        "description": "Short invoice summary output.",
+        "framework": "react",
+        "propsSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Max 60 characters."},
+                "content": {"type": "string", "description": "Max 400 characters."},
+            },
+            "required": ["title", "content"],
+        },
+        "suitability": "Use for short invoice summaries only. Use markdown for long tables.",
+        "constraints": {"maxTitleChars": 60, "maxContentChars": 400, "outputOnly": True},
+        "active": True,
+    }
+
+    created = client.post("/widget-components", headers=auth_headers(), json=payload)
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["key"] == "invoice_summary"
+    assert created_body["propsSchema"]["required"] == ["title", "content"]
+
+    listed = client.get("/widget-components", headers=auth_headers())
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["key"] == "invoice_summary"
+
+    updated = client.put(
+        f"/widget-components/{created_body['id']}",
+        headers=auth_headers(),
+        json={**payload, "active": False, "description": "Updated summary output."},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["active"] is False
+    assert updated.json()["description"] == "Updated summary output."
+
+    deleted = client.delete(f"/widget-components/{created_body['id']}", headers=auth_headers())
+    assert deleted.status_code == 204
+    assert client.get("/widget-components", headers=auth_headers()).json()["items"] == []
+
+
+def test_widget_components_reject_builtin_key(client: TestClient):
+    rejected = client.post(
+        "/widget-components",
+        headers=auth_headers(),
+        json={
+            "key": "summary_card",
+            "version": "1",
+            "displayName": "Bad",
+            "description": "Bad key.",
+            "framework": "react",
+            "propsSchema": {"type": "object", "properties": {"content": {"type": "string"}}},
+            "suitability": "Never.",
+            "constraints": {},
+            "active": True,
+        },
+    )
+    assert rejected.status_code == 400
+
+
 def test_agent_custom_system_prompt_get_and_update(client: TestClient):
     create = client.post("/agent", headers=auth_headers())
     assert create.status_code == 201
@@ -115,6 +178,7 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetIconUrl"] is None
     assert body["widgetAppearanceMode"] == "infer"
+    assert body["widgetResponseMode"] == "warpy_components"
     assert body["widgetTheme"] is None
     assert body["widgetBehavior"] == "overlay"
     assert body["widgetEmptyTitle"] == "What would you like to do?"
@@ -130,6 +194,7 @@ def test_agent_widget_config_get_and_update(client: TestClient):
             "widgetTitle": "Acme Assistant",
             "widgetIconUrl": "https://example.com/icon.png",
             "widgetAppearanceMode": "custom",
+            "widgetResponseMode": "native_components",
             "widgetTheme": {
                 "version": 1,
                 "light": {
@@ -292,6 +357,7 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert updated_body["widgetTitle"] == "Acme Assistant"
     assert updated_body["widgetIconUrl"] == "https://example.com/icon.png"
     assert updated_body["widgetAppearanceMode"] == "custom"
+    assert updated_body["widgetResponseMode"] == "native_components"
     assert updated_body["widgetTheme"]["version"] == 1
     assert updated_body["widgetBehavior"] == "push"
     assert updated_body["widgetSuggestionsEnabled"] is True
@@ -301,6 +367,7 @@ def test_agent_widget_config_get_and_update(client: TestClient):
     assert refetched.status_code == 200
     assert refetched.json()["widgetTitle"] == "Acme Assistant"
     assert refetched.json()["widgetAppearanceMode"] == "custom"
+    assert refetched.json()["widgetResponseMode"] == "native_components"
     assert refetched.json()["widgetTheme"]["version"] == 1
     assert refetched.json()["widgetBehavior"] == "push"
     assert refetched.json()["widgetStarterSuggestions"] == ["Show recent invoices", "Create a refund"]

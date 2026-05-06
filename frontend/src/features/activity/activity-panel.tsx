@@ -4,7 +4,6 @@ import type { DateRange } from "react-day-picker"
 
 import { PanelShell } from "@/components/panel-shell"
 import { Badge } from "@/components/ui/badge"
-import { MarkdownContent } from "@/components/ui/markdown-content"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -14,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { WidgetRenderPayloadView } from "@/components/ui/widget-render-payload"
 import { cn } from "@/lib/utils"
 import { navigationSelectors, useNavigationStore } from "@/stores/navigation"
 import { useActivityConversationDetailInfiniteQuery } from "@/queries/use-activity-conversation-detail"
@@ -206,7 +206,7 @@ const ConversationDetailDialog = ({
                         </p>
                         <p className="text-xs text-muted-foreground">{toDisplayTime(message.createdAt)}</p>
                       </div>
-                      <MarkdownContent className="mt-2">{message.content}</MarkdownContent>
+                      <WidgetRenderPayloadView content={message.content} renderPayload={message.renderPayload} />
                     </div>
                   ))}
                   {!messages.length ? (

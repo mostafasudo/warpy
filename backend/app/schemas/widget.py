@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..models import AuthType, StorageSource
 from .mcp_connection import McpAuthBundlePayload, WidgetMcpConnectionResponse
+from .widget_dynamic_ui import WidgetRenderPayload, WidgetResponseMode
 from .widget_theme import WidgetTheme
 
 WIDGET_SUGGESTION_MAX_COUNT = 3
@@ -42,6 +43,7 @@ class WidgetConfigResponse(BaseModel):
     widget_title: str = Field(default="Warpy", alias="widgetTitle")
     widget_icon_url: str | None = Field(default=None, alias="widgetIconUrl")
     widget_appearance_mode: Literal["infer", "custom"] = Field(default="infer", alias="widgetAppearanceMode")
+    widget_response_mode: WidgetResponseMode = Field(default="warpy_components", alias="widgetResponseMode")
     widget_theme: WidgetTheme | None = Field(default=None, alias="widgetTheme")
     widget_behavior: Literal["overlay", "push"] = Field(default="overlay", alias="widgetBehavior")
     widget_empty_title: str = Field(default="What would you like to do?", alias="widgetEmptyTitle")
@@ -122,6 +124,7 @@ class ToolResultPayload(BaseModel):
 class WidgetMessagePayload(BaseModel):
     role: str
     content: str
+    render_payload: WidgetRenderPayload | None = Field(default=None, alias="renderPayload")
 
 
 class WidgetChatRequest(BaseModel):

@@ -378,6 +378,7 @@ describe("apiClient", () => {
         widgetTitle: "Warpy",
         widgetIconUrl: null,
         widgetAppearanceMode: "infer",
+        widgetResponseMode: "warpy_components",
         widgetTheme: null,
         widgetBehavior: "overlay",
         widgetEmptyTitle: "What would you like to do?",
@@ -391,6 +392,7 @@ describe("apiClient", () => {
         widgetTitle: "Acme Assistant",
         widgetIconUrl: "https://example.com/icon.png",
         widgetAppearanceMode: "custom",
+        widgetResponseMode: "native_components",
         widgetTheme: null,
         widgetBehavior: "push",
         widgetEmptyTitle: "How can we help?",
@@ -413,6 +415,7 @@ describe("apiClient", () => {
       widgetTitle: "Acme Assistant",
       widgetIconUrl: "https://example.com/icon.png",
       widgetAppearanceMode: "custom",
+      widgetResponseMode: "native_components",
       widgetTheme: null,
       widgetBehavior: "push",
       widgetEmptyTitle: "How can we help?",
@@ -446,6 +449,55 @@ describe("apiClient", () => {
       new URL("/agent/widget-install", "http://api.test"),
       expect.objectContaining({ method: "PUT" })
     )
+  })
+
+  it("supports widget component operations", async () => {
+    const component = {
+      id: "component-1",
+      key: "invoice_summary",
+      version: "1",
+      displayName: "Invoice Summary",
+      description: "Short invoice summary.",
+      framework: "react" as const,
+      propsSchema: { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
+      suitability: "Use for short summaries.",
+      constraints: { maxContentChars: 400 },
+      active: true,
+      createdAt: "2026-05-06T00:00:00Z",
+      updatedAt: "2026-05-06T00:00:00Z"
+    }
+    const responses = [
+      jsonResponse({ items: [component] }),
+      jsonResponse(component),
+      jsonResponse({ ...component, active: false }),
+      jsonResponse(null)
+    ]
+    const payload = {
+      key: component.key,
+      version: component.version,
+      displayName: component.displayName,
+      description: component.description,
+      framework: component.framework,
+      propsSchema: component.propsSchema,
+      suitability: component.suitability,
+      constraints: component.constraints,
+      active: component.active
+    }
+
+    const fetchSpy = jest
+      .spyOn(globalThis as typeof globalThis & { fetch: typeof fetch }, "fetch")
+      .mockImplementation(() => Promise.resolve(responses.shift()!))
+
+    await apiClient.getWidgetComponents()
+    await apiClient.createWidgetComponent(payload)
+    await apiClient.updateWidgetComponent("component-1", { ...payload, active: false })
+    await apiClient.deleteWidgetComponent("component-1")
+
+    const calls = fetchSpy.mock.calls.slice(-4)
+    expect(calls[0]).toEqual([new URL("/widget-components", "http://api.test"), expect.any(Object)])
+    expect(calls[1]).toEqual([new URL("/widget-components", "http://api.test"), expect.objectContaining({ method: "POST" })])
+    expect(calls[2]).toEqual([new URL("/widget-components/component-1", "http://api.test"), expect.objectContaining({ method: "PUT" })])
+    expect(calls[3]).toEqual([new URL("/widget-components/component-1", "http://api.test"), expect.objectContaining({ method: "DELETE" })])
   })
 
   it("supports custom instruction operations", async () => {

@@ -18,6 +18,7 @@ from .controllers.products import router as products_router
 from .controllers.session import router as session_router
 from .controllers.static_docs import router as static_docs_router
 from .controllers.widget import router as widget_router
+from .controllers.widget_ui_components import router as widget_ui_components_router
 from .controllers.widget_token import router as widget_token_router
 from .core.config import get_settings
 from .core.cors import configure_cors
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(activity_router)
     app.include_router(billing_router)
     app.include_router(widget_router)
+    app.include_router(widget_ui_components_router)
     app.include_router(widget_token_router)
     app.include_router(products_router)
     app.include_router(knowledge_base_router)

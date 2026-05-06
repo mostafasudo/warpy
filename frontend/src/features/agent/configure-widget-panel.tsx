@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
-import { ArrowLeft, Check, ChevronDown, Layers, MessageSquare, Palette } from "lucide-react"
+import { ArrowLeft, Check, ChevronDown, Code2, Copy, Layers, MessageSquare, Palette, Sparkles } from "lucide-react"
 import clsx from "clsx"
 
 import { DirtyActions, UnsavedBadge } from "@/components/dirty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -20,6 +21,7 @@ import type {
   AgentWidgetConfigUpdate,
   WidgetAppearanceMode,
   WidgetBehavior,
+  WidgetResponseMode,
   WidgetTheme,
   WidgetThemeColors,
   WidgetThemeDimensions,
@@ -48,6 +50,7 @@ type WidgetConfigDraft = {
   widgetTitle: string
   widgetIconUrl: string | null
   widgetAppearanceMode: WidgetAppearanceMode
+  widgetResponseMode: WidgetResponseMode
   widgetTheme: WidgetTheme | null
   widgetBehavior: WidgetBehavior
   widgetEmptyTitle: string
@@ -57,6 +60,8 @@ type WidgetConfigDraft = {
   widgetStarterSuggestions: [string, string, string]
   widgetSecurityDisclosureEnabled: boolean
 }
+
+type NativeComponentFramework = "react" | "vue" | "angular" | "svelte" | "vanilla" | "script"
 
 const WIDGET_STARTER_SUGGESTION_LIMIT = 3
 
@@ -80,6 +85,7 @@ const DEFAULT_WIDGET_CONFIG: AgentWidgetConfigUpdate = {
   widgetTitle: "Warpy",
   widgetIconUrl: null,
   widgetAppearanceMode: "infer",
+  widgetResponseMode: "warpy_components",
   widgetTheme: null,
   widgetBehavior: "overlay",
   widgetEmptyTitle: "What would you like to do?",
@@ -110,10 +116,94 @@ const WIDGET_BEHAVIOR_OPTIONS: Array<{
   },
 ]
 
+const WIDGET_RESPONSE_MODE_OPTIONS: Array<{
+  value: WidgetResponseMode
+  title: string
+  description: string
+  icon: typeof MessageSquare
+  recommended?: boolean
+}> = [
+  {
+    value: "markdown",
+    title: "Markdown",
+    description: "Plain text and markdown replies.",
+    icon: MessageSquare,
+  },
+  {
+    value: "warpy_components",
+    title: "Warpy components",
+    description: "Responsive cards, lists, and tables styled by your widget theme.",
+    icon: Sparkles,
+    recommended: true,
+  },
+  {
+    value: "native_components",
+    title: "Native components",
+    description: "Render registered output components from your own app.",
+    icon: Code2,
+  },
+]
+
+const NATIVE_COMPONENT_SNIPPETS: Record<NativeComponentFramework, string> = {
+  react: `import { Widget } from "@warpy-ai/widget/react"
+
+const components = [{
+  key: "invoice_summary",
+  version: "1",
+  component: InvoiceSummary
+}]
+
+<Widget agentId="..." scriptSrc="..." components={components} />`,
+  vue: `<WarpyWidget
+  agent-id="..."
+  script-src="..."
+  :components="[{ key: 'invoice_summary', version: '1', component: InvoiceSummary }]"
+/>`,
+  angular: `components = [{
+  key: "invoice_summary",
+  version: "1",
+  render: ({ mount, props }) => {
+    // Mount your Angular component with your app's injector.
+  }
+}]
+
+<warpy-widget
+  agentId="..."
+  scriptSrc="..."
+  [components]="components">
+</warpy-widget>`,
+  svelte: `<WarpyWidget
+  agentId="..."
+  scriptSrc="..."
+  components={[{ key: 'invoice_summary', version: '1', component: InvoiceSummary }]}
+/>`,
+  vanilla: `import { mountWidget } from "@warpy-ai/widget"
+
+mountWidget({
+  agentId: "...",
+  scriptSrc: "...",
+  components: [{
+    key: "invoice_summary",
+    version: "1",
+    render: ({ mount, props }) => mount.replaceChildren(renderInvoiceSummary(props))
+  }]
+})`,
+  script: `<script>
+  window.warpy?.registerComponents?.([{
+    key: "invoice_summary",
+    version: "1",
+    render({ mount, props }) {
+      mount.textContent = props.content
+    }
+  }])
+</script>`,
+}
+
 const createWidgetConfigDraft = (value: AgentWidgetConfigResponse): WidgetConfigDraft => ({
   widgetTitle: value.widgetTitle,
   widgetIconUrl: value.widgetIconUrl,
   widgetAppearanceMode: value.widgetAppearanceMode,
+  widgetResponseMode: value.widgetResponseMode ?? "warpy_components",
   widgetTheme: value.widgetTheme ? cloneWidgetTheme(value.widgetTheme) : null,
   widgetBehavior: value.widgetBehavior === "push" ? "push" : "overlay",
   widgetEmptyTitle: value.widgetEmptyTitle,
@@ -134,6 +224,7 @@ const normalizeWidgetConfig = (value: WidgetConfigDraft): AgentWidgetConfigUpdat
     widgetTitle: value.widgetTitle.trim(),
     widgetIconUrl: value.widgetIconUrl?.trim() ? value.widgetIconUrl.trim() : null,
     widgetAppearanceMode: value.widgetAppearanceMode,
+    widgetResponseMode: value.widgetResponseMode,
     widgetTheme: nextTheme ? cloneWidgetTheme(nextTheme) : null,
     widgetBehavior: value.widgetBehavior,
     widgetEmptyTitle: value.widgetEmptyTitle.trim(),
@@ -254,6 +345,9 @@ export const ConfigureWidgetPanelContent = () => {
   const [iconMode, setIconMode] = useState<"default" | "custom">("default")
   const [themeVariant, setThemeVariant] = useState<WidgetThemeVariant>("light")
   const [previewScene, setPreviewScene] = useState<WidgetPreviewScene>("launcher")
+  const [nativeComponentsOpen, setNativeComponentsOpen] = useState(false)
+  const [nativeFramework, setNativeFramework] = useState<NativeComponentFramework>("react")
+  const [nativeSnippetCopied, setNativeSnippetCopied] = useState(false)
   const widgetBehaviorOptionRefs = useRef<Record<WidgetBehavior, HTMLButtonElement | null>>({
     overlay: null,
     push: null,
@@ -369,6 +463,16 @@ export const ConfigureWidgetPanelContent = () => {
     }
   }
 
+  const handleNativeSnippetCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(NATIVE_COMPONENT_SNIPPETS[nativeFramework])
+      setNativeSnippetCopied(true)
+      setTimeout(() => setNativeSnippetCopied(false), 2000)
+    } catch {
+      addToast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "error" })
+    }
+  }
+
   const handleDiscard = () => {
     if (!data) return
     setDraft(createWidgetConfigDraft(data))
@@ -406,6 +510,7 @@ export const ConfigureWidgetPanelContent = () => {
   const suggestionsCount = payload?.widgetStarterSuggestions.length ?? 0
 
   return (
+    <>
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div className="mt-6 rounded-xl border border-border bg-card/70 shadow-sm">
         <div className="p-6">
@@ -421,6 +526,13 @@ export const ConfigureWidgetPanelContent = () => {
               <div className="flex items-center gap-3">
                 <Badge variant={draft.widgetAppearanceMode === "custom" ? "default" : "secondary"}>
                   {draft.widgetAppearanceMode === "custom" ? "Custom theme" : "Infer from page"}
+                </Badge>
+                <Badge variant={draft.widgetResponseMode === "warpy_components" ? "default" : "secondary"}>
+                  {draft.widgetResponseMode === "warpy_components"
+                    ? "Warpy components"
+                    : draft.widgetResponseMode === "native_components"
+                      ? "Native components"
+                      : "Markdown"}
                 </Badge>
                 <CollapsibleTrigger asChild>
                   <Button
@@ -510,6 +622,77 @@ export const ConfigureWidgetPanelContent = () => {
                         )
                       })}
                     </div>
+                  </ThemeCard>
+
+                  <ThemeCard
+                    title="Response mode"
+                    description="Choose how assistant replies render inside the widget. Warpy components are responsive-first and stay visually quiet inside narrow panels."
+                  >
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      {WIDGET_RESPONSE_MODE_OPTIONS.map((option) => {
+                        const Icon = option.icon
+                        const selected = draft.widgetResponseMode === option.value
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() =>
+                              setDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      widgetResponseMode: option.value,
+                                    }
+                                  : current,
+                              )
+                            }
+                            className={clsx(
+                              "rounded-2xl border px-4 py-4 text-left transition-colors",
+                              selected
+                                ? "border-primary bg-primary/5 shadow-sm"
+                                : "border-border/70 bg-muted/10 hover:border-primary/40 hover:bg-muted/20",
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={clsx(
+                                  "flex h-10 w-10 items-center justify-center rounded-xl border",
+                                  selected
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-border/70 bg-background/80 text-muted-foreground",
+                                )}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-semibold">{option.title}</p>
+                                  {option.recommended ? <Badge variant="secondary">Recommended</Badge> : null}
+                                  {selected ? <Check className="h-4 w-4 text-primary" /> : null}
+                                </div>
+                                <p className="text-sm text-muted-foreground">{option.description}</p>
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {draft.widgetResponseMode === "native_components" ? (
+                      <div className="mt-4 rounded-xl border border-border bg-muted/20 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">Connect your app components</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Register output-only components and keep their prop schemas in sync through the Warpy API.
+                            </p>
+                          </div>
+                          <Button type="button" variant="outline" onClick={() => setNativeComponentsOpen(true)}>
+                            <Code2 className="mr-2 h-4 w-4" />
+                            Connect components
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </ThemeCard>
 
                   <ThemeCard title="Launcher & basics">
@@ -932,5 +1115,69 @@ export const ConfigureWidgetPanelContent = () => {
         </div>
       </div>
     </Collapsible>
+    <Dialog open={nativeComponentsOpen} onOpenChange={setNativeComponentsOpen}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Connect native components</DialogTitle>
+          <DialogDescription>
+            Native mode renders components from your app. Warpy only stores the component contract and complete markdown fallback.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-start">
+            <div className="space-y-2">
+              <Label htmlFor="native-component-framework">Framework</Label>
+              <Select
+                value={nativeFramework}
+                onValueChange={(value) => setNativeFramework(value as NativeComponentFramework)}
+              >
+                <SelectTrigger id="native-component-framework" aria-label="Native component framework">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="react">React</SelectItem>
+                  <SelectItem value="vue">Vue</SelectItem>
+                  <SelectItem value="angular">Angular</SelectItem>
+                  <SelectItem value="svelte">Svelte</SelectItem>
+                  <SelectItem value="vanilla">Vanilla JS</SelectItem>
+                  <SelectItem value="script">Script tag</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div
+              className="rounded-xl border border-border bg-muted/20 p-4 text-sm leading-relaxed text-muted-foreground sm:mt-6"
+              data-testid="native-components-api-guidance"
+            >
+              Use <code className="rounded bg-background px-1 py-0.5">/widget-components</code> through the Warpy API to add,
+              update, or remove components. Your agent should diff local prop types against Warpy, then apply changes after your
+              approval.
+            </div>
+          </div>
+          <div className="relative rounded-xl border border-border bg-muted/30">
+            <pre
+              className="max-h-72 overflow-auto p-4 pr-24 text-xs text-foreground"
+              data-testid="native-components-snippet"
+            >
+              <code>{NATIVE_COMPONENT_SNIPPETS[nativeFramework]}</code>
+            </pre>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="absolute right-2 top-2 bg-background/80"
+              onClick={() => void handleNativeSnippetCopy()}
+              data-testid="copy-native-components-snippet-button"
+            >
+              {nativeSnippetCopied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
+              {nativeSnippetCopied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <div className="rounded-xl border border-border bg-background p-4 text-sm text-muted-foreground">
+            Components must be output-only. Include precise prop descriptions, character limits, row/item limits, and when Warpy should avoid the component. If the reply does not fully fit, Warpy uses markdown.
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

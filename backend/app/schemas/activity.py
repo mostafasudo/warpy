@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .widget_dynamic_ui import WidgetRenderPayload
+
 
 class ActivityTopAction(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -47,6 +49,7 @@ class ActivityMessage(BaseModel):
 
     role: str
     content: str
+    render_payload: WidgetRenderPayload | None = Field(default=None, alias="renderPayload")
     created_at: datetime = Field(alias="createdAt")
 
 

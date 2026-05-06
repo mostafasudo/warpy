@@ -159,6 +159,7 @@ const baseWidgetConfig = {
   widgetTitle: "Warpy",
   widgetIconUrl: null,
   widgetAppearanceMode: "infer",
+  widgetResponseMode: "warpy_components",
   widgetTheme: null,
   widgetBehavior: "overlay",
   widgetEmptyTitle: "What would you like to do?",
@@ -388,6 +389,41 @@ describe("AgentPanel", () => {
     await user.click(screen.getByRole("button", { name: /custom theme/i }))
 
     expect(screen.getByTestId("widget-theme-preview-frame")).not.toBeNull()
+  })
+
+  it("shows response modes and native component instructions", async () => {
+    const mutateAsync = jest.fn(async () => ({ ...baseWidgetConfig, widgetResponseMode: "native_components" }))
+    mockedUseUpdateAgentWidgetConfig.mockReturnValue({
+      mutateAsync,
+      isPending: false
+    })
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<AgentPanel />, { wrapper: createWrapper() })
+
+    await user.click(screen.getByRole("button", { name: /expand configure widget/i }))
+    expect(screen.getAllByText("Warpy components").length).toBeGreaterThan(0)
+    expect(screen.getByText("Recommended")).not.toBeNull()
+
+    await user.click(screen.getByRole("button", { name: /native components/i }))
+    await user.click(screen.getByRole("button", { name: /connect components/i }))
+
+    expect(await screen.findByRole("heading", { name: "Connect native components" })).not.toBeNull()
+    expect(screen.getByTestId("native-components-api-guidance").textContent).toContain(
+      "Use /widget-components through the Warpy API to add, update, or remove components."
+    )
+    expect(screen.getByTestId("native-components-snippet").textContent).toContain("@warpy-ai/widget/react")
+    expect(screen.getByTestId("copy-native-components-snippet-button")).not.toBeNull()
+    await user.keyboard("{Escape}")
+    await user.click(screen.getByRole("button", { name: /save changes/i }))
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widgetResponseMode: "native_components"
+        })
+      )
+    })
   })
 
   it("removes the security preview scene when disclosure is disabled", async () => {

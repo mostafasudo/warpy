@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Warpy Dynamic UI Demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f8fafc;
+        color: #111827;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(135deg, rgba(37, 99, 235, 0.08), transparent 36%),
+          #f8fafc;
+      }
+
+      main {
+        width: min(980px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+
+      .shell {
+        display: grid;
+        gap: 18px;
+        max-width: 620px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(32px, 6vw, 56px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0;
+        color: #4b5563;
+        line-height: 1.6;
+      }
+
+      .modes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      button {
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        background: #fff;
+        color: #111827;
+        min-height: 40px;
+        padding: 0 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button[aria-pressed="true"] {
+        border-color: #2563eb;
+        background: #dbeafe;
+      }
+
+      .panel {
+        margin-top: 28px;
+        width: min(560px, 100%);
+        border: 1px solid #d1d5db;
+        border-radius: 18px;
+        background: #fff;
+        padding: 18px;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="shell">
+        <h1>Dynamic Widget UI</h1>
+        <p>
+          Use the controls below to switch the same widget preview between markdown,
+          Warpy components, and native component fallback mode.
+        </p>
+        <div class="modes" aria-label="Widget response mode">
+          <button type="button" data-mode="markdown">Markdown</button>
+          <button type="button" data-mode="warpy_components">Warpy components</button>
+          <button type="button" data-mode="native_components">Native components</button>
+        </div>
+        <div class="panel">
+          <strong>Host dashboard preview</strong>
+          <p>This page intentionally uses plain host styling so you can verify the widget stays minimal.</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const remoteConfig = {
+        agentId: "preview-agent",
+        widgetAppearanceMode: "custom",
+        widgetResponseMode: "warpy_components",
+        widgetTitle: "Assistant",
+        widgetBehavior: "overlay",
+        widgetEmptyTitle: "What would you like to do?",
+        widgetEmptyDescription: "Ask for a summary or request an action.",
+        widgetInputPlaceholder: "Ask anything...",
+        widgetSuggestionsEnabled: true,
+        widgetStarterSuggestions: ["Show invoices", "Summarize approvals"],
+        securityDisclosureEnabled: true
+      }
+
+      window.__WARPY_WIDGET_PREVIEW__ = {
+        enabled: true,
+        config: { agentId: "preview-agent", baseUrl: "" },
+        remoteConfig,
+        colorScheme: "light",
+        scene: "messages"
+      }
+
+      const buttons = Array.from(document.querySelectorAll("[data-mode]"))
+      const updateMode = (mode) => {
+        remoteConfig.widgetResponseMode = mode
+        buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.mode === mode)))
+        window.dispatchEvent(new CustomEvent("warpy:preview:update", {
+          detail: {
+            config: remoteConfig,
+            previewColorScheme: "light",
+            scene: "messages"
+          }
+        }))
+      }
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => updateMode(button.dataset.mode))
+      })
+      updateMode("warpy_components")
+    </script>
+    <script src="/widget/agent.js" data-agent-id="preview-agent"></script>
+  </body>
+</html>

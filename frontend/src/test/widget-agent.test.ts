@@ -26,6 +26,7 @@ type WidgetConfig = {
   mcpConnections?: Array<{ id: string; name: string; authMode: "none" | "static_headers" | "token_exchange"; tokenExchangePath?: string | null }>
   sendCookiesWithRequests?: boolean
   widgetAppearanceMode?: "infer" | "custom"
+  widgetResponseMode?: "markdown" | "warpy_components" | "native_components"
   widgetTheme?: {
     version: 1
     light: Record<string, unknown>
@@ -123,6 +124,7 @@ function createConfig(overrides: WidgetConfig = {}): Required<WidgetConfig> {
     sendCookiesWithRequests: false,
     securityDisclosureEnabled: true,
     widgetAppearanceMode: "infer",
+    widgetResponseMode: "warpy_components",
     widgetTheme: null,
     widgetBehavior: "overlay",
     widgetInputPlaceholder: "Ask Warpy…",
@@ -338,7 +340,7 @@ function readWidgetState() {
     interruptedByNavigation?: boolean
     lastReadMessageId?: string | null
     messageCursor?: number
-    messages?: Array<{ id?: string; role: string; content: string }>
+    messages?: Array<{ id?: string; role: string; content: string; renderPayload?: unknown }>
     resumePanelOpen?: boolean | null
     version?: number
   }
@@ -511,6 +513,7 @@ describe("widget preview mode", () => {
     document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
     document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR)
     delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    delete (window as typeof window & { warpy?: unknown }).warpy
     localStorage.clear()
     sessionStorage.clear()
     setViewport(1280, 900)
@@ -667,6 +670,7 @@ describe("widget preview mode", () => {
     sessionStorage.clear()
     localStorage.clear()
     delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    delete (window as typeof window & { warpy?: unknown }).warpy
     MockWebSocket.reset()
 
     const actual = await loadWidget(config)
@@ -766,6 +770,7 @@ describe("widget theme inference", () => {
     document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
     document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR)
     delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    delete (window as typeof window & { warpy?: unknown }).warpy
     localStorage.clear()
     sessionStorage.clear()
     setViewport(1280, 900)
@@ -843,6 +848,7 @@ describe("widget desktop resize", () => {
     document.documentElement.removeAttribute(PAGE_PUSH_ACTIVE_ATTR)
     document.documentElement.style.removeProperty(PAGE_PUSH_OFFSET_VAR)
     delete (window as typeof window & { __WARPY_WIDGET_PREVIEW__?: unknown }).__WARPY_WIDGET_PREVIEW__
+    delete (window as typeof window & { warpy?: unknown }).warpy
     localStorage.clear()
     sessionStorage.clear()
     setViewport(1280, 900)
@@ -1007,6 +1013,455 @@ describe("widget desktop resize", () => {
       expect(suggestionTexts).toEqual(["Send it to finance", "Create another invoice"])
     })
     expect(shadowRoot.textContent).toContain("Here is the update.")
+  })
+
+  it("renders Warpy component payloads from assistant messages", async () => {
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "warpy_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                tree: [
+                  { component: "summary_card", props: { title: "Invoice summary", body: "Two invoices need review." } },
+                  { component: "status_list", props: { items: [{ label: "One refund needs approval" }] } }
+                ]
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-ui-title")?.textContent).toBe("Invoice summary")
+    })
+    expect(shadowRoot.querySelector(".cta-widget-ui-list-item")?.textContent).toContain("One refund needs approval")
+  })
+
+  it("renders registered native component payloads", async () => {
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "native_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                componentKey: "invoice_summary",
+                componentVersion: "1",
+                props: { title: "Invoice summary", content: "Two invoices need review." }
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    ;(window as typeof window & { warpy: { registerComponents: (components: unknown[]) => void } }).warpy.registerComponents([
+      {
+        key: "invoice_summary",
+        version: "1",
+        render({ mount, props }: { mount: HTMLElement; props: { title?: string; content?: string } }) {
+          mount.textContent = `${props.title}: ${props.content}`
+        }
+      }
+    ])
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-native-mount")?.textContent).toContain("Invoice summary: Two invoices need review.")
+    })
+    expect(shadowRoot.querySelector(".cta-widget-native-placeholder")).toBeNull()
+  })
+
+  it("renders async native component payloads", async () => {
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "native_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                componentKey: "invoice_summary",
+                componentVersion: "1",
+                props: { title: "Invoice summary", content: "Two invoices need review." }
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    ;(window as typeof window & { warpy: { registerComponents: (components: unknown[]) => void } }).warpy.registerComponents([
+      {
+        key: "invoice_summary",
+        version: "1",
+        async render({ props }: { props: { title?: string; content?: string } }) {
+          return `${props.title}: ${props.content}`
+        }
+      }
+    ])
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-native-mount")?.textContent).toContain("Invoice summary: Two invoices need review.")
+    })
+    expect(shadowRoot.querySelector(".cta-widget-native-placeholder")).toBeNull()
+  })
+
+  it("falls back when async native component renderers reject", async () => {
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "native_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                componentKey: "invoice_summary",
+                componentVersion: "1",
+                props: { content: "Fallback summary." }
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    ;(window as typeof window & { warpy: { registerComponents: (components: unknown[]) => void } }).warpy.registerComponents([
+      {
+        key: "invoice_summary",
+        version: "1",
+        async render() {
+          throw new Error("Renderer failed")
+        }
+      }
+    ])
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-native-placeholder")?.textContent).toContain("fallback")
+    })
+    expect(shadowRoot.querySelector(".cta-widget-ui-fallback")?.textContent).toContain("Fallback summary.")
+  })
+
+  it("cleans up native component renderers when messages are removed", async () => {
+    let cleanupCount = 0
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "native_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                componentKey: "invoice_summary",
+                componentVersion: "1",
+                props: { content: "Fallback summary." }
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    ;(window as typeof window & { warpy: { registerComponents: (components: unknown[]) => void } }).warpy.registerComponents([
+      {
+        key: "invoice_summary",
+        version: "1",
+        render({ mount }: { mount: HTMLElement }) {
+          mount.textContent = "Mounted native output"
+          return () => {
+            cleanupCount += 1
+          }
+        }
+      }
+    ])
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-native-mount")?.textContent).toContain("Mounted native output")
+    })
+
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-new-chat") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(cleanupCount).toBe(1)
+    })
+  })
+
+  it("cleans up native component renderers when the widget host is removed", async () => {
+    let cleanupCount = 0
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "native_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                componentKey: "invoice_summary",
+                componentVersion: "1",
+                props: { content: "Fallback summary." }
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    ;(window as typeof window & { warpy: { registerComponents: (components: unknown[]) => void } }).warpy.registerComponents([
+      {
+        key: "invoice_summary",
+        version: "1",
+        render({ mount }: { mount: HTMLElement }) {
+          mount.textContent = "Mounted native output"
+          return () => {
+            cleanupCount += 1
+          }
+        }
+      }
+    ])
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-native-mount")?.textContent).toContain("Mounted native output")
+    })
+
+    widget.host.remove()
+
+    await waitFor(() => {
+      expect(cleanupCount).toBe(1)
+    })
+  })
+
+  it("stores markdown-only state when render payload storage exceeds quota", async () => {
+    const originalSetItem = Storage.prototype.setItem
+    const setItem = jest.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string
+    ) {
+      if (key === STORAGE_KEY && value.includes("\"renderPayload\"")) {
+        throw new DOMException("Storage quota exceeded", "QuotaExceededError")
+      }
+      return originalSetItem.call(this, key, value)
+    })
+
+    try {
+      MockWebSocket.handler = (socket) => {
+        socket.receive({
+          type: "chat.response",
+          response: {
+            conversationId: "conversation-1",
+            messages: [
+              {
+                role: "assistant",
+                content: "Fallback summary.",
+                renderPayload: {
+                  kind: "native_components",
+                  version: 1,
+                  markdownFallback: "Fallback summary.",
+                  componentKey: "invoice_summary",
+                  componentVersion: "1",
+                  props: { content: "Fallback summary." }
+                }
+              }
+            ],
+            toolCalls: [],
+            suggestions: [],
+            done: true,
+            isWidgetHidden: false,
+            actionsRemaining: 5,
+          },
+        })
+      }
+
+      const widget = await loadWidget()
+      await openPanel(widget)
+      const shadowRoot = getShadowRoot(widget)
+      fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+      fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+      await waitFor(() => {
+        expect(shadowRoot.textContent).toContain("Fallback summary.")
+      })
+      const storedAssistant = readWidgetState().messages?.find((message) => message.role === "assistant")
+      expect(storedAssistant?.content).toBe("Fallback summary.")
+      expect(storedAssistant?.renderPayload).toBeUndefined()
+    } finally {
+      setItem.mockRestore()
+    }
+  })
+
+  it("falls back when native component renderers are missing", async () => {
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "native_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                componentKey: "invoice_summary",
+                componentVersion: "1",
+                props: { content: "Fallback summary." }
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.querySelector(".cta-widget-native-placeholder")?.textContent).toContain("fallback")
+    })
+    expect(shadowRoot.querySelector(".cta-widget-ui-fallback")?.textContent).toContain("Fallback summary.")
+  })
+
+  it("falls back to markdown for malformed component payloads", async () => {
+    MockWebSocket.handler = (socket) => {
+      socket.receive({
+        type: "chat.response",
+        response: {
+          conversationId: "conversation-1",
+          messages: [
+            {
+              role: "assistant",
+              content: "Fallback summary.",
+              renderPayload: {
+                kind: "warpy_components",
+                version: 1,
+                markdownFallback: "Fallback summary.",
+                tree: [{ component: "unknown", props: {} }]
+              }
+            }
+          ],
+          toolCalls: [],
+          suggestions: [],
+          done: true,
+          isWidgetHidden: false,
+          actionsRemaining: 5,
+        },
+      })
+    }
+
+    const widget = await loadWidget()
+    await openPanel(widget)
+    const shadowRoot = getShadowRoot(widget)
+    fireEvent.change(shadowRoot.querySelector(".cta-widget-input") as HTMLTextAreaElement, { target: { value: "Show invoices" } })
+    fireEvent.click(shadowRoot.querySelector(".cta-widget-send") as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain("Fallback summary.")
+    })
+    expect(shadowRoot.querySelector(".cta-widget-ui")).toBeNull()
   })
 
   it("migrates legacy stored messages by assigning ids and marking the history as read", async () => {

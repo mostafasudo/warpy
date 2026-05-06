@@ -71,7 +71,7 @@ If the context starts getting large, stop exploratory work, update the checkpoin
 
 Warpy is a drop-in AI execution layer for complex B2B dashboards. Customers embed a lightweight widget into their product, expose approved APIs and UI actions, and let end users ask for work in plain language.
 
-Warpy does not replace the product UI. Chat is the low-friction intent input. The host product remains the output surface for structured results, navigation, review, and safe action confirmation.
+Warpy does not replace the product UI. Chat is the low-friction intent input. The widget can render compact structured output, and customers can map that output to native components when the host app should own the final presentation.
 
 The core GTM promise is dashboard adoption: more users reaching value, using advanced workflows, and getting work done without menu hunting. Lower support volume matters, but it is a secondary outcome.
 
@@ -199,7 +199,7 @@ Content pillars:
 - users only using a small slice of feature-rich products
 - chat as the fastest input path to adoption, activation, and time-to-value
 - embedded AI that takes approved actions, not just answers questions
-- product and UX shifts from menu hunting to intent capture while the structured UI remains the output surface
+- product and UX shifts from menu hunting to intent capture with structured output in the widget or native app UI
 - smart commentary on launches, interface changes, and product strategy shifts that show where software is going
 
 Reference accounts for taste calibration:

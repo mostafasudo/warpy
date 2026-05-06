@@ -7,6 +7,7 @@ CONTROL_PLANE_PREFIXES = (
     "/config",
     "/features",
     "/tools",
+    "/widget-components",
     "/mcp-connections",
     "/knowledge-base",
     "/agent",
@@ -27,6 +28,11 @@ SECTION_MANIFEST = [
         "section": "Features",
         "purpose": "Group tools into product surfaces and enable or disable them.",
         "toggles": ["feature.agentEnabled", "tool.agentEnabled"],
+    },
+    {
+        "section": "Dynamic UI",
+        "purpose": "Register native output components that the widget can render instead of markdown.",
+        "toggles": ["widgetResponseMode", "widgetComponent.active"],
     },
     {
         "section": "Knowledge Base",
@@ -50,6 +56,8 @@ TOGGLE_MANIFEST = {
     "sendCookiesWithRequests": "When true, browser cookies are included on backend tool requests.",
     "feature.agentEnabled": "Feature-level enablement. Disabling the feature removes all child tools from the agent surface.",
     "tool.agentEnabled": "Tool-level enablement. Disabled tools stay stored but are not callable by the agent.",
+    "widgetResponseMode": "Controls whether widget replies render as markdown, Warpy components, or native components.",
+    "widgetComponent.active": "Controls whether a native output component is eligible for the agent to render.",
     "knowledgeBase.enabled": "Controls whether retrieval is available to Warpy for this user.",
     "frontendCapability.enabled": "Controls whether screen autopilot and frontend execution are available.",
     "widgetSuggestionsEnabled": "Controls whether starter suggestions render in the widget.",
@@ -84,6 +92,35 @@ FRONTEND_EXAMPLE = {
     },
     "agentEnabled": True,
     "feature": {"mode": "existing", "id": "feature_uuid_here"},
+}
+
+WIDGET_COMPONENT_EXAMPLE = {
+    "key": "invoice_summary",
+    "version": "1",
+    "displayName": "Invoice Summary",
+    "description": "Compact invoice review card for short billing summaries.",
+    "framework": "react",
+    "propsSchema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Title, max 60 characters.",
+            },
+            "content": {
+                "type": "string",
+                "description": "Complete summary text, max 400 characters.",
+            },
+        },
+        "required": ["title", "content"],
+    },
+    "suitability": "Use only for one compact invoice summary that fits fully in the title and content limits. Use markdown for long tables or detailed multi-step explanations.",
+    "constraints": {
+        "maxTitleChars": 60,
+        "maxContentChars": 400,
+        "outputOnly": True,
+    },
+    "active": True,
 }
 
 BACKEND_EXAMPLE = {
@@ -325,6 +362,7 @@ def build_integrate_warpy_markdown(openapi: dict) -> str:
     )
     backend_example = json.dumps(BACKEND_EXAMPLE, indent=2, sort_keys=True)
     frontend_example = json.dumps(FRONTEND_EXAMPLE, indent=2, sort_keys=True)
+    widget_component_example = json.dumps(WIDGET_COMPONENT_EXAMPLE, indent=2, sort_keys=True)
 
     sections = [
         """# Warpy Agent Integration Manual
@@ -424,6 +462,48 @@ const widget = mountWidget({
   data-base-url="https://api.your-product.com"
 ></script>
 ```
+
+## Dynamic Widget UI
+
+Widget replies can render in three modes:
+- `markdown`: plain text and markdown
+- `warpy_components`: Warpy's responsive built-in output components, styled by the widget theme
+- `native_components`: components from the host app, registered in the widget runtime
+
+Warpy always stores and sends a complete markdown fallback. Native components are output-only; do not register forms, buttons, or destructive controls here.
+
+### Native Component Runtime Example
+
+```tsx
+import { Widget } from "@warpy-ai/widget/react"
+
+const components = [
+  { key: "invoice_summary", version: "1", component: InvoiceSummary }
+]
+
+<Widget
+  agentId="YOUR_AGENT_ID"
+  baseUrl="https://api.your-product.com"
+  scriptSrc="https://cdn.warpy.ai/widget.js"
+  components={components}
+/>
+```
+
+### Native Component Definition Example
+
+Register the matching component contract through `POST /widget-components`.
+
+```json""".rstrip(),
+        widget_component_example,
+        """```
+
+### Component Drift Detection
+
+An agent should compare:
+- local component prop types, stories, or JSON schemas
+- current Warpy component definitions from `/widget-components`
+
+The agent must detect new props, removed props, type changes, character limits, row/item limits, and suitability changes. It must explain the diff and ask for confirmation before calling `POST`, `PUT`, or `DELETE /widget-components`.
 
 ## Authentication Setup
 

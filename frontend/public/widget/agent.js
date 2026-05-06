@@ -810,6 +810,46 @@
     return div.innerHTML;
   }
 
+  function componentRegistryKey(key, version) {
+    return `${String(key || "").trim()}@${String(version || "1").trim() || "1"}`;
+  }
+
+  function ensureWarpyNamespace() {
+    const existing = window.warpy;
+    if (typeof existing !== "function") {
+      window.warpy = function () {
+        return Promise.reject(new Error("window.warpy handler is not registered"));
+      };
+      window.warpy.__warpyFallbackHandler = true;
+    }
+    if (!window.warpy.__componentRegistry || typeof window.warpy.__componentRegistry !== "object") {
+      window.warpy.__componentRegistry = {};
+    }
+    return window.warpy;
+  }
+
+  function getComponentRegistry() {
+    return ensureWarpyNamespace().__componentRegistry;
+  }
+
+  function registerComponents(components) {
+    if (!Array.isArray(components)) return;
+    const registry = getComponentRegistry();
+    components.forEach(function (component) {
+      if (!component || typeof component !== "object") return;
+      const key = typeof component.key === "string" ? component.key.trim() : "";
+      if (!key || typeof component.render !== "function") return;
+      registry[componentRegistryKey(key, component.version)] = component;
+    });
+  }
+
+  function installWarpyComponentRegistration() {
+    ensureWarpyNamespace();
+    window.warpy.registerComponents = registerComponents;
+  }
+
+  installWarpyComponentRegistration();
+
   function resolveApiUrl() {
     try {
       const preview = getPreviewBootstrap();
@@ -859,6 +899,9 @@
         return scripts.length ? scripts[scripts.length - 1] : null;
       })();
     if (!script) return null;
+    if (Array.isArray(script.__warpyComponents)) {
+      registerComponents(script.__warpyComponents);
+    }
     return {
       agentId: script.getAttribute("data-agent-id"),
       baseUrl: script.getAttribute("data-base-url"),
@@ -879,7 +922,26 @@
     if (isPreviewMode()) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch { }
+    } catch {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(createMarkdownOnlyStorageState(state)));
+      } catch { }
+    }
+  }
+
+  function createMarkdownOnlyStorageState(sourceState) {
+    const messages = Array.isArray(sourceState && sourceState.messages)
+      ? sourceState.messages.map(function (message) {
+        if (!message || typeof message !== "object") return message;
+        const next = { ...message };
+        delete next.renderPayload;
+        return next;
+      })
+      : [];
+    return {
+      ...(sourceState || {}),
+      messages,
+    };
   }
 
   function loadUiState() {
@@ -939,6 +1001,9 @@
       role,
       content: typeof raw.content === "string" ? raw.content : String(raw.content || ""),
     };
+    if (raw.renderPayload && typeof raw.renderPayload === "object") {
+      message.renderPayload = raw.renderPayload;
+    }
     if (typeof raw.kind === "string" && raw.kind.trim()) {
       message.kind = raw.kind.trim();
     }
@@ -3406,7 +3471,7 @@
     if (!toolName) {
       return { id: toolCall.id, statusCode: 400, body: null, error: "Frontend tool name is required" };
     }
-    if (typeof window.warpy !== "function") {
+    if (typeof window.warpy !== "function" || window.warpy.__warpyFallbackHandler === true) {
       return {
         id: toolCall.id,
         statusCode: 400,
@@ -4813,6 +4878,117 @@
         margin-bottom: 0;
       }
 
+      .cta-widget-ui {
+        display: grid;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .cta-widget-ui-card,
+      .cta-widget-ui-list-item,
+      .cta-widget-ui-table-shell,
+      .cta-widget-native-placeholder {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid var(--cta-border);
+        background: var(--cta-surface);
+        border-radius: 12px;
+      }
+
+      .cta-widget-ui-card,
+      .cta-widget-native-placeholder {
+        padding: 10px;
+      }
+
+      .cta-widget-ui-title {
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: inherit;
+      }
+
+      .cta-widget-ui-body {
+        margin-top: 4px;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-ui-list {
+        display: grid;
+        gap: 6px;
+      }
+
+      .cta-widget-ui-list-item {
+        display: grid;
+        grid-template-columns: 8px minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .cta-widget-ui-dot {
+        width: 6px;
+        height: 6px;
+        margin-top: 5px;
+        border-radius: 999px;
+        background: var(--cta-accent);
+        opacity: 0.76;
+      }
+
+      .cta-widget-ui-table-title {
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--cta-border);
+      }
+
+      .cta-widget-ui-table-scroll {
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      .cta-widget-ui-table-shell table {
+        min-width: 280px;
+        width: 100%;
+        border-collapse: collapse;
+        display: table;
+        font-size: 12px;
+      }
+
+      .cta-widget-ui-table-shell th,
+      .cta-widget-ui-table-shell td {
+        padding: 8px 10px;
+        border: 0;
+        border-top: 1px solid var(--cta-border);
+        text-align: left;
+        vertical-align: top;
+        white-space: nowrap;
+      }
+
+      .cta-widget-ui-table-shell th {
+        color: var(--cta-fg-muted);
+        font-weight: 700;
+        background: var(--cta-surface-strong);
+      }
+
+      .cta-widget-native-mount {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .cta-widget-native-placeholder {
+        border-style: dashed;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--cta-fg-muted);
+      }
+
+      .cta-widget-ui-fallback {
+        margin-top: 8px;
+      }
+
       .cta-widget-message-actions {
         margin-top: 10px;
         display: flex;
@@ -5292,6 +5468,7 @@
     let widgetTitle = "Warpy";
     let widgetIconUrl = null;
     let widgetAppearanceMode = "infer";
+    let widgetResponseMode = "warpy_components";
     let widgetTheme = null;
     let widgetBehavior = "overlay";
     let widgetEmptyTitle = "What would you like to do?";
@@ -6402,13 +6579,63 @@
     }
 
     function replacePreviewMessages(messages) {
-      state.messages = messages.map((message) => createStoredMessage(message.role, message.content));
+      state.messages = messages.map((message) => createStoredMessage(message.role, message.content, {
+        renderPayload: message.renderPayload || null,
+      }));
       state.firstUnreadMessageId = null;
       state.lastReadMessageId = getLastMessageId();
       state.suggestions = [];
     }
 
     function buildPreviewMessages() {
+      if (widgetResponseMode === "native_components") {
+        return [
+          {
+            role: "assistant",
+            content: "Native components render in your app. The live preview shows this fallback because Warpy does not have access to your component library.",
+            renderPayload: {
+              kind: "native_components",
+              version: 1,
+              markdownFallback: "Native components render in your app. The live preview shows this fallback because Warpy does not have access to your component library.",
+              componentKey: "customer_invoice_summary",
+              componentVersion: "1",
+              props: { content: "Preview fallback" },
+            },
+          },
+        ];
+      }
+      if (widgetResponseMode === "warpy_components") {
+        return [
+          {
+            role: "assistant",
+            content: "You have **3 invoices** waiting for review. I can summarize them, open the billing screen, or start a refund.",
+            renderPayload: {
+              kind: "warpy_components",
+              version: 1,
+              markdownFallback: "You have **3 invoices** waiting for review. I can summarize them, open the billing screen, or start a refund.",
+              tree: [
+                {
+                  component: "summary_card",
+                  props: {
+                    title: "3 invoices need review",
+                    body: "Aging invoices, refund requests, and overdue approvals are grouped into a compact summary for the widget.",
+                  },
+                },
+                {
+                  component: "status_list",
+                  props: {
+                    items: [
+                      { label: "2 invoices are overdue", status: "warning" },
+                      { label: "1 refund needs approval", status: "neutral" },
+                      { label: "Billing page is ready to open", status: "success" },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ];
+      }
       return [
         {
           role: "assistant",
@@ -6464,6 +6691,10 @@
         }
       }
 
+      if (widgetResponseMode === "native_components" && currentPreviewScene !== "launcher") {
+        showFrontendWarning("Native components render in your app. This preview shows the fallback state.");
+      }
+
       renderMessages();
       if (options.announce !== false) {
         postPreviewMessage("sceneChanged", {
@@ -6472,6 +6703,235 @@
         });
       }
       emitPreviewSnapshot("scene");
+    }
+
+    function appendText(el, value) {
+      el.textContent = typeof value === "string" ? value : String(value || "");
+    }
+
+    function createDynamicSummaryCard(props) {
+      const card = document.createElement("div");
+      card.className = "cta-widget-ui-card";
+      const title = document.createElement("div");
+      title.className = "cta-widget-ui-title";
+      appendText(title, props && props.title || "Summary");
+      card.appendChild(title);
+      if (props && props.body) {
+        const body = document.createElement("div");
+        body.className = "cta-widget-ui-body";
+        appendText(body, props.body);
+        card.appendChild(body);
+      }
+      return card;
+    }
+
+    function createDynamicStatusList(props) {
+      const list = document.createElement("div");
+      list.className = "cta-widget-ui-list";
+      const items = Array.isArray(props && props.items) ? props.items : [];
+      items.forEach(function (item) {
+        const label = item && typeof item === "object" ? item.label : "";
+        if (!label) return;
+        const row = document.createElement("div");
+        row.className = "cta-widget-ui-list-item";
+        const dot = document.createElement("span");
+        dot.className = "cta-widget-ui-dot";
+        const text = document.createElement("span");
+        appendText(text, label);
+        row.appendChild(dot);
+        row.appendChild(text);
+        list.appendChild(row);
+      });
+      return list.childNodes.length ? list : null;
+    }
+
+    function createDynamicTable(props) {
+      const columns = Array.isArray(props && props.columns) ? props.columns : [];
+      const rows = Array.isArray(props && props.rows) ? props.rows : [];
+      if (!columns.length || !rows.length) return null;
+      const shell = document.createElement("div");
+      shell.className = "cta-widget-ui-table-shell";
+      if (props && props.title) {
+        const title = document.createElement("div");
+        title.className = "cta-widget-ui-title cta-widget-ui-table-title";
+        appendText(title, props.title);
+        shell.appendChild(title);
+      }
+      const scroller = document.createElement("div");
+      scroller.className = "cta-widget-ui-table-scroll";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      columns.forEach(function (column) {
+        const th = document.createElement("th");
+        appendText(th, column);
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      const tbody = document.createElement("tbody");
+      rows.forEach(function (row) {
+        const tr = document.createElement("tr");
+        const cells = Array.isArray(row) ? row : [];
+        columns.forEach(function (_column, index) {
+          const td = document.createElement("td");
+          appendText(td, cells[index] || "");
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      scroller.appendChild(table);
+      shell.appendChild(scroller);
+      return shell;
+    }
+
+    function appendMarkdownFallback(node, content) {
+      const fallback = document.createElement("div");
+      fallback.className = "cta-widget-ui-fallback";
+      fallback.innerHTML = renderMarkdown(content);
+      node.appendChild(fallback);
+    }
+
+    function renderNativeFallback(node, payload, fallbackContent) {
+      const notice = document.createElement("div");
+      notice.className = "cta-widget-native-placeholder";
+      notice.textContent = "Rendered with your app component. Showing the fallback here.";
+      node.appendChild(notice);
+      appendMarkdownFallback(node, payload && payload.markdownFallback || fallbackContent);
+    }
+
+    function renderWarpyPayload(node, payload, fallbackContent) {
+      const tree = Array.isArray(payload && payload.tree) ? payload.tree : [];
+      if (!tree.length) return false;
+      const root = document.createElement("div");
+      root.className = "cta-widget-ui";
+      tree.forEach(function (entry) {
+        if (!entry || typeof entry !== "object") return;
+        const props = entry.props && typeof entry.props === "object" ? entry.props : {};
+        let element = null;
+        if (entry.component === "summary_card" || entry.component === "record_card" || entry.component === "notice") {
+          element = createDynamicSummaryCard(props);
+        } else if (entry.component === "status_list" || entry.component === "timeline" || entry.component === "source_list") {
+          element = createDynamicStatusList(props);
+        } else if (entry.component === "compact_table") {
+          element = createDynamicTable(props);
+        }
+        if (element) root.appendChild(element);
+      });
+      if (!root.childNodes.length) return false;
+      node.appendChild(root);
+      return true;
+    }
+
+    function renderNativePayload(node, payload, fallbackContent) {
+      const registry = getComponentRegistry();
+      const component = registry[componentRegistryKey(payload && payload.componentKey, payload && payload.componentVersion)];
+      if (component && typeof component.render === "function") {
+        const mount = document.createElement("div");
+        mount.className = "cta-widget-native-mount";
+        node.appendChild(mount);
+        const renderKey = node._renderKey;
+        try {
+          const result = component.render({
+            mount,
+            props: payload.props || {},
+            markdownFallback: payload.markdownFallback || fallbackContent,
+          });
+          if (isPromiseLike(result)) {
+            Promise.resolve(result)
+              .then(function (resolved) {
+                if (!isCurrentNativeMount(node, mount, renderKey)) {
+                  if (typeof resolved === "function") {
+                    try {
+                      resolved();
+                    } catch (_error) {
+                      void _error;
+                    }
+                  }
+                  return;
+                }
+                if (!applyNativeRenderResult(mount, resolved)) {
+                  mount.remove();
+                  renderNativeFallback(node, payload, fallbackContent);
+                }
+              })
+              .catch(function () {
+                if (!isCurrentNativeMount(node, mount, renderKey)) return;
+                mount.remove();
+                renderNativeFallback(node, payload, fallbackContent);
+              });
+          } else if (!applyNativeRenderResult(mount, result)) {
+            mount.remove();
+            renderNativeFallback(node, payload, fallbackContent);
+          }
+          return true;
+        } catch (_error) {
+          mount.remove();
+        }
+      }
+      renderNativeFallback(node, payload, fallbackContent);
+      return true;
+    }
+
+    function isPromiseLike(value) {
+      return value && typeof value === "object" && typeof value.then === "function";
+    }
+
+    function isCurrentNativeMount(node, mount, renderKey) {
+      return Boolean(mount && mount.isConnected && mount.parentNode === node && node._renderKey === renderKey);
+    }
+
+    function applyNativeRenderResult(mount, result) {
+      if (result instanceof Node) {
+        mount.replaceChildren(result);
+        return true;
+      }
+      if (typeof result === "string") {
+        mount.textContent = result;
+        return true;
+      }
+      if (typeof result === "function") {
+        mount.__warpyCleanup = result;
+        return true;
+      }
+      return result == null && (mount.childNodes.length > 0 || mount.textContent.trim().length > 0);
+    }
+
+    function renderMessagePayload(node, message) {
+      const payload = message && message.renderPayload;
+      if (!payload || typeof payload !== "object") return false;
+      if (payload.kind === "warpy_components") {
+        return renderWarpyPayload(node, payload, message.content);
+      }
+      if (payload.kind === "native_components") {
+        return renderNativePayload(node, payload, message.content);
+      }
+      return false;
+    }
+
+    function cleanupMessageNode(node) {
+      if (!node || typeof node.querySelectorAll !== "function") return;
+      node.querySelectorAll(".cta-widget-native-mount").forEach(function (mount) {
+        if (typeof mount.__warpyCleanup === "function") {
+          try {
+            mount.__warpyCleanup();
+          } catch (_error) {
+            void _error;
+          }
+          mount.__warpyCleanup = null;
+        }
+      });
+    }
+
+    function cleanupAllMessageNodes() {
+      messageNodes.forEach(function (node) {
+        cleanupMessageNode(node);
+      });
+    }
+
+    function cleanupWidget() {
+      cleanupAllMessageNodes();
     }
 
     function createMessageNode(message) {
@@ -6491,6 +6951,7 @@
         message.role,
         message.kind || "",
         message.content,
+        message.renderPayload ? JSON.stringify(message.renderPayload) : "",
         message.resumeQuery || "",
         canResume ? "1" : "0",
       ].join("::");
@@ -6502,9 +6963,12 @@
       node._renderKey = renderKey;
       node.className = `cta-widget-message ${message.role}`;
       node.dataset.messageId = message.id;
+      cleanupMessageNode(node);
       node.innerHTML = "";
       if (message.role === "assistant") {
-        node.innerHTML = renderMarkdown(message.content);
+        if (!renderMessagePayload(node, message)) {
+          node.innerHTML = renderMarkdown(message.content);
+        }
         if (isResumeErrorMessage(message)) {
           const actions = document.createElement("div");
           actions.className = "cta-widget-message-actions";
@@ -6529,6 +6993,7 @@
     }
 
     function renderEmptyState() {
+      cleanupAllMessageNodes();
       messageNodes.clear();
       timelineEl.innerHTML = "";
       if (unreadDividerEl.parentNode === timelineEl) {
@@ -6584,6 +7049,7 @@
         if (cursor === unreadDividerEl) {
           timelineEl.removeChild(cursor);
         } else {
+          cleanupMessageNode(cursor);
           const messageId = cursor.dataset ? cursor.dataset.messageId : "";
           if (messageId) {
             messageNodes.delete(messageId);
@@ -6596,6 +7062,7 @@
       for (const [messageId, node] of Array.from(messageNodes.entries())) {
         if (!activeMessageIds.has(messageId)) {
           if (node.parentNode) {
+            cleanupMessageNode(node);
             node.parentNode.removeChild(node);
           }
           messageNodes.delete(messageId);
@@ -7076,6 +7543,9 @@
       widgetIconUrl = getConfigString(data, "widgetIconUrl");
       if (data.widgetAppearanceMode === "custom" || data.widgetAppearanceMode === "infer") {
         widgetAppearanceMode = data.widgetAppearanceMode;
+      }
+      if (data.widgetResponseMode === "markdown" || data.widgetResponseMode === "warpy_components" || data.widgetResponseMode === "native_components") {
+        widgetResponseMode = data.widgetResponseMode;
       }
       widgetTheme = data.widgetTheme && typeof data.widgetTheme === "object" ? cloneObject(data.widgetTheme) : null;
       if (data.widgetBehavior === "push" || data.widgetBehavior === "overlay") {
@@ -7565,7 +8035,9 @@
           let firstAssistantMessageId = null;
           if (isRunStale()) return;
           for (const msg of data.messages) {
-            const appended = appendStoredMessage(msg.role, msg.content);
+            const appended = appendStoredMessage(msg.role, msg.content, {
+              renderPayload: msg && msg.renderPayload && typeof msg.renderPayload === "object" ? msg.renderPayload : null,
+            });
             if (appended.role === "assistant") {
               didReceiveAssistant = true;
               if (!firstAssistantMessageId) {
@@ -7844,7 +8316,11 @@
           previewColorScheme = detail.previewColorScheme;
         }
         if (detail.config && typeof detail.config === "object") {
+          const wasPreviewPanelOpen = isOpen;
           applyRemoteConfig(detail.config);
+          if (currentPreviewScene !== "launcher" && wasPreviewPanelOpen) {
+            applyPreviewScene(currentPreviewScene, { announce: false });
+          }
         } else {
           syncThemeState();
         }
@@ -7880,6 +8356,15 @@
       state.activeRequestId = null;
       state.resumePanelOpen = null;
       saveState(state);
+    }
+
+    if (host && typeof MutationObserver === "function" && document.body) {
+      const removalObserver = new MutationObserver(function () {
+        if (host.isConnected) return;
+        cleanupWidget();
+        removalObserver.disconnect();
+      });
+      removalObserver.observe(document.body, { childList: true });
     }
 
     return root;

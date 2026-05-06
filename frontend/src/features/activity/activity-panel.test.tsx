@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
+import { useActivityConversationDetailInfiniteQuery } from "@/queries/use-activity-conversation-detail"
+import { useActivityConversationsInfiniteQuery } from "@/queries/use-activity-conversations"
+import { useActivitySummaryQuery } from "@/queries/use-activity-summary"
 import { ActivityPanel } from "./activity-panel"
 
 jest.mock("@/queries/use-activity-summary", () => ({
@@ -17,9 +20,18 @@ jest.mock("@/queries/use-activity-conversation-detail", () => ({
   useActivityConversationDetailInfiniteQuery: jest.fn()
 }))
 
-const mockedSummary = require("@/queries/use-activity-summary").useActivitySummaryQuery as jest.Mock
-const mockedConversations = require("@/queries/use-activity-conversations").useActivityConversationsInfiniteQuery as jest.Mock
-const mockedDetail = require("@/queries/use-activity-conversation-detail").useActivityConversationDetailInfiniteQuery as jest.Mock
+type DetailQueryArgs = { conversationId?: string | null }
+type HookMock = {
+  mockReset: () => void
+  mockReturnValue: (value: unknown) => void
+}
+type DetailHookMock = HookMock & {
+  mockImplementation: (implementation: (args: DetailQueryArgs) => unknown) => void
+}
+
+const mockedSummary = useActivitySummaryQuery as unknown as HookMock
+const mockedConversations = useActivityConversationsInfiniteQuery as unknown as HookMock
+const mockedDetail = useActivityConversationDetailInfiniteQuery as unknown as DetailHookMock
 
 describe("ActivityPanel", () => {
   beforeEach(() => {
@@ -63,7 +75,7 @@ describe("ActivityPanel", () => {
       isFetchingNextPage: false
     })
 
-    mockedDetail.mockImplementation((args: any) => ({
+    mockedDetail.mockImplementation((args: DetailQueryArgs) => ({
       data: args?.conversationId
         ? {
           pages: [
@@ -122,6 +134,92 @@ describe("ActivityPanel", () => {
     expect(screen.getByText(/"products"/)).not.toBeNull()
   })
 
+  it("renders Warpy dynamic messages and native fallbacks in conversation detail", async () => {
+    mockedSummary.mockReturnValue({
+      data: { conversationCount: 1, actionCount: 0, hasAnyConversation: true, topActions: [] },
+      isPending: false
+    })
+    mockedConversations.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              {
+                id: "c1-uuid",
+                participant: "widget",
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-02T00:00:00Z",
+                userMessageCount: 1,
+                actionCount: 0
+              }
+            ],
+            nextCursor: null
+          }
+        ]
+      },
+      isPending: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    })
+    mockedDetail.mockImplementation((args: DetailQueryArgs) => ({
+      data: args?.conversationId
+        ? {
+          pages: [
+            {
+              id: "c1-uuid",
+              participant: "widget",
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-02T00:00:00Z",
+              messages: [
+                {
+                  role: "assistant",
+                  content: "Markdown fallback",
+                  createdAt: "2026-01-02T00:00:01Z",
+                  renderPayload: {
+                    kind: "warpy_components",
+                    version: 1,
+                    markdownFallback: "Markdown fallback",
+                    tree: [{ component: "summary_card", props: { title: "Invoice summary", body: "Two invoices need review." } }]
+                  }
+                },
+                {
+                  role: "assistant",
+                  content: "Native fallback",
+                  createdAt: "2026-01-02T00:00:02Z",
+                  renderPayload: {
+                    kind: "native_components",
+                    version: 1,
+                    markdownFallback: "Native fallback",
+                    componentKey: "invoice_summary",
+                    componentVersion: "1",
+                    props: { content: "Native fallback" }
+                  }
+                }
+              ],
+              nextMessageCursor: null,
+              actions: [],
+              nextActionCursor: null
+            }
+          ]
+        }
+        : undefined,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      fetchNextPage: jest.fn(),
+      isFetchingNextPage: false
+    }))
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    render(<ActivityPanel />)
+
+    await user.click(screen.getByTestId("view-c1-uuid"))
+    expect(await screen.findByText("Invoice summary")).not.toBeNull()
+    expect(screen.getByText("Rendered with a customer component in the host app.")).not.toBeNull()
+    expect(screen.getByText("Native fallback")).not.toBeNull()
+  })
+
   it("shows frontend tool inputs with frontend-specific labels", async () => {
     mockedSummary.mockReturnValue({
       data: {
@@ -157,7 +255,7 @@ describe("ActivityPanel", () => {
       isFetchingNextPage: false
     })
 
-    mockedDetail.mockImplementation((args: any) => ({
+    mockedDetail.mockImplementation((args: DetailQueryArgs) => ({
       data: args?.conversationId
         ? {
           pages: [
@@ -260,7 +358,7 @@ describe("ActivityPanel", () => {
       isFetchingNextPage: false
     })
 
-    mockedDetail.mockImplementation((args: any) => ({
+    mockedDetail.mockImplementation((args: DetailQueryArgs) => ({
       data: args?.conversationId
         ? {
           pages: [
@@ -350,7 +448,7 @@ describe("ActivityPanel", () => {
       isFetchingNextPage: false
     })
 
-    mockedDetail.mockImplementation((args: any) => ({
+    mockedDetail.mockImplementation((args: DetailQueryArgs) => ({
       data: args?.conversationId
         ? {
           pages: [
@@ -432,7 +530,7 @@ describe("ActivityPanel", () => {
       isFetchingNextPage: false
     })
 
-    mockedDetail.mockImplementation((args: any) => ({
+    mockedDetail.mockImplementation((args: DetailQueryArgs) => ({
       data: args?.conversationId
         ? {
           pages: [
@@ -602,17 +700,27 @@ describe("ActivityPanel", () => {
     })
 
     const originalIntersectionObserver = global.IntersectionObserver
-    let lastCallback: ((entries: Array<{ isIntersecting: boolean }>, observer: unknown) => void) | null = null
+    let lastCallback: IntersectionObserverCallback | null = null
 
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     try {
-      global.IntersectionObserver = class MockIntersectionObserver {
-        constructor(callback: any) {
+      class MockIntersectionObserver implements IntersectionObserver {
+        readonly root = null
+        readonly rootMargin = ""
+        readonly thresholds = []
+
+        constructor(callback: IntersectionObserverCallback) {
           lastCallback = callback
         }
-        observe() { }
-        disconnect() { }
-      } as any
+
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+      }
+      global.IntersectionObserver = MockIntersectionObserver
 
       render(<ActivityPanel />)
 
@@ -623,7 +731,10 @@ describe("ActivityPanel", () => {
       expect(screen.queryByTestId("apply-custom")).toBeNull()
 
       expect(lastCallback).not.toBeNull()
-        ; (lastCallback as any)([{ isIntersecting: true }], {})
+      const invokeIntersection = lastCallback as IntersectionObserverCallback | null
+      if (invokeIntersection) {
+        invokeIntersection([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+      }
       expect(fetchNextPage).toHaveBeenCalledTimes(1)
       expect(screen.queryByRole("button", { name: /load more/i })).toBeNull()
     } finally {

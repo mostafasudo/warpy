@@ -99,6 +99,7 @@ def get_widget_config(
         widget_title=agent.widget_title,
         widget_icon_url=agent.widget_icon_url,
         widget_appearance_mode="custom" if agent.widget_appearance_mode == "custom" else "infer",
+        widget_response_mode=agent.widget_response_mode if agent.widget_response_mode in {"markdown", "warpy_components", "native_components"} else "warpy_components",
         widget_theme=agent.widget_theme,
         widget_behavior=agent.widget_behavior,
         widget_empty_title=agent.widget_empty_title,
@@ -134,10 +135,22 @@ def get_widget_conversation(session: Session, conversation_id: UUID, agent_id: U
     )
 
 
-def save_widget_message(session: Session, conversation_id: UUID, role: str, content: str) -> Message:
+def save_widget_message(
+    session: Session,
+    conversation_id: UUID,
+    role: str,
+    content: str,
+    render_payload: dict | None = None,
+) -> Message:
     _lock_and_touch_conversation(session, conversation_id)
     next_seq = _next_message_sequence(session, conversation_id)
-    message = Message(conversation_id=conversation_id, role=role, content=content, sequence=next_seq)
+    message = Message(
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        render_payload=render_payload,
+        sequence=next_seq,
+    )
     session.add(message)
     session.flush()
     return message

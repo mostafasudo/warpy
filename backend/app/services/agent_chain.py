@@ -35,6 +35,7 @@ from .context_budget import truncate_tool_result
 from .embedding_service import search_similar_tools
 from .mcp_runtime import McpAuthExpiredError, McpStepContext, is_db_tool_ref, is_mcp_tool_ref, make_db_tool_ref, parse_db_tool_ref
 from .tool_cache import ToolCache
+from .widget_dynamic_ui_service import build_widget_render_payload, format_widget_markdown_response, normalize_widget_response_mode
 
 MAX_ITERATIONS_RESPONSE = "I've reached the maximum number of steps. Here's what I found so far based on our conversation."
 MAX_HISTORY_PAIRS = 10
@@ -94,6 +95,8 @@ Safety:
 {frontend_tips}{knowledge_base_context}
 {custom_user_system_prompt_fragment}Output:
 - Either tool calls OR a concise response (<=2 sentences, <=40 words) that summarizes what you did or asks one clear question for missing info.
+- Use valid GitHub-flavored Markdown for lists, tables, records, links, or multi-field data. Put each list item and record field on its own line; never collapse numbered records into one paragraph.
+- Do not wrap record/list data in code fences unless the user explicitly asks for JSON or code. Render image URLs with Markdown image syntax.
 - When listing capabilities, mention 2-3 examples and say you can do more if the user describes their goal."""
 
 DISCOVERY_TOOL_NAMES = {"find_tools", "find_actions"}
@@ -162,6 +165,7 @@ def build_system_prompt(
 class StepResult:
     tool_calls: list[ToolCallPayload] = field(default_factory=list)
     response: str | None = None
+    render_payload: dict[str, Any] | None = None
     suggestions: list[str] = field(default_factory=list)
     done: bool = False
     messages: list[BaseMessage] = field(default_factory=list)
@@ -189,6 +193,8 @@ class AgentExecutor:
         frontend_capability_enabled: bool = True,
         knowledge_base_enabled: bool = False,
         widget_suggestions_enabled: bool = False,
+        widget_response_mode: str = "markdown",
+        native_component_catalog: list[dict[str, Any]] | None = None,
         custom_user_system_prompt: str = DEFAULT_CUSTOM_USER_SYSTEM_PROMPT,
         responses_transport: OpenAIResponsesWebSocketSession | None = None,
         session_provider: Callable[[], ContextManager[Session]] | None = None,
@@ -201,6 +207,8 @@ class AgentExecutor:
         self.frontend_capability_enabled = frontend_capability_enabled
         self.knowledge_base_enabled = knowledge_base_enabled
         self.widget_suggestions_enabled = widget_suggestions_enabled
+        self.widget_response_mode = normalize_widget_response_mode(widget_response_mode)
+        self.native_component_catalog = native_component_catalog or []
         self.custom_user_system_prompt = custom_user_system_prompt
         self.schema_factory = schema_factory or SchemaFactory()
         self._system_prompt = build_system_prompt(
@@ -610,15 +618,25 @@ Keep it brief and friendly."""
 
     @staticmethod
     def _sanitize_user_facing_kb_language(content: str, *, used_knowledge_base: bool) -> str:
+        def preserve_markdown_whitespace(value: str) -> str:
+            normalized = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+            lines = [line.rstrip() for line in normalized.split("\n")]
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            while lines and not lines[-1].strip():
+                lines.pop()
+            return "\n".join(lines).strip()
+
+        text = preserve_markdown_whitespace(content)
         if not used_knowledge_base:
-            return " ".join(content.split()).strip()
+            return text
 
         def replace_match(match: re.Match[str], replacement: str) -> str:
             if match.group(0)[:1].isupper():
                 return replacement[:1].upper() + replacement[1:]
             return replacement
 
-        sanitized = content
+        sanitized = text
         for source, replacement in KB_PHRASE_REPLACEMENTS:
             sanitized = re.sub(
                 rf"\b{re.escape(source)}\b",
@@ -626,7 +644,7 @@ Keep it brief and friendly."""
                 sanitized,
                 flags=re.IGNORECASE,
             )
-        return " ".join(sanitized.split()).strip()
+        return preserve_markdown_whitespace(sanitized)
 
     @staticmethod
     def _extract_conversation_for_suggestions(messages: list[BaseMessage]) -> str:
@@ -720,6 +738,13 @@ Keep it brief and friendly."""
             return []
         parsed = self._parse_json_array(str(response.content or ""))
         return self._sanitize_widget_suggestions(parsed, min_count=WIDGET_DYNAMIC_SUGGESTION_MIN_COUNT)
+
+    def _build_render_payload(self, response_text: str) -> dict[str, Any] | None:
+        return build_widget_render_payload(
+            response_text,
+            self.widget_response_mode,
+            native_components=self.native_component_catalog,
+        )
 
     def _build_frontend_recovery_note(self, result: ToolResultPayload) -> str | None:
         if result.status_code not in (207, 400, 404, 422, 500):
@@ -870,13 +895,17 @@ Keep it brief and friendly."""
                 runtime_messages.append(response)
 
                 if not response.tool_calls:
-                    final_response = self._sanitize_user_facing_kb_language(
-                        response.content or "",
-                        used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                    final_response = format_widget_markdown_response(
+                        self._sanitize_user_facing_kb_language(
+                            response.content or "",
+                            used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                        ),
+                        user_message=self._latest_user_text(user_message, conversation_history),
                     )
                     suggestions = await self._maybe_generate_widget_suggestions(messages, final_response)
                     return StepResult(
                         response=final_response,
+                        render_payload=self._build_render_payload(final_response),
                         suggestions=suggestions,
                         done=True,
                         messages=messages,
@@ -1085,12 +1114,22 @@ Keep it brief and friendly."""
             suggestions = await self._maybe_generate_widget_suggestions(messages, max_iter_response)
             return StepResult(
                 response=max_iter_response,
+                render_payload=self._build_render_payload(max_iter_response),
                 suggestions=suggestions,
                 done=True,
                 messages=messages,
                 responses_input_items=responses_input_items,
                 active_tool_ids=self.active_tool_ids
             )
+
+    @staticmethod
+    def _latest_user_text(user_message: str | None, conversation_history: list[dict[str, str]]) -> str:
+        if user_message:
+            return user_message
+        for message in reversed(conversation_history):
+            if message.get("role") == "user":
+                return message.get("content") or ""
+        return ""
 
     async def run(self, user_message: str, conversation_history: list[dict[str, str]]):
         self._sync_cache()
@@ -1113,9 +1152,12 @@ Keep it brief and friendly."""
             response = await llm_with_tools.ainvoke(messages, config={"tags": ["main-agent"]})
             messages.append(response)
             if not response.tool_calls:
-                return self._sanitize_user_facing_kb_language(
-                    response.content or "",
-                    used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                return format_widget_markdown_response(
+                    self._sanitize_user_facing_kb_language(
+                        response.content or "",
+                        used_knowledge_base=self._has_knowledge_base_tool_usage(messages),
+                    ),
+                    user_message=user_message,
                 )
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]

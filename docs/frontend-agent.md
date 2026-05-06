@@ -12,6 +12,54 @@ In addition, `backend` tool calls invoke customer-configured API endpoints. Tool
 
 In the Agents tab, the toggle for this behavior is labeled **Screen Autopilot**. It controls screen-level context and automated page actions (`read_page`, `find_elements`, `frontend`, `js_exec`) and does not require your defined frontend tools.
 
+## Dynamic output UI
+Widget replies support three response modes:
+
+- **Markdown**: assistant replies render as plain text or markdown.
+- **Warpy components**: the default for new agents. The backend attaches a validated `renderPayload` and the vanilla widget renders compact, responsive output components in the chat timeline.
+- **Native components**: the backend attaches a validated `renderPayload` for a customer-registered component key/version. The host app registers a renderer through the widget package or `window.warpy.registerComponents`.
+
+`messages.content` remains the complete markdown fallback in every mode. `messages.render_payload` is optional structured metadata for dynamic rendering. Invalid payloads, unsuitable content, missing native renderers, and Activity views for native components all fall back to the complete markdown content.
+
+Dynamic UI is output-only in v1. It must not introduce forms, destructive buttons, or extra action controls. Follow-up suggestions and approved tools remain the action surface.
+
+Warpy component payload:
+
+```json
+{
+  "kind": "warpy_components",
+  "version": 1,
+  "tree": [
+    {
+      "component": "summary_card",
+      "props": {
+        "title": "Invoice summary",
+        "body": "3 invoices are ready for review."
+      }
+    }
+  ],
+  "markdownFallback": "3 invoices are ready for review."
+}
+```
+
+Native component payload:
+
+```json
+{
+  "kind": "native_components",
+  "version": 1,
+  "componentKey": "invoice_summary",
+  "componentVersion": "1",
+  "props": {
+    "title": "Invoice summary",
+    "content": "3 invoices are ready for review."
+  },
+  "markdownFallback": "3 invoices are ready for review."
+}
+```
+
+Native component definitions live in `widget_ui_components` and are managed by `/widget-components`. Each definition must include a precise prop JSON schema, suitability guidance, constraints, and active status so the presentation planner can choose markdown when no component fully fits.
+
 ## Manual frontend tools under Features
 Features can now contain both backend and frontend tools:
 

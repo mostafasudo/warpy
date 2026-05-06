@@ -54,6 +54,8 @@ from ..services.widget_service import (
     save_widget_message,
     supersede_other_widget_runs,
 )
+from ..services.widget_dynamic_ui_service import normalize_widget_response_mode
+from ..services.widget_ui_component_service import list_widget_ui_components
 from ..services.conversation_actions_service import ToolCallForLog, record_screen_autopilot_action, record_widget_tool_results
 from ..services.widget_auth_service import WidgetJwtError, verify_widget_jwt
 from ..services.user_rate_limit_service import (
@@ -425,6 +427,20 @@ def build_logged_tool_calls(tool_calls: list) -> list[ToolCallForLog]:
 
 def build_widget_agent_runtime(session: Session, agent) -> WidgetAgentRuntime:
     executor_config = dict(build_agent_executor_config(agent))
+    executor_config["widget_response_mode"] = normalize_widget_response_mode(agent.widget_response_mode)
+    executor_config["native_component_catalog"] = [
+        {
+            "key": component.component_key,
+            "version": component.version,
+            "displayName": component.display_name,
+            "description": component.description,
+            "framework": component.framework,
+            "propsSchema": component.props_schema,
+            "suitability": component.suitability,
+            "constraints": component.constraints,
+        }
+        for component in list_widget_ui_components(session, agent.user_id, active_only=True)
+    ]
     executor_config["knowledge_base_enabled"] = (
         bool(executor_config.get("knowledge_base_enabled"))
         and has_retrievable_knowledge_sources(session, agent.user_id)
@@ -465,7 +481,13 @@ def build_widget_resume_response(
     response_done = done if done is not None else assistant_message is not None
     is_hidden_response = assistant_message is not None and assistant_message.role == "assistant_hidden"
     if assistant_message is not None:
-        messages.append(WidgetMessagePayload(role="assistant", content=assistant_message.content))
+        messages.append(
+            WidgetMessagePayload(
+                role="assistant",
+                content=assistant_message.content,
+                renderPayload=assistant_message.render_payload,
+            )
+        )
     return WidgetChatResponse(
         conversationId=conversation_id,
         requestId=request_id,
@@ -859,7 +881,13 @@ def persist_widget_result(
         result_input_items = _build_result_input_items(result)
         if result.done and result.response:
             if run.assistant_message_id is None:
-                assistant_message = save_widget_message(session, conversation_id, "assistant", result.response)
+                assistant_message = save_widget_message(
+                    session,
+                    conversation_id,
+                    "assistant",
+                    result.response,
+                    getattr(result, "render_payload", None),
+                )
                 run.assistant_message_id = assistant_message.id
             else:
                 log_info(
@@ -964,7 +992,22 @@ def mark_widget_run_failed(conversation_id: UUID | None, request_id: str | None,
 
 async def send_socket_json(websocket: WebSocket, send_lock: asyncio.Lock, payload: dict) -> None:
     async with send_lock:
-        await websocket.send_json(jsonable_encoder(payload))
+        await websocket.send_json(jsonable_encoder(_compact_widget_socket_payload(payload)))
+
+
+def _compact_widget_socket_payload(payload: dict) -> dict:
+    if payload.get("type") != "chat.response":
+        return payload
+    response = payload.get("response")
+    if not isinstance(response, dict):
+        return payload
+    messages = response.get("messages")
+    if not isinstance(messages, list):
+        return payload
+    for message in messages:
+        if isinstance(message, dict) and message.get("renderPayload") is None:
+            message.pop("renderPayload", None)
+    return payload
 
 
 async def keepalive_loop(websocket: WebSocket, send_lock: asyncio.Lock, stop_event: asyncio.Event) -> None:
@@ -1330,7 +1373,13 @@ async def widget_session(
             )
 
             if result.done and result.response:
-                response_messages.append(WidgetMessagePayload(role="assistant", content=result.response))
+                response_messages.append(
+                    WidgetMessagePayload(
+                        role="assistant",
+                        content=result.response,
+                        renderPayload=result.render_payload,
+                    )
+                )
                 response = WidgetChatResponse(
                     conversationId=conversation_id,
                     requestId=request_id,

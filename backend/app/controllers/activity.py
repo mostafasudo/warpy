@@ -203,7 +203,12 @@ def get_activity_conversation_detail_route(
             createdAt=conversation.created_at,
             updatedAt=conversation.updated_at,
             messages=[
-                ActivityMessage(role=message.role, content=message.content, createdAt=message.created_at)
+                ActivityMessage(
+                    role=message.role,
+                    content=message.content,
+                    renderPayload=message.render_payload,
+                    createdAt=message.created_at,
+                )
                 for message in messages
             ],
             nextMessageCursor=next_message_cursor,

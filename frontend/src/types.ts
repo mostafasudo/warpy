@@ -183,6 +183,45 @@ export type ApiKeyRevealResponse = {
 
 export type WidgetBehavior = "overlay" | "push";
 export type WidgetAppearanceMode = "infer" | "custom";
+export type WidgetResponseMode = "markdown" | "warpy_components" | "native_components";
+
+export type WidgetRenderPayload =
+  | {
+      kind: "warpy_components";
+      version: 1;
+      markdownFallback: string;
+      tree: Array<{ component: string; props: Record<string, unknown> }>;
+    }
+  | {
+      kind: "native_components";
+      version: 1;
+      markdownFallback: string;
+      componentKey: string;
+      componentVersion?: string | null;
+      props: Record<string, unknown>;
+    };
+
+export type WidgetUiComponentPayload = {
+  key: string;
+  version: string;
+  displayName: string;
+  description: string;
+  framework: "react" | "vue" | "angular" | "svelte" | "vanilla" | "script";
+  propsSchema: Record<string, unknown>;
+  suitability: string;
+  constraints: Record<string, unknown>;
+  active: boolean;
+};
+
+export type WidgetUiComponentResponse = WidgetUiComponentPayload & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WidgetUiComponentsResponse = {
+  items: WidgetUiComponentResponse[];
+};
 
 export type WidgetThemeColors = {
   text: string;
@@ -276,6 +315,7 @@ export type AgentWidgetConfigResponse = {
   widgetTitle: string;
   widgetIconUrl: string | null;
   widgetAppearanceMode: WidgetAppearanceMode;
+  widgetResponseMode: WidgetResponseMode;
   widgetTheme: WidgetTheme | null;
   widgetBehavior: WidgetBehavior;
   widgetEmptyTitle: string;
@@ -352,6 +392,7 @@ export type ActivityConversationsResponse = {
 export type ActivityMessage = {
   role: string;
   content: string;
+  renderPayload?: WidgetRenderPayload | null;
   createdAt: string;
 };
 

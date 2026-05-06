@@ -153,6 +153,7 @@ def test_widget_config_returns_headers(client: TestClient):
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetIconUrl"] is None
     assert body["widgetAppearanceMode"] == "infer"
+    assert body["widgetResponseMode"] == "warpy_components"
     assert body["widgetTheme"] is None
     assert body["widgetBehavior"] == "overlay"
     assert body["widgetEmptyTitle"] == "What would you like to do?"
@@ -173,6 +174,8 @@ def test_build_widget_agent_runtime_hides_knowledge_base_without_searchable_sour
         runtime = build_widget_agent_runtime(session, agent)
 
     assert runtime.executor_config["knowledge_base_enabled"] is False
+    assert runtime.executor_config["widget_response_mode"] == "warpy_components"
+    assert runtime.executor_config["native_component_catalog"] == []
 
 
 def test_build_widget_agent_runtime_enables_knowledge_base_when_searchable_source_exists():
