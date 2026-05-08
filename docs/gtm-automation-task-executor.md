@@ -135,6 +135,14 @@ When a task needs message context, use:
 
 Do not assume Apollo custom fields contain full GTM research context.
 
+## Duo-Sourced Copy Context
+
+For Duo-sourced leads, load `duo_message_context`, `duo_trigger_summary`, `decision_maker_verification`, and `role_authority_summary` from the manifest before writing or approving any recipient-facing copy.
+
+If a Duo-sourced task is missing this context and the lookup can be done safely, use Amplemarket or the Duo profile through Chrome CDP to inspect only the specific profile and suggested sequence fields needed. Capture compact inspiration only: angle, trigger, pain, proof cue, and useful phrasing. Do not paste full Duo suggested messages into the live transcript or local ledger.
+
+Duo suggested sequence copy is inspiration, not send-ready copy. Rewrite it using the `GTM.md` voice and the current Apollo sequence step. Override inherited Apollo task copy when it is generic, off-persona, missing the Duo trigger, over-polished, too salesy, or conflicts with Warpy copy rules. Never send Duo suggested copy as-is.
+
 ## Voice
 
 Recipient-facing copy follows `GTM.md`.
@@ -148,7 +156,7 @@ Key reminders:
 - lead with adoption, product usage, and users getting more done in the dashboard
 - mention support reduction only when the persona or trigger makes it natural
 
-If a live Apollo draft is off-strategy, rewrite it before sending.
+If a live Apollo draft is off-strategy, generic, missing the Duo trigger, or inconsistent with the verified persona, rewrite it before sending.
 
 ## Handoff And Safety
 
@@ -277,8 +285,9 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 - use one clear CTA
 - align the message with the sequence step and persona angle
 - pull trigger and proof context from local manifest first
-- send clean drafts as-is
-- polish only when the live task body is off-strategy
+- use compact Duo context as inspiration when present, then rewrite in Warpy voice
+- send clean drafts as-is only when they already match the verified trigger, persona, and `GTM.md` voice
+- override inherited Apollo copy when the live task body is off-strategy or missing required context
 
 ### LinkedIn Post Interaction
 
@@ -356,9 +365,10 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
    - re-check that no outbound touch has already been sent to the same contact in this run
    - read Apollo note, contact context, and sequence step
    - load matching manifest context
+   - for Duo-sourced leads, load compact Duo message context and decision-maker verification before copy work
    - check handoff, suppression, duplicate, and stage state
    - inspect LinkedIn or X only when needed for context, using Chrome CDP when any non-browser lookup cannot provide the needed context
-   - generate or edit the exact copy
+   - generate or edit the exact copy, rewriting any Duo-inspired or Apollo-inherited copy into `GTM.md` voice
    - write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>` before opening any approved GTM platform composer
    - if the recipient-safety ledger blocks, do not open the platform composer; write `skipped` with the block reason and continue
    - complete the eligible GTM task when safe
@@ -387,6 +397,7 @@ For each run, log:
 - Apollo/local state mismatches
 - links to profiles or posts acted on
 - exact copy used
+- Duo context used, missing, or overridden when relevant
 - Apollo due date/state for every acted task
 - Apollo sequence step and prior-step state for every acted task
 - ledger path and `completion_pending` items
@@ -404,6 +415,8 @@ A successful run:
 - never opens an approved GTM platform composer before a successful recipient-safety ledger claim
 - does not complete tasks that appear only after another task is completed in the same run
 - keeps copy aligned with `GTM.md`
+- uses Duo suggested-sequence context only as inspiration and never sends it verbatim
+- overrides inherited Apollo copy when it misses the verified Duo trigger, persona, or Warpy voice
 - avoids duplicate sends across retries
 - leaves replies and live conversations to the AE
 - updates Apollo task state and local ledger accurately

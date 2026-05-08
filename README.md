@@ -48,6 +48,8 @@ Live Chrome-session validation and automation use [docs/chrome-cdp.md](docs/chro
 
 GTM outbound task follow-through uses [docs/gtm-automation-task-executor.md](docs/gtm-automation-task-executor.md) and must claim recipient-visible work through the local recipient-safety ledger CLI, `scripts/gtm-task-guard.mjs`, before opening Apollo email, LinkedIn, X, or any other approved GTM platform composer. The ledger stores duplicate-prevention state under `/Users/levw/.codex/state/warpy-gtm/` and treats duplicate prevention as at-most-once.
 
+GTM lead sourcing uses [docs/gtm-automation-lead-builder.md](docs/gtm-automation-lead-builder.md). Duo Copilot suggestions must be verified for ICP and buyer authority before Apollo import, and Duo messaging context may only inspire rewritten Warpy-voice outreach.
+
 ## Landing page
 
 The marketing/landing site lives in the `landing/` submodule ([LevwTech/warpy-landing](https://github.com/LevwTech/warpy-landing)).

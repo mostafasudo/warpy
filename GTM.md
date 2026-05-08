@@ -134,6 +134,7 @@ Pipeline rules:
 - choose the best primary lead for the trigger and keep an adjacent lead available when useful
 - import the primary lead first and hold adjacent context locally until multithreading is actually useful
 - each accepted account needs a persona, trigger, pain hypothesis, proof point, `fit_score`, and `priority_tier`
+- Duo Copilot suggestions are high-signal inputs, not trusted leads. Verify account ICP fit and buyer authority before import; reject random SWEs, designers, junior ICs, unclear titles, or other non-buyer roles unless there is clear evidence they own the relevant Product, Support, CS/Growth, Engineering, or Founder decision.
 - use verified work email for email sequencing and do not send to generic aliases, personal free-mail, or risky guesses
 - LinkedIn is the main social context surface. X is useful only when the buyer is clearly active there
 - public LinkedIn engagement is likes only for now. Do not leave LinkedIn public comments. X/Twitter public comments are allowed when relevant, specific, and non-pitchy
