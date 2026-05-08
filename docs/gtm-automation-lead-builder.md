@@ -33,6 +33,7 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 - Local state: authoritative manifests and account-level control state
 - Local artifacts: Apollo import CSVs and audit CSVs
 - Apollo authenticated GTM browser workflow: import, verification, sequence enrollment, and adjacent import when multithreading is useful
+- Amplemarket Duo Copilot suggestions: first-priority candidate queue from manually configured Warpy ICP signals at `https://app.amplemarket.com/dashboard/duo`
 - Chrome CDP workflow for the user's authenticated GTM browser session: Apollo work, optional X lookup, and any Amplemarket step where direct MCP cannot complete the exact operation
 
 ## Run Concurrency Guard
@@ -78,6 +79,35 @@ Direct MCP is an acceleration path, not a blocker. For every approved GTM platfo
 
 Do not stop the run just because an MCP cannot perform a step. Use Chrome CDP for the live Amplemarket or Apollo UI when the browser can complete the work. Local manifests, CSVs, and audit artifacts remain local filesystem work.
 
+## Duo Copilot Priority Source
+
+Duo Copilot suggestions are the first candidate source for every Lead Builder run. They are a priority queue, not a bypass. Every Duo-sourced lead must still pass the same ICP scoring, Apollo exclusion, verified work email, import, sequence, manifest, and cleanup rules as conventionally sourced Amplemarket leads.
+
+At the start of the sourcing phase, open `https://app.amplemarket.com/dashboard/duo` through the Chrome CDP workflow and capture a compact suggestion queue. Capture only:
+
+- lead name, title, company, company domain or website, LinkedIn URL, and Amplemarket profile URL when visible
+- Duo signal name and signal type
+- short trigger summary from the visible recommendation reason, post, event, competitor, or thought-leader context
+- suggestion status and visible suggested date when available
+
+Do not bulk-read the Duo page, profile histories, full post bodies, large tables, screenshots, or hidden detail payloads into the live transcript. Write any needed audit detail to the run artifact directory and summarize only counts, accepted domains, rejected counts by reason, signal names, and blockers.
+
+Current manually configured Warpy ICP signals:
+
+- `Warpy ICP | dashboard adoption + in-app AI intent`
+- `Warpy ICP | Crow competitor engagement`
+- `Warpy ICP | SaaS product + CS event intent`
+- `Warpy ICP | PLG + AI product thought leaders`
+
+Duo priority handling:
+
+- Review Duo suggestions account-first before running broad Amplemarket searches.
+- Prefer the strongest accepted Duo suggestion per account as the primary lead.
+- Keep a real second owner as an adjacent lead only when the account warrants multithreading.
+- Import highest-fit Duo-sourced primaries first, then fill remaining capacity with the existing Amplemarket search flow.
+- If Duo has no usable suggestions, is stale, unavailable, or the UI cannot be reached safely, log the blocker and continue the existing Amplemarket MCP/CDP sourcing workflow.
+- Do not complete, dismiss, archive, or mutate Duo suggestions unless Amplemarket exposes a clearly safe "used" or "imported" state for that exact suggestion.
+
 ## Non-Blocking Operating Rule
 
 Keep the automation moving. Do not add backlog gates, schedule gates, arbitrary quotas, duplicate research loops, or tool-preference rules that stop the run when there is still useful sourcing, enrichment, artifact generation, import, or cleanup work to do.
@@ -105,6 +135,7 @@ Run twice on weekdays. Smaller batches reduce per-run MCP, browser, import, and 
 - Treat LinkedIn as the main identity and social context surface when available.
 - X is optional. Use it only when identity and buyer activity are clear.
 - Every accepted account should have persona, trigger, pain hypothesis, proof point, `fit_score`, and `priority_tier`.
+- Preserve Duo provenance for Duo-sourced leads so future runs can understand which signal created the opportunity.
 
 ## Persistent State Contract
 
@@ -121,6 +152,8 @@ Persistent state:
 The manifest index is keyed by `company_domain`, then `thread_role`. It should store:
 
 - lead identity and role
+- `source_channel`: `duo_copilot`, `amplemarket_search`, or another explicit source channel
+- Duo provenance when present: `duo_signal_name`, `duo_signal_type`, `duo_trigger_summary`, `duo_seen_at`, and `duo_profile_url`
 - latest manifest path and batch name
 - Apollo import and sequence status
 - `account_status`: `active`, `ae_owned`, `suppressed`, or `blocked`
@@ -164,6 +197,7 @@ Useful company filters:
 
 Useful trigger signals:
 
+- Duo Copilot suggestions from the configured Warpy ICP signals
 - complex dashboard, analytics, reporting, workflow, or platform language
 - product, support, onboarding, implementation, solutions engineering, or AI hiring
 - recent launches, partnerships, funding, or product expansion that strengthens ICP fit
@@ -225,6 +259,12 @@ The authoritative batch manifest should include:
 - `proof_point`
 - `fit_score`
 - `priority_tier`
+- `source_channel`
+- `duo_signal_name`
+- `duo_signal_type`
+- `duo_trigger_summary`
+- `duo_seen_at`
+- `duo_profile_url`
 - `batch_name`
 - `amplemarket_lead_list_id`
 - `apollo_import_status`
@@ -268,22 +308,25 @@ Amplemarket lead lists are temporary batch containers.
 
 1. Claim the run concurrency guard for `warpy-gtm-lead-builder`.
 2. Load `manifest-index.json` and Apollo exclusion context.
-3. Search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
-4. Review candidates account by account.
-5. Select primary and adjacent leads where useful.
-6. Enrich accepted leads and look up verified business emails for accepted primaries.
-7. Add optional X context only when confidence is high.
-8. Write trigger, pain hypothesis, proof point, fit score, and priority tier.
-9. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
-10. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
-11. Generate manifest and CSV artifacts.
-12. Apply the Lead Builder cap and import the highest-fit accepted primaries into Apollo.
-13. Verify imported contacts in Apollo.
-14. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
-15. Update the batch manifest and manifest index.
-16. Keep adjacent leads in local state for future multithreading.
-17. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
-18. Release the run concurrency guard before the final inbox report.
+3. Open Duo Copilot suggestions at `https://app.amplemarket.com/dashboard/duo` with Chrome CDP and build the compact Duo priority queue.
+4. Review Duo suggestions account by account against manifest, Apollo, suppression, ICP, and fit-score gates.
+5. Select accepted Duo primaries and adjacent leads where useful, preserving Duo provenance in local state.
+6. If accepted Duo primaries do not fill the run cap, search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
+7. Review non-Duo candidates account by account.
+8. Select additional primary and adjacent leads where useful.
+9. Enrich accepted leads and look up verified business emails for accepted primaries.
+10. Add optional X context only when confidence is high.
+11. Write trigger, pain hypothesis, proof point, fit score, priority tier, source channel, and Duo provenance when present.
+12. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
+13. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
+14. Generate manifest and CSV artifacts.
+15. Apply the Lead Builder cap and import the highest-fit Duo-sourced primaries first, then the highest-fit conventional Amplemarket primaries until the cap is reached.
+16. Verify imported contacts in Apollo.
+17. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
+18. Update the batch manifest and manifest index.
+19. Keep adjacent leads in local state for future multithreading.
+20. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
+21. Release the run concurrency guard before the final inbox report.
 
 ## Logging
 
@@ -291,6 +334,8 @@ For each run, log:
 
 - batch name
 - Amplemarket lead list id
+- Duo suggestions reviewed, accepted, rejected, and imported by signal
+- Duo blockers, stale-state notes, or UI access issues
 - accounts reviewed and accepted
 - primary leads enriched/imported
 - adjacent leads reserved
@@ -305,6 +350,7 @@ For each run, log:
 
 A successful run:
 
+- checks Duo Copilot suggestions first and imports the highest-fit Duo-sourced primaries before fallback-sourced leads
 - imports only ICP-fit, sequence-ready primary leads
 - respects the `6` target and `8` hard max for accepted primaries
 - preserves full GTM context locally
