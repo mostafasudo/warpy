@@ -10,8 +10,11 @@ const STORAGE_KEY = "cta_widget_state"
 const UI_STORAGE_KEY = "cta_widget_ui_state"
 const PAGE_PUSH_OFFSET_VAR = "--cta-widget-push-offset"
 const PAGE_PUSH_ACTIVE_ATTR = "data-cta-widget-push-active"
+const WIDGET_ENVIRONMENT_TOKEN = "__WARPY_DASHBOARD_ENVIRONMENT__"
 
-const widgetSource = fs.readFileSync(path.resolve(process.cwd(), "public/widget/agent.js"), "utf8")
+const widgetTemplate = fs.readFileSync(path.resolve(process.cwd(), "public/widget/agent.js"), "utf8")
+const renderWidgetSource = (environment: string | null = "local") =>
+  widgetTemplate.replaceAll(WIDGET_ENVIRONMENT_TOKEN, environment ?? "")
 
 type WidgetConfig = {
   actionsRemaining?: number
@@ -409,7 +412,7 @@ function assignRect(
 
 async function loadWidget(
   configOverrides: WidgetConfig = {},
-  options: { baseUrl?: string, mockConfigFetch?: boolean } = {}
+  options: { baseUrl?: string; mockConfigFetch?: boolean; environment?: string | null } = {}
 ): Promise<WidgetDom> {
   const config = createConfig(configOverrides)
   if (options.mockConfigFetch !== false) {
@@ -422,7 +425,7 @@ async function loadWidget(
   script.setAttribute("data-base-url", options.baseUrl ?? "http://localhost:8000")
   document.body.appendChild(script)
 
-  window.eval(widgetSource)
+  window.eval(renderWidgetSource(options.environment === undefined ? "local" : options.environment))
 
   const host = await waitFor(() => {
     const value = document.getElementById(WIDGET_CONTAINER_ID)
@@ -449,7 +452,7 @@ async function loadPreviewWidget(configOverrides: WidgetConfig = {}) {
     scene: "messages",
     colorScheme: "light",
   }
-  window.eval(widgetSource)
+  window.eval(renderWidgetSource())
   const host = await waitFor(() => {
     const value = document.getElementById(WIDGET_CONTAINER_ID)
     expect(value).not.toBeNull()
@@ -1696,7 +1699,31 @@ describe("widget desktop resize", () => {
     expect(readWidgetState().firstUnreadMessageId).toBeNull()
   })
 
-  it("keeps Warpy widget routes on the Warpy API even when a customer base URL is configured", async () => {
+  it.each([
+    ["missing", null],
+    ["production", "production"],
+    ["staging", "staging"],
+    ["unprocessed widget token", WIDGET_ENVIRONMENT_TOKEN],
+  ])("uses the production widget API when ENVIRONMENT is %s", async (_label, environment) => {
+    const config = createConfig()
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      expect(url).toBe(`https://api.warpy.ai/widget/config/${AGENT_ID}`)
+      return createJsonResponse(config)
+    })
+
+    await loadWidget({}, { mockConfigFetch: false, environment })
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        `https://api.warpy.ai/widget/config/${AGENT_ID}`,
+        expect.any(Object)
+      )
+    })
+  })
+
+  it("keeps Warpy widget routes on the local Warpy API when ENVIRONMENT is local", async () => {
     const config = createConfig()
 
     ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
@@ -1737,6 +1764,25 @@ describe("widget desktop resize", () => {
     await waitFor(() => {
       expect(MockWebSocket.instances).toHaveLength(1)
       expect(MockWebSocket.instances[0]?.url).toBe("ws://localhost:8000/widget/session")
+    })
+  })
+
+  it("keeps production Warpy widget routes separate from a customer's local dashboard host", async () => {
+    const config = createConfig()
+
+    ;(global.fetch as jest.Mock).mockImplementation(async (input) => {
+      const url = String(input)
+      expect(url).toBe(`https://api.warpy.ai/widget/config/${AGENT_ID}`)
+      return createJsonResponse(config)
+    })
+
+    await loadWidget({}, { baseUrl: "http://localhost:3000/api", mockConfigFetch: false, environment: null })
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        `https://api.warpy.ai/widget/config/${AGENT_ID}`,
+        expect.any(Object)
+      )
     })
   })
 

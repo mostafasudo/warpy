@@ -10,6 +10,7 @@
   const API_TIMEOUT = 30000;
   const API_URL = "http://localhost:8000";
   const PROD_API_URL = "https://api.warpy.ai";
+  const DASHBOARD_ENVIRONMENT = "__WARPY_DASHBOARD_ENVIRONMENT__";
   const LOCAL_PORT_OFFSET = 2827;
   const MARKED_SRC = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";
   const MARKED_INTEGRITY = "sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi";
@@ -858,9 +859,7 @@
       }
       // Warpy-managed widget routes always go to Warpy's API origin.
       // data-base-url is reserved for customer-owned backend calls only.
-      const host = window.location && window.location.hostname ? window.location.hostname : "";
-      const localHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
-      const isLocal = localHosts.has(host);
+      const isLocal = DASHBOARD_ENVIRONMENT === "local";
       if (!isLocal) return PROD_API_URL.replace(/\/$/, "");
       try {
         const scriptEl =
