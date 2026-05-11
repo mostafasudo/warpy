@@ -628,7 +628,7 @@ export const ConfigureWidgetPanelContent = () => {
                     title="Response mode"
                     description="Choose how assistant replies render inside the widget. Warpy components are responsive-first and stay visually quiet inside narrow panels."
                   >
-                    <div className="grid gap-3 lg:grid-cols-3">
+                    <div className="grid gap-3">
                       {WIDGET_RESPONSE_MODE_OPTIONS.map((option) => {
                         const Icon = option.icon
                         const selected = draft.widgetResponseMode === option.value
@@ -646,33 +646,48 @@ export const ConfigureWidgetPanelContent = () => {
                                   : current,
                               )
                             }
+                            aria-pressed={selected}
                             className={clsx(
-                              "rounded-2xl border px-4 py-4 text-left transition-colors",
+                              "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border px-4 py-4 text-left transition-colors",
                               selected
                                 ? "border-primary bg-primary/5 shadow-sm"
                                 : "border-border/70 bg-muted/10 hover:border-primary/40 hover:bg-muted/20",
                             )}
                           >
-                            <div className="flex items-start gap-3">
-                              <div
-                                className={clsx(
-                                  "flex h-10 w-10 items-center justify-center rounded-xl border",
-                                  selected
-                                    ? "border-primary/30 bg-primary/10 text-primary"
-                                    : "border-border/70 bg-background/80 text-muted-foreground",
-                                )}
-                              >
-                                <Icon className="h-4 w-4" />
-                              </div>
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-sm font-semibold">{option.title}</p>
-                                  {option.recommended ? <Badge variant="secondary">Recommended</Badge> : null}
-                                  {selected ? <Check className="h-4 w-4 text-primary" /> : null}
-                                </div>
-                                <p className="text-sm text-muted-foreground">{option.description}</p>
-                              </div>
+                            <div
+                              className={clsx(
+                                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
+                                selected
+                                  ? "border-primary/30 bg-primary/10 text-primary"
+                                  : "border-border/70 bg-background/80 text-muted-foreground",
+                              )}
+                            >
+                              <Icon className="h-4 w-4" />
                             </div>
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <p className="min-w-0 text-sm font-semibold leading-5">{option.title}</p>
+                                {option.recommended ? (
+                                  <Badge variant="secondary" className="shrink-0 px-2 py-0 text-[11px]">
+                                    Recommended
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <p className="max-w-2xl break-words text-sm leading-5 text-muted-foreground">
+                                {option.description}
+                              </p>
+                            </div>
+                            <span
+                              aria-hidden="true"
+                              className={clsx(
+                                "mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors",
+                                selected
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border/70 bg-background/70",
+                              )}
+                            >
+                              {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                            </span>
                           </button>
                         )
                       })}
