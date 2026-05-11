@@ -340,16 +340,16 @@ def build_integrate_warpy_markdown(openapi: dict) -> str:
     config_example = json.dumps(
         {
             "baseUrl": {
-                "local": "http://localhost:3000",
+                "local": "http://localhost:8000",
                 "production": "https://api.your-product.com",
             },
             "auth": {
                 "mode": "header",
-                "source": "cookies",
-                "key": "__session",
+                "source": "localStorage",
+                "key": "access_token",
                 "authType": "bearer",
             },
-            "sendCookiesWithRequests": True,
+            "sendCookiesWithRequests": False,
             "headers": {
                 "X-Tenant-Id": {
                     "source": "localStorage",
@@ -385,9 +385,40 @@ Warpy is an AI execution layer for B2B dashboards. It is not a generic chatbot. 
 
 All state-changing actions must use the same control-plane API the dashboard uses.
 
-## Start Here: Install The Widget First
+## Initial Setup Flow
 
-The first thing an agent should do is embed the widget into the host product. Do this before adding tools, because the widget is the runtime surface the end user will actually use.
+Set up Warpy in this order:
+
+1. Configure the API layer: local and production base URLs, authorization, cookie behavior, and any custom headers.
+2. Embed the widget into the host product so there is a real runtime surface to test.
+3. Configure backend and frontend tools against the embedded runtime.
+
+## Step 1: Configure The API Layer
+
+The first thing an agent should do is inspect the host codebase and determine how authenticated backend requests work:
+- local and production API base URLs
+- `Authorization` header source, if the host app uses token auth
+- browser cookie behavior, if the host app uses cookie auth
+- required tenant, workspace, or custom headers
+
+Then configure Warpy through `PUT /config`.
+
+### Auth Rules
+
+- If the host app uses an Authorization header, map it through `auth.mode = "header"`.
+- If the host app uses cookies, set `sendCookiesWithRequests = true`.
+- Additional fixed or mapped headers go in `headers`.
+- The agent must inspect the codebase and choose the right source instead of guessing.
+
+### Config Example
+
+```json""".rstrip(),
+        config_example,
+        """```
+
+## Step 2: Embed The Widget
+
+After API config exists, embed the widget into the host product. The widget is the runtime surface the end user will actually use, and it needs the selected environment base URL from the API config.
 
 ### React
 
@@ -463,6 +494,10 @@ const widget = mountWidget({
 ></script>
 ```
 
+## Step 3: Configure Backend And Frontend Tools
+
+After the widget is embedded, configure the backend and frontend tools the agent may use. Use the live widget runtime to validate that requests reach the configured base URL with the expected auth and headers, and that frontend handlers execute in the host app.
+
 ## Dynamic Widget UI
 
 Widget replies can render in three modes:
@@ -504,28 +539,6 @@ An agent should compare:
 - current Warpy component definitions from `/widget-components`
 
 The agent must detect new props, removed props, type changes, character limits, row/item limits, and suitability changes. It must explain the diff and ask for confirmation before calling `POST`, `PUT`, or `DELETE /widget-components`.
-
-## Authentication Setup
-
-After widget install, inspect the host codebase and determine how authenticated backend requests work:
-- `localStorage`
-- `sessionStorage`
-- browser cookies
-
-Then configure Warpy through `PUT /config`.
-
-### Auth Rules
-
-- If the host app uses an Authorization header, map it through `auth.mode = "header"`.
-- If the host app uses cookies, set `sendCookiesWithRequests = true`.
-- Additional fixed or mapped headers go in `headers`.
-- The agent must inspect the codebase and choose the right source instead of guessing.
-
-### Config Example
-
-```json""".rstrip(),
-        config_example,
-        """```
 
 ## Warpy API Key
 

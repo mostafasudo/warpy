@@ -43,7 +43,10 @@ def test_integrate_warpy_markdown_is_public_and_detailed(client: TestClient):
 
     assert "single source of truth for agents" in body
     assert "All state-changing actions must use the same control-plane API the dashboard uses." in body
-    assert "## Start Here: Install The Widget First" in body
+    assert "## Initial Setup Flow" in body
+    assert "## Step 1: Configure The API Layer" in body
+    assert "## Step 2: Embed The Widget" in body
+    assert "## Step 3: Configure Backend And Frontend Tools" in body
     assert "## Drift Detection Workflow" in body
     assert "`GET /api-key`" in body
     assert "`POST /api-key/rotate`" in body
