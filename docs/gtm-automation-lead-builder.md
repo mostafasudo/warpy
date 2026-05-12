@@ -111,7 +111,31 @@ Duo priority handling:
 - Keep a real second owner as an adjacent lead only when the account warrants multithreading.
 - Import highest-fit Duo-sourced primaries first, then fill remaining capacity with the existing Amplemarket search flow.
 - If Duo has no usable suggestions, is stale, unavailable, or the UI cannot be reached safely, log the blocker and continue the existing Amplemarket MCP/CDP sourcing workflow.
-- Do not complete, dismiss, archive, or mutate Duo suggestions unless Amplemarket exposes a clearly safe "used" or "imported" state for that exact suggestion.
+- After the local decision is recorded, dismiss reviewed Duo suggestions that are intentionally not picked up. Use only a clearly safe Amplemarket dismiss, pass, or not-interested action for that exact suggestion.
+- Do not dismiss unreviewed Duo suggestions, accepted primaries, locally reserved adjacents, or suggestions whose UI action is ambiguous. If dismissal cannot be reached safely, leave the suggestion in place and log a cleanup blocker.
+
+## Duo Dismissal Contract
+
+Duo suggestions that are reviewed but not selected should not be left in the active Duo queue when Amplemarket exposes a safe dismissal action. This keeps future Lead Builder runs focused on fresh suggestions instead of repeatedly re-reviewing known rejects.
+
+Before dismissing a Duo suggestion:
+
+- Write the compact review decision to the run artifact directory: lead identity, company/domain, visible profile link, Duo signal name/type, rejection or skip reason, reviewer decision, and timestamp.
+- Confirm the suggestion was reviewed in the current run and was not accepted as a primary or reserved as an adjacent.
+- Confirm the visible Amplemarket action is clearly a dismiss, pass, or not-interested action for that exact suggestion.
+
+After dismissal:
+
+- Record `duo_dismissal_status`, `duo_dismissed_at`, and the visible action label in the run artifact or manifest rejection summary.
+- Update the run checkpoint and heartbeat.
+- Summarize only dismissed counts by reason and signal in the live transcript.
+
+Never dismiss:
+
+- suggestions that were not opened or reviewed
+- buyer-fit suggestions held locally as adjacents
+- accepted Duo primaries waiting for enrichment, import, or Apollo verification
+- suggestions where the UI may complete, enroll, message, archive an unrelated item, or mutate a different recommendation
 
 ## Non-Blocking Operating Rule
 
@@ -323,22 +347,23 @@ Amplemarket lead lists are temporary batch containers.
 4. Review Duo suggestions account by account against manifest, Apollo, suppression, ICP, buyer-authority, and fit-score gates.
 5. Click into each promising Duo lead before acceptance, verify title seniority and decision ownership, and capture compact suggested-sequence inspiration as `duo_message_context` when available.
 6. Select accepted Duo primaries and adjacent leads where useful, preserving Duo provenance, decision-maker verification, role authority, and compact message context in local state.
-7. If accepted Duo primaries do not fill the run cap, search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
-8. Review non-Duo candidates account by account.
-9. Select additional primary and adjacent leads where useful.
-10. Enrich accepted leads and look up verified business emails for accepted primaries.
-11. Add optional X context only when confidence is high.
-12. Write trigger, pain hypothesis, proof point, fit score, priority tier, source channel, decision-maker verification, role authority, and Duo provenance/message context when present.
-13. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
-14. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
-15. Generate manifest and CSV artifacts.
-16. Apply the Lead Builder cap and import the highest-fit Duo-sourced primaries first, then the highest-fit conventional Amplemarket primaries until the cap is reached.
-17. Verify imported contacts in Apollo.
-18. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
-19. Update the batch manifest and manifest index.
-20. Keep adjacent leads in local state for future multithreading.
-21. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
-22. Release the run concurrency guard before the final inbox report.
+7. Record compact rejection or skip decisions for reviewed Duo suggestions that are not picked up, then dismiss those suggestions in Amplemarket when the exact suggestion exposes a safe dismiss/pass/not-interested action.
+8. If accepted Duo primaries do not fill the run cap, search people and companies with direct Amplemarket MCP, falling back to Chrome CDP when MCP cannot complete the exact search.
+9. Review non-Duo candidates account by account.
+10. Select additional primary and adjacent leads where useful.
+11. Enrich accepted leads and look up verified business emails for accepted primaries.
+12. Add optional X context only when confidence is high.
+13. Write trigger, pain hypothesis, proof point, fit score, priority tier, source channel, decision-maker verification, role authority, and Duo provenance/message context when present.
+14. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
+15. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
+16. Generate manifest and CSV artifacts.
+17. Apply the Lead Builder cap and import the highest-fit Duo-sourced primaries first, then the highest-fit conventional Amplemarket primaries until the cap is reached.
+18. Verify imported contacts in Apollo.
+19. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
+20. Update the batch manifest and manifest index.
+21. Keep adjacent leads in local state for future multithreading.
+22. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
+23. Release the run concurrency guard before the final inbox report.
 
 ## Logging
 
@@ -347,6 +372,7 @@ For each run, log:
 - batch name
 - Amplemarket lead list id
 - Duo suggestions reviewed, accepted, rejected, and imported by signal
+- Duo reviewed suggestions dismissed, dismissal blockers, and dismissal reasons by signal
 - Duo blockers, stale-state notes, or UI access issues
 - Duo decision-maker verification rejects and compact message-context capture counts
 - accounts reviewed and accepted
