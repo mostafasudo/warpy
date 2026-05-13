@@ -336,6 +336,10 @@ The lead builder may import contacts and enroll sequence-eligible primaries, but
 Amplemarket lead lists are temporary batch containers.
 
 - Delete the temporary Amplemarket list after local artifacts and Apollo state are safely recorded.
+- When the Amplemarket MCP does not expose a delete operation, use the authenticated Chrome CDP Amplemarket UI for cleanup instead of leaving the list behind.
+- For CDP cleanup, use only the checkpointed `amplemarket_lead_list_id` and neutral list name. Do not call `get_lead_list`, re-read list contents, or inspect lead rows after the local manifest exists.
+- In the Amplemarket UI, search or navigate to the exact temporary list, confirm both the visible name and checkpointed ID when available, then use only a clearly labeled delete/remove/archive action for that exact list. If the UI offers an ambiguous bulk action or another list could be affected, stop and log a blocker.
+- After deletion, verify through compact list metadata such as `list_lead_lists` or a visible UI absence check. Never verify cleanup by fetching full list contents.
 - If cleanup cannot be completed safely, leave the list in place and log the blocker.
 - The local manifest preserves the durable GTM context.
 
