@@ -46,7 +46,9 @@ First-run onboarding now lives in [docs/onboarding.md](docs/onboarding.md). New 
 
 Live Chrome-session validation and automation use [docs/chrome-cdp.md](docs/chrome-cdp.md). The direct `scripts/cdp.mjs` CLI keeps one shared Chrome debugging session alive so repeated browser actions do not keep forcing fresh approval prompts.
 
-GTM outbound task follow-through uses [docs/gtm-automation-task-executor.md](docs/gtm-automation-task-executor.md) and must claim recipient-visible work through the local recipient-safety ledger CLI, `scripts/gtm-task-guard.mjs`, before opening Apollo email, LinkedIn, X, or any other approved GTM platform composer. The ledger stores duplicate-prevention state under `/Users/levw/.codex/state/warpy-gtm/` and treats duplicate prevention as at-most-once.
+GTM outbound task follow-through uses [docs/gtm-automation-task-executor.md](docs/gtm-automation-task-executor.md) and must claim recipient-visible work through the local recipient-safety and copy-quality ledger CLI, `scripts/gtm-task-guard.mjs`, before opening Apollo email, LinkedIn, X, or any other approved GTM platform composer. The ledger stores duplicate-prevention state under `/Users/levw/.codex/state/warpy-gtm/`, treats duplicate prevention as at-most-once, and blocks unresolved placeholders, internal source labels, static Apollo template copy, missing email subject/body, and missing personalization evidence for message-bearing tasks.
+
+GTM automations can record only high-confidence, materially useful pipeline bugs or optimization opportunities through `scripts/gtm-improvement-log.mjs`. The improvement log lives under `/Users/levw/.codex/state/warpy-gtm/`, and the weekly review workflow is documented in [docs/gtm-automation-improvement-review.md](docs/gtm-automation-improvement-review.md).
 
 ## Landing page
 

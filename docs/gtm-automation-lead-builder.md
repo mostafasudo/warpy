@@ -35,6 +35,8 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 - Apollo authenticated GTM browser workflow: import, verification, sequence enrollment, and adjacent import when multithreading is useful
 - Amplemarket Duo Copilot suggestions: first-priority candidate queue from manually configured Warpy ICP signals at `https://app.amplemarket.com/dashboard/duo`
 - Chrome CDP workflow for the user's authenticated GTM browser session: Apollo work, optional X lookup, and any Amplemarket step where direct MCP cannot complete the exact operation
+- Local personalization packet: source of truth for per-lead outbound copy that the task executor refreshes and sends
+- Local improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl` through `scripts/gtm-improvement-log.mjs`
 
 ## Run Concurrency Guard
 
@@ -148,6 +150,26 @@ The only enforced throughput cap is:
 
 If fewer than 6 accepted primaries are available, use the smaller number. Do not fill the batch with weak accounts.
 
+## Improvement Logging
+
+At the end of the run, after side effects are checkpointed and before the final inbox report, decide whether the run exposed any obvious high-confidence issue or optimization worth recording.
+
+Use:
+
+```sh
+node scripts/gtm-improvement-log.mjs add --payload-file <improvement-note.json>
+```
+
+Record only high-signal notes that would materially improve autonomous interested-lead generation, such as:
+
+- recurring Duo, Amplemarket, Apollo, or Chrome CDP workflow blockers that reduce accepted lead volume
+- clear ICP, buyer-authority, or data-quality failure modes that let bad accounts through or reject good accounts
+- repeated import, sequence-enrollment, cleanup, or state-sync failures with a concrete fix
+- obvious personalization-packet gaps that prevent sequence-ready leads from enrolling
+- observability gaps that made safe autonomous recovery materially harder
+
+Do not record speculative ideas, low-confidence preferences, isolated platform slowness, or generic "improve sourcing" notes. If the fix is not clear and the impact is not material, leave it out.
+
 ## Cadence
 
 Run twice on weekdays. Smaller batches reduce per-run MCP, browser, import, and cleanup context while preserving comparable daily sourcing capacity.
@@ -165,6 +187,7 @@ Run twice on weekdays. Smaller batches reduce per-run MCP, browser, import, and 
 - X is optional. Use it only when identity and buyer activity are clear.
 - Every accepted account should have persona, trigger, pain hypothesis, proof point, `fit_score`, and `priority_tier`.
 - Every accepted lead should have `decision_maker_verification` and `role_authority_summary`; Duo-sourced leads must not be imported without them.
+- Every accepted primary lead should have a complete `personalization_packet` before Apollo enrollment. If copy cannot be generated safely, record `personalization_blocker` and do not enroll the lead until the blocker is resolved.
 - Preserve Duo provenance for Duo-sourced leads so future runs can understand which signal created the opportunity.
 
 ## Persistent State Contract
@@ -185,6 +208,8 @@ The manifest index is keyed by `company_domain`, then `thread_role`. It should s
 - `source_channel`: `duo_copilot`, `amplemarket_search`, or another explicit source channel
 - Duo provenance when present: `duo_signal_name`, `duo_signal_type`, `duo_trigger_summary`, `duo_seen_at`, and `duo_profile_url`
 - Duo copy context when present: `duo_message_context`, kept as compact rewritten notes rather than raw suggested sequence copy
+- `personalization_packet`, with generated per-step drafts and evidence references for the primary lead
+- `personalization_blocker` when a primary lead is otherwise accepted but should not be enrolled because safe personalized copy cannot be generated
 - buyer authority fields: `decision_maker_verification` and `role_authority_summary`
 - latest manifest path and batch name
 - Apollo import and sequence status
@@ -298,6 +323,8 @@ The authoritative batch manifest should include:
 - `duo_seen_at`
 - `duo_profile_url`
 - `duo_message_context`
+- `personalization_packet`
+- `personalization_blocker`
 - `decision_maker_verification`
 - `role_authority_summary`
 - `batch_name`
@@ -308,6 +335,35 @@ The authoritative batch manifest should include:
 - `apollo_account_stage`
 
 The local manifest is the GTM source of truth for research context. Do not force triggers, hypotheses, or notes into Apollo unless a dedicated free-text custom field has already been validated.
+
+## Personalization Packet Schema
+
+Every accepted primary lead must get a compact `personalization_packet` before sequence enrollment. The packet is the copy source of truth for all future recipient-visible touches. Apollo templates and Duo suggestions are inputs only.
+
+Required fields:
+
+- `core_idea`: the Warpy thesis for this account, centered on low feature adoption, repetitive support tickets, and an in-product AI assistant that lets users control the dashboard through chat plus dynamic UI
+- `lead_specific_observation`: the specific account/person trigger that makes this outreach relevant
+- `persona_angle`: the Product, Support, Technical, or CS/Growth angle for this lead
+- `proof_workflow`: one concrete workflow Warpy could handle inside the company's dashboard
+- `copy_source`: `duo_rewritten`, `research_generated`, or `executor_refreshed`
+- `generated_at`: ISO timestamp
+- `fresh_until`: ISO date or timestamp after which the executor should refresh the copy before sending
+- `evidence_references`: compact source notes or URLs used for the observation
+- `steps`: keyed drafts for sequence steps, such as `email_1`, `email_2`, `linkedin_connection`, `linkedin_dm`, `email_3`, `asset_send`, and `close_loop`
+
+Each message-bearing `steps` entry should include:
+
+- `channel`: `email`, `linkedin`, `x`, or `asset`
+- `sequence_step`: Apollo step number or short label
+- `subject`: required for email
+- `body`: required for email, DM, X reply, or non-blank connection note
+- `personalization_evidence`: the trigger or observation that justifies the copy
+- `copy_status`: `ready`, `needs_refresh`, or `blocked`
+
+Keep packet content compact. Store enough to regenerate and validate copy, not full Duo raw messages, bulky post bodies, screenshots, or long page extracts.
+
+Recipient-visible packet copy must strip internal sourcing labels. It is fine for `evidence_references` to mention Apollo, Amplemarket, or Duo as local provenance, but `subject`, `body`, LinkedIn messages, X copy, and asset notes must never say `Apollo profile`, `Amplemarket`, `Duo Copilot`, or similar internal source names.
 
 ## Apollo Import Contract
 
@@ -358,16 +414,19 @@ Amplemarket lead lists are temporary batch containers.
 11. Enrich accepted leads and look up verified business emails for accepted primaries.
 12. Add optional X context only when confidence is high.
 13. Write trigger, pain hypothesis, proof point, fit score, priority tier, source channel, decision-maker verification, role authority, and Duo provenance/message context when present.
-14. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
-15. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
-16. Generate manifest and CSV artifacts.
-17. Apply the Lead Builder cap and import the highest-fit Duo-sourced primaries first, then the highest-fit conventional Amplemarket primaries until the cap is reached.
-18. Verify imported contacts in Apollo.
-19. Enroll sequence-eligible primaries into `Warpy Founder-Led SDR Sequence`.
-20. Update the batch manifest and manifest index.
-21. Keep adjacent leads in local state for future multithreading.
-22. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
-23. Release the run concurrency guard before the final inbox report.
+14. Generate a `personalization_packet` for every accepted primary lead using the trigger, persona, proof workflow, and compact evidence. Use Duo suggested-sequence context only as inspiration, rewritten in `GTM.md` voice.
+15. If safe personalized copy cannot be generated, record `personalization_blocker`, skip Apollo enrollment for that lead, and keep processing other leads.
+16. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
+17. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
+18. Generate manifest and CSV artifacts.
+19. Apply the Lead Builder cap and import the highest-fit Duo-sourced primaries first, then the highest-fit conventional Amplemarket primaries until the cap is reached.
+20. Verify imported contacts in Apollo.
+21. Enroll only sequence-eligible primaries that have a ready `personalization_packet` into `Warpy Founder-Led SDR Sequence`.
+22. Update the batch manifest and manifest index.
+23. Keep adjacent leads in local state for future multithreading.
+24. Delete the temporary Amplemarket list when safe, falling back to Chrome CDP if direct MCP does not support or complete deletion. Do not call `get_lead_list` as part of cleanup.
+25. Add improvement-log notes only for obvious high-impact bugs or optimizations found during the run.
+26. Release the run concurrency guard before the final inbox report.
 
 ## Logging
 
@@ -387,7 +446,9 @@ For each run, log:
 - accounts excluded for Apollo state, suppression, duplicates, or unverified email
 - contacts with X found
 - Apollo import and sequence enrollment results
+- personalization packets generated, refreshed, blocked, and skipped by reason
 - cleanup status and follow-up blockers
+- improvement-log notes recorded, deduped, or intentionally omitted
 
 ## Success Criteria
 
@@ -396,9 +457,12 @@ A successful run:
 - checks Duo Copilot suggestions first and imports the highest-fit Duo-sourced primaries before fallback-sourced leads
 - imports only ICP-fit, buyer-verified, sequence-ready primary leads
 - preserves compact Duo messaging context without storing or sending raw Duo suggested copy
+- generates ready per-lead personalization packets before Apollo enrollment
+- skips Apollo enrollment when a primary lead lacks safe personalized copy
 - respects the `6` target and `8` hard max for accepted primaries
 - preserves full GTM context locally
 - keeps adjacent leads available without prematurely sequencing them
 - verifies Apollo import and enrollment state
 - avoids duplicates and AE-owned accounts
 - cleans up temporary Amplemarket transport lists when safe
+- records only high-confidence improvement notes, and only when the run exposed a material bug or optimization

@@ -39,6 +39,8 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 - Recipient-safety ledger CLI: `scripts/gtm-task-guard.mjs`
 - Recipient-safety ledger index: `/Users/levw/.codex/state/warpy-gtm/task-guard-index.json`
 - Recipient-safety ledger claims: `/Users/levw/.codex/state/warpy-gtm/task-guard-claims/`
+- Copy-quality gate: the same `scripts/gtm-task-guard.mjs claim` call blocks unresolved placeholders, static Apollo templates, missing email subject/body, and missing personalization evidence before any composer opens
+- Local improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl` through `scripts/gtm-improvement-log.mjs`
 
 ## Run Concurrency Guard
 
@@ -91,6 +93,26 @@ This applies to read-only context lookup as well as recipient-facing GTM platfor
 
 Keep processing eligible Apollo tasks until the due-today and overdue queue has no safe work left. Do not introduce arbitrary per-channel, daily-volume, deliverability, or throughput caps beyond the due-window and recipient safety gates.
 
+## Improvement Logging
+
+At the end of the run, after ledger/checkpoint state is written and before the final inbox report, decide whether the run exposed any obvious high-confidence issue or optimization worth recording.
+
+Use:
+
+```sh
+node scripts/gtm-improvement-log.mjs add --payload-file <improvement-note.json>
+```
+
+Record only high-signal notes that would materially improve autonomous interested-lead generation, such as:
+
+- a recurring Apollo, LinkedIn, X, or Chrome CDP workflow blocker with a concrete fix
+- repeated due-date, sequence-order, or completion-pending failure patterns that reduce autonomous throughput
+- copy-quality or personalization-packet gaps that block otherwise eligible recipient-visible tasks
+- state mismatches between Apollo, the manifest, and local ledgers that create safety risk or unnecessary skips
+- observability gaps that made it materially harder to prove whether an action was sent, completed, skipped, or safe to retry
+
+Do not record speculative ideas, low-confidence preferences, isolated site slowness, or generic "make task execution better" notes. If the fix is not clear and the impact is not material, leave it out.
+
 ## Due-Window Enforcement
 
 The executor must preserve Apollo sequence timing and per-contact sequence order. A task is eligible only when all of these are true:
@@ -128,20 +150,42 @@ If a specific eligible task is unsafe, unclear, duplicate-prone, or missing cont
 When a task needs message context, use:
 
 1. `manifest-index.json` and the referenced batch manifest
-2. `GTM.md`
-3. the live Apollo sequence step and task note
-4. direct Amplemarket read-only lookup when needed, limited to the specific person/company fields required, with Chrome CDP fallback when MCP lookup is limited, bulky, or failing
-5. live LinkedIn or X context
+2. the lead's `personalization_packet`
+3. `GTM.md`
+4. the live Apollo sequence step and task note
+5. direct Amplemarket read-only lookup when needed, limited to the specific person/company fields required, with Chrome CDP fallback when MCP lookup is limited, bulky, or failing
+6. live LinkedIn or X context
 
 Do not assume Apollo custom fields contain full GTM research context.
 
+## Personalization Packet
+
+The executor sends from the local `personalization_packet`, not from Apollo's static template body. Apollo controls task timing and step order only.
+
+For every recipient-visible task:
+
+- load `personalization_packet`, `trigger`, `pain_hypothesis`, `proof_point`, `decision_maker_verification`, and `role_authority_summary`
+- map the Apollo task to the matching packet step, such as `email_1`, `email_2`, `linkedin_connection`, `linkedin_dm`, `email_3`, `asset_send`, or `close_loop`
+- verify `copy_status: "ready"` and that `fresh_until` has not passed
+- refresh the step copy as `copy_source: "executor_refreshed"` when packet copy is stale, missing, generic, off-step, or inconsistent with fresh LinkedIn/X/Apollo context
+- include the final subject/body or message, `personalization_packet`, `personalization_evidence`, and `copy_source` in the audit record before calling `scripts/gtm-task-guard.mjs claim`
+- never send copy that still contains `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, or the static Apollo sequence template with fields swapped
+- never send copy that exposes internal provenance labels such as `Apollo profile`, `Amplemarket`, `Duo Copilot`, `Duo Crow competitor`, or `Structured Amplemarket search`; rewrite those into natural recipient-safe observations first
+
+Valid no-copy cases are explicit:
+
+- `no_copy_mode: "linkedin_like_only"` for LinkedIn like-only public engagement
+- `no_copy_mode: "blank_connection_request"` for a blank LinkedIn connection request
+
+Every other outbound action needs final recipient-visible copy and personalization evidence before the guard claim.
+
 ## Duo-Sourced Copy Context
 
-For Duo-sourced leads, load `duo_message_context`, `duo_trigger_summary`, `decision_maker_verification`, and `role_authority_summary` from the manifest before writing or approving any recipient-facing copy.
+For Duo-sourced leads, load `duo_message_context`, `duo_trigger_summary`, `decision_maker_verification`, `role_authority_summary`, and `personalization_packet` from the manifest before writing or approving any recipient-facing copy.
 
 If a Duo-sourced task is missing this context and the lookup can be done safely, use Amplemarket or the Duo profile through Chrome CDP to inspect only the specific profile and suggested sequence fields needed. Capture compact inspiration only: angle, trigger, pain, proof cue, and useful phrasing. Do not paste full Duo suggested messages into the live transcript or local ledger.
 
-Duo suggested sequence copy is inspiration, not send-ready copy. Rewrite it using the `GTM.md` voice and the current Apollo sequence step. Override inherited Apollo task copy when it is generic, off-persona, missing the Duo trigger, over-polished, too salesy, or conflicts with Warpy copy rules. Never send Duo suggested copy as-is.
+Duo suggested sequence copy is inspiration, not send-ready copy. Rewrite it using the `GTM.md` voice and the current Apollo sequence step. Override inherited Apollo task copy when it is generic, off-persona, missing the Duo trigger, over-polished, too salesy, or conflicts with Warpy copy rules. Never send Duo suggested copy as-is. If Duo context exists but no packet exists, generate or refresh the packet before any recipient-visible action.
 
 ## Voice
 
@@ -153,10 +197,10 @@ Key reminders:
 - short, informal, and human
 - no em dashes or semicolons
 - no corporate polish or generic sales language
-- lead with adoption, product usage, and users getting more done in the dashboard
-- mention support reduction only when the persona or trigger makes it natural
+- lead with low feature adoption, product usage, and users controlling the dashboard through chat plus dynamic UI
+- mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets
 
-If a live Apollo draft is off-strategy, generic, missing the Duo trigger, or inconsistent with the verified persona, rewrite it before sending.
+If a live Apollo draft is off-strategy, generic, missing the verified trigger, or inconsistent with the verified persona, rewrite it before sending. If it cannot be rewritten safely, skip the task with a copy blocker.
 
 ## Handoff And Safety
 
@@ -194,6 +238,15 @@ The audit record must include:
 - `step_type`
 - `contact_email`, `linkedin_url`, `x_url`, `apollo_contact_id`, or `contact_name` plus `account_domain`
 
+For message-bearing actions, the audit record must also include:
+
+- `subject` for email
+- `body`, `message`, `copy`, or an equivalent final recipient-visible text field
+- `personalization_evidence`, `lead_specific_observation`, `trigger`, or `personalization_packet`
+- `copy_source`: `duo_rewritten`, `research_generated`, or `executor_refreshed`
+
+For valid no-copy actions, include `no_copy_mode: "linkedin_like_only"` or `no_copy_mode: "blank_connection_request"` instead of body copy.
+
 The recipient-safety ledger normalizes:
 
 - `email` and `apollo_email` into the same `email` family
@@ -209,6 +262,7 @@ The recipient-safety ledger blocks when any of these are true:
 - the same normalized recipient already has an outbound touch claimed in the same executor run
 - the same normalized recipient already received an email or LinkedIn DM on the same local date
 - a prior `completion_pending` record exists, in which case only Apollo completion may be retried
+- message copy is missing, generic, static, unresolved, or lacks personalization evidence
 
 If the recipient-safety ledger returns `blocked`, do not open or touch the approved GTM platform composer. Write a `skipped` ledger entry with the block reason and continue. If it returns `claimed`, complete the eligible GTM task at most once, then mark ledger state after the result:
 
@@ -232,6 +286,8 @@ Use the audit mode to inspect duplicate-prone history without mutating Apollo or
 node scripts/gtm-task-guard.mjs audit
 ```
 
+Audit mode also reports historic placeholder and static-template sends through `copy_quality_issue_records`, `copy_quality_issue_counts`, and `copy_quality_issues`.
+
 Ledger fields:
 
 - `action_key`
@@ -248,6 +304,12 @@ Ledger fields:
 - `guard_claim_keys` (legacy field name for recipient-safety ledger claim keys)
 - `guard_block_reason` (legacy field name for recipient-safety ledger block reason)
 - `copy_hash`
+- `subject`
+- `body`, `message`, `copy_used`, `exact_copy`, `planned_copy`, or `intended_copy`
+- `copy_source`
+- `personalization_packet`
+- `personalization_evidence`
+- `no_copy_mode`
 - `status`
 - `sent_at`
 - `apollo_completed_at`
@@ -285,8 +347,9 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 - use one clear CTA
 - align the message with the sequence step and persona angle
 - pull trigger and proof context from local manifest first
+- use the matching `personalization_packet` step as the starting point
 - use compact Duo context as inspiration when present, then rewrite in Warpy voice
-- send clean drafts as-is only when they already match the verified trigger, persona, and `GTM.md` voice
+- send clean drafts as-is only when they already match the verified trigger, persona, `personalization_packet`, and `GTM.md` voice
 - override inherited Apollo copy when the live task body is off-strategy or missing required context
 
 ### LinkedIn Post Interaction
@@ -365,12 +428,14 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
    - re-check that no outbound touch has already been sent to the same contact in this run
    - read Apollo note, contact context, and sequence step
    - load matching manifest context
+   - load the `personalization_packet` and map it to the current Apollo step
    - for Duo-sourced leads, load compact Duo message context and decision-maker verification before copy work
    - check handoff, suppression, duplicate, and stage state
    - inspect LinkedIn or X only when needed for context, using Chrome CDP when any non-browser lookup cannot provide the needed context
-   - generate or edit the exact copy, rewriting any Duo-inspired or Apollo-inherited copy into `GTM.md` voice
+   - generate, refresh, or edit the exact copy, rewriting any Duo-inspired or Apollo-inherited copy into `GTM.md` voice
+   - if a message-bearing task cannot produce final personalized copy, skip before opening any composer with a copy-specific blocker
    - write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>` before opening any approved GTM platform composer
-   - if the recipient-safety ledger blocks, do not open the platform composer; write `skipped` with the block reason and continue
+   - if the recipient-safety or copy-quality ledger blocks, do not open the platform composer; write `skipped` with the block reason and continue
    - complete the eligible GTM task when safe
    - mark ledger status `sent` immediately after the recipient-visible platform step succeeds
    - write `sent` immediately after the recipient-visible platform step succeeds
@@ -379,7 +444,8 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
    - write `completed` only after Apollo confirms completion
 10. If Apollo completion fails after the recipient-visible platform step succeeds, mark ledger status `completion_pending`, write `completion_pending`, and retry only completion next time.
 11. If a task cannot be completed safely, log the reason and keep moving.
-12. Release the run concurrency guard before the final inbox report.
+12. Add improvement-log notes only for obvious high-impact bugs or optimizations found during the run.
+13. Release the run concurrency guard before the final inbox report.
 
 ## Logging
 
@@ -397,11 +463,14 @@ For each run, log:
 - Apollo/local state mismatches
 - links to profiles or posts acted on
 - exact copy used
+- personalization packets loaded, refreshed, missing, stale, or blocked
+- copy-quality guard blocks
 - Duo context used, missing, or overridden when relevant
 - Apollo due date/state for every acted task
 - Apollo sequence step and prior-step state for every acted task
 - ledger path and `completion_pending` items
 - recipient-safety ledger index path and any `claimed` items that did not reach `sent`, `completion_pending`, or `completed`
+- improvement-log notes recorded, deduped, or intentionally omitted
 
 ## Success Criteria
 
@@ -413,11 +482,15 @@ A successful run:
 - never completes a later sequence step before earlier steps for the same contact are completed, safely terminal-skipped, or no longer applicable
 - never sends two outbound touches to the same contact in one executor run
 - never opens an approved GTM platform composer before a successful recipient-safety ledger claim
+- never opens an approved GTM platform composer before passing the copy-quality guard
 - does not complete tasks that appear only after another task is completed in the same run
 - keeps copy aligned with `GTM.md`
+- uses per-lead `personalization_packet` copy or refreshes it before sending
+- blocks unresolved placeholders and static Apollo templates before any send path
 - uses Duo suggested-sequence context only as inspiration and never sends it verbatim
 - overrides inherited Apollo copy when it misses the verified Duo trigger, persona, or Warpy voice
 - avoids duplicate sends across retries
 - leaves replies and live conversations to the AE
 - updates Apollo task state and local ledger accurately
 - records blockers without stopping unrelated tasks
+- records only high-confidence improvement notes, and only when the run exposed a material bug or optimization

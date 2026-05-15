@@ -15,6 +15,7 @@ Automation source docs:
 - [Lead Builder](docs/gtm-automation-lead-builder.md)
 - [Task Executor](docs/gtm-automation-task-executor.md)
 - [Marketing Engine](docs/gtm-automation-marketing-engine.md)
+- [Improvement Review](docs/gtm-automation-improvement-review.md)
 
 ## Chrome CDP Fallback Rule
 
@@ -26,7 +27,7 @@ Do this before declaring the step blocked. This applies to Amplemarket, Apollo, 
 
 ## Automation Reliability And Context Budget
 
-All three Codex GTM automations must finish with a compact live transcript. Long-running GTM work should store detailed state on disk and keep only decisions, counts, artifact paths, and blockers in the model context.
+Codex GTM automations must finish with a compact live transcript. Long-running GTM work should store detailed state on disk and keep only decisions, counts, artifact paths, and blockers in the model context.
 
 Run guard claim commands should use the shared two-hour stale window unless a workflow doc explicitly overrides it:
 
@@ -126,7 +127,9 @@ Amplemarket is the sourcing and enrichment layer. Codex automations move clean l
 
 The task executor must preserve Apollo sequence timing and per-contact step order. It may complete only Apollo tasks from the Warpy sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before a recipient-visible GTM step, skip the task and log the blocker. For a given contact, never complete a later sequence step until all earlier Apollo sequence steps for that contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo. Build the eligible queue once at run start; do not complete tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
 
-Before opening any Apollo email, LinkedIn, X, or other approved GTM platform composer, the task executor must write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>`. This local recipient-safety ledger is the duplicate-prevention boundary. If it blocks the claim, skip without touching the platform composer. `copy_hash` is audit metadata only and must never be used for duplicate prevention. Existing `sent`, `completion_pending`, `completed`, or `claimed` ledger state wins over Apollo backlog pressure. A missed touch is acceptable; a duplicate email, DM, connection request, or public social touch is not.
+Before opening any Apollo email, LinkedIn, X, or other approved GTM platform composer, the task executor must write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>`. This local recipient-safety ledger is the duplicate-prevention and copy-quality boundary. If it blocks the claim, skip without touching the platform composer. `copy_hash` is audit metadata only and must never be used for duplicate prevention. Existing `sent`, `completion_pending`, `completed`, or `claimed` ledger state wins over Apollo backlog pressure. A missed touch is acceptable; a duplicate email, DM, connection request, public social touch, unresolved placeholder, or static Apollo-template send is not.
+
+Every recipient-visible message must be hyper-personalized for the specific lead. Apollo sequence templates are cadence scaffolding only, never the source of truth for final copy. The shared core idea is consistent: Warpy helps B2B dashboards with low feature adoption and repetitive support tickets by embedding an in-product AI assistant that lets users control the app through chat and dynamic UI, using only approved actions. The actual subject, body, LinkedIn note, DM, X reply, or asset note must be unique to the person and account, using that lead's trigger, persona angle, dashboard/workflow context, and proof workflow. Literal placeholders such as `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, or internal sourcing labels like `Amplemarket`, `Apollo profile`, or `Duo Copilot` are terminal blockers.
 
 Pipeline rules:
 
@@ -134,6 +137,7 @@ Pipeline rules:
 - choose the best primary lead for the trigger and keep an adjacent lead available when useful
 - import the primary lead first and hold adjacent context locally until multithreading is actually useful
 - each accepted account needs a persona, trigger, pain hypothesis, proof point, `fit_score`, and `priority_tier`
+- each accepted primary lead needs a `personalization_packet` before Apollo sequence enrollment, or a recorded blocker explaining why copy cannot be generated yet
 - Duo Copilot suggestions are high-signal inputs, not trusted leads. Verify account ICP fit and buyer authority before import; reject random SWEs, designers, junior ICs, unclear titles, or other non-buyer roles unless there is clear evidence they own the relevant Product, Support, CS/Growth, Engineering, or Founder decision. After recording the local decision, dismiss reviewed Duo suggestions that are intentionally not picked up, using only a clearly safe Amplemarket dismiss/not-interested action for that exact suggestion.
 - use verified work email for email sequencing and do not send to generic aliases, personal free-mail, or risky guesses
 - LinkedIn is the main social context surface. X is useful only when the buyer is clearly active there
@@ -163,7 +167,9 @@ Pick the best-fit primary lead first. Use the adjacent lead only when the accoun
 | 17 | Email | Primary or adjacent | Pure value touch. No hard CTA. |
 | 21 | Email | Primary | Polite close-the-loop email. |
 
-Every touch should add a new angle. Lead with dashboard adoption and product usage. Mention support reduction only when the persona or trigger makes it the natural hook.
+Every touch should add a new angle. Lead with dashboard adoption, product usage, and users controlling the product through chat plus dynamic UI. Mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets.
+
+For each lead, keep messages short and straightforward while varying the observation, proof workflow, and CTA by step. Follow-ups may reuse the same account thesis, but they must not reuse a static template body with only names or company fields swapped.
 
 ## GTM State
 
@@ -171,12 +177,48 @@ Sales automation state:
 
 - persistent state: `/Users/levw/.codex/state/warpy-gtm/`
 - temporary artifacts: `/Users/levw/.codex/tmp/warpy-gtm/`
+- improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl`
+- improvement index: `/Users/levw/.codex/state/warpy-gtm/improvement-log-index.json`
 
 Marketing automation state:
 
 - persistent state: `/Users/levw/.codex/state/warpy-marketing-gtm/`
 
 Amplemarket lead lists are temporary transport objects. Their names must stay neutral and must not include `Warpy`. Delete temporary lists after local artifacts and Apollo import state are safely recorded.
+
+## Self-Improving Pipeline
+
+The Lead Builder and Task Executor should record only obvious, high-confidence issues or improvements that materially affect the goal: generating interested leads while staying autonomous, safe, and high-quality.
+
+Use the local improvement log CLI:
+
+```sh
+node scripts/gtm-improvement-log.mjs add --payload-file /path/to/improvement-note.json
+node scripts/gtm-improvement-log.mjs report --days 90
+node scripts/gtm-improvement-log.mjs resolve --fingerprint <fingerprint> --resolution-note "fixed in ..."
+```
+
+Record a note only when the run found a clear bug, recurring blocker, state mismatch, copy-quality failure mode, platform workflow friction, or obvious optimization that can improve interested-lead generation, autonomy, safety, deliverability, data quality, copy quality, throughput, or platform reliability.
+
+Do not log speculative ideas, vague preferences, one-off friction without clear impact, "could be nicer" cleanup, or generic observations that would not change pipeline outcomes. Missing a note is better than polluting the improvement backlog.
+
+Improvement note payloads must include:
+
+- `source_automation`: `warpy-gtm-lead-builder` or `warpy-gtm-task-executor`
+- `category`: `bug`, `optimization`, `data_quality`, `copy_quality`, `platform_reliability`, `observability`, or `process`
+- `priority`: `p1`, `p2`, or `p3`
+- `impact_area`: `interested_leads`, `autonomy`, `safety`, `copy_quality`, `data_quality`, `deliverability`, `throughput`, or `platform_reliability`
+- `confidence`: `high`
+- `title`, `observation`, `impact_on_goal`, `suggested_fix`
+- optional compact `evidence`, `artifact_paths`, and `platform_refs`
+
+Priority definitions:
+
+- `p1`: blocks safe autonomy, risks duplicate/bad sends, or materially prevents interested-lead generation
+- `p2`: recurring blocker or clear optimization that would improve run completion, copy quality, fit quality, or platform reliability
+- `p3`: smaller but still obvious improvement with a concrete fix and clear expected payoff
+
+The weekly improvement review automation reads the report, clusters related notes, and creates a focused optimization plan. It should usually pick at most three high-leverage fixes. It should not turn every logged note into immediate implementation work.
 
 ## Marketing Engine
 

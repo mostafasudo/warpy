@@ -19,6 +19,72 @@ const OUTBOUND_FAMILIES = new Set([
 const DEFAULT_STATE_DIR = resolve(homedir(), '.codex/state/warpy-gtm');
 const INDEX_FILE = 'task-guard-index.json';
 const CLAIM_DIR = 'task-guard-claims';
+const NO_COPY_MODES = new Set(['linkedin_like_only', 'blank_connection_request']);
+const MESSAGE_FAMILIES = new Set(['email', 'linkedin_dm', 'x_touch', 'other_outbound']);
+const UNRESOLVED_PLACEHOLDER_PATTERN = /(\[(?:first name|last name|trigger|company|company name|title|persona|pain|proof|workflow|observation)\]|\{\{\s*[^}]+\s*\}\})/i;
+const INTERNAL_SOURCE_LABEL_PATTERN = /\b(?:apollo profile|amplemarket|structured amplemarket|duo crow competitor|duo saas event|duo copilot|crow competitor)\b/i;
+const STATIC_TEMPLATE_PHRASE_SETS = [
+  [
+    'in complex dashboards most users only use a small slice',
+    'dashboard filter navigate and take the next approved action',
+    'want me to send a quick breakdown',
+  ],
+  [
+    'this usually shows up in one of 3 ways',
+    'users only use a small slice of the product',
+    'new users stall before value',
+  ],
+  [
+    'one concrete example',
+    'a user types what they need in plain english',
+    'want me to map one workflow',
+  ],
+  [
+    'the fastest places to test something like this are usually the same 3',
+    'features users rarely find on their own',
+    'repeat how do i do this questions',
+  ],
+  [
+    'seems like this is either not a priority right now or i missed the mark',
+    'if helping more users get more out of',
+    'happy to send over a quick breakdown',
+  ],
+  [
+    'thanks for connecting noticed',
+    'happy to send a quick breakdown of where chat could help users do more in',
+    'dashboard if useful',
+  ],
+  [
+    'noticed a pattern in complex b2b dashboards',
+    'users still miss key workflows and support keeps getting the same how do i do this tickets',
+    'warpy adds an in product ai assistant',
+  ],
+  [
+    'when users cannot find the right feature or workflow',
+    'low adoption slow onboarding and more support tickets',
+    'making the existing dashboard ai native',
+  ],
+  [
+    'thanks for connecting i keep seeing the same thing in complex b2b dashboards',
+    'users miss deep features then support gets the how do i do this tickets',
+    'in product ai assistant could help if useful',
+  ],
+  [
+    'a user asks the app to do the job in plain english',
+    'opens the right view shows the relevant dynamic ui',
+    'lift feature adoption and cut repetitive support tickets',
+  ],
+  [
+    'best places to test an in product ai assistant are usually',
+    'setup or reporting flows that create support tickets',
+    'users know the job but not the path through the dashboard',
+  ],
+  [
+    'complex dashboards often have the same hidden cost',
+    'users only adopt a slice of the product',
+    'making the app feel ai native through chat and dynamic ui',
+  ],
+];
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -30,6 +96,10 @@ function normalizeString(value) {
 
 function normalizeToken(value) {
   return normalizeString(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function normalizeCopy(value) {
+  return normalizeString(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function normalizeEmail(value) {
@@ -105,6 +175,176 @@ function normalizeActionFamily(payload) {
 
 function isOutboundFamily(family) {
   return OUTBOUND_FAMILIES.has(family);
+}
+
+function parseMaybeJson(value) {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function copyValueToText(value) {
+  const parsed = parseMaybeJson(value);
+  if (parsed == null) return '';
+  if (typeof parsed === 'string') return parsed;
+  if (typeof parsed === 'object') {
+    const parts = [
+      parsed.subject,
+      parsed.body,
+      parsed.message,
+      parsed.copy,
+      parsed.text,
+      parsed.note,
+    ].map(copyValueToText).filter(Boolean);
+    if (parts.length > 0) return parts.join('\n');
+    return JSON.stringify(parsed);
+  }
+  return String(parsed);
+}
+
+function collectEvidenceValues(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.flatMap(collectEvidenceValues);
+  if (typeof value !== 'object') return [value];
+  const ignoredEvidenceKeys = new Set([
+    'core_idea',
+    'persona_angle',
+    'proof_workflow',
+    'proof_point',
+    'subject',
+    'body',
+    'message',
+    'copy',
+    'text',
+    'note',
+    'channel',
+    'sequence_step',
+    'copy_status',
+    'copy_source',
+    'generated_at',
+    'fresh_until',
+  ]);
+  return [
+    value.personalization_evidence,
+    value.lead_specific_observation,
+    value.trigger,
+    value.evidence_references,
+    ...Object.entries(value)
+      .filter(([key]) => !ignoredEvidenceKeys.has(key))
+      .flatMap(([, nestedValue]) => collectEvidenceValues(nestedValue)),
+  ].flatMap(collectEvidenceValues);
+}
+
+function extractCopyParts(payload) {
+  const parsedCopyFields = [
+    payload.copy_payload,
+    payload.exact_copy,
+    payload.copy_used,
+    payload.planned_copy,
+    payload.intended_copy,
+    payload.copy,
+  ].map(parseMaybeJson);
+
+  const subject = normalizeString(
+    payload.subject ??
+      payload.email_subject ??
+      payload.subject_line ??
+      parsedCopyFields.find((value) => value && typeof value === 'object' && normalizeString(value.subject))?.subject ??
+      '',
+  );
+
+  const body = [
+    payload.body,
+    payload.email_body,
+    payload.message,
+    payload.linkedin_message,
+    payload.connection_note,
+    ...parsedCopyFields.map((value) => (value && typeof value === 'object' ? value.body ?? value.message ?? value.copy ?? value.text : value)),
+  ].map(copyValueToText).filter(Boolean).join('\n').trim();
+
+  return { subject, body, combined: [subject, body].filter(Boolean).join('\n') };
+}
+
+function extractPersonalizationEvidence(payload) {
+  const packet = payload.personalization_packet && typeof payload.personalization_packet === 'object'
+    ? payload.personalization_packet
+    : {};
+  const evidence = [
+    payload.personalization_evidence,
+    payload.lead_specific_observation,
+    payload.trigger,
+    payload.duo_trigger_summary,
+    packet.lead_specific_observation,
+    Array.isArray(packet.evidence_references) ? packet.evidence_references.join(' ') : packet.evidence_references,
+    ...collectEvidenceValues(packet.steps),
+  ].map(copyValueToText).filter((value) => normalizeString(value).length >= 12);
+
+  return evidence;
+}
+
+function hasStaticTemplateCopy(copy) {
+  const normalized = normalizeCopy(copy);
+  if (!normalized) return false;
+  return STATIC_TEMPLATE_PHRASE_SETS.some((phrases) => phrases.every((phrase) => normalized.includes(phrase)));
+}
+
+function validateCopyQuality(payload, keyInfo) {
+  const family = keyInfo?.family ?? normalizeActionFamily(payload);
+  if (!isOutboundFamily(family)) return null;
+
+  const noCopyMode = normalizeToken(payload.no_copy_mode).replace(/-/g, '_');
+  if (noCopyMode) {
+    if (!NO_COPY_MODES.has(noCopyMode)) {
+      return { reason: 'unsupported_no_copy_mode', details: { no_copy_mode: noCopyMode } };
+    }
+    if (noCopyMode === 'blank_connection_request' && family === 'connection_request') return null;
+    if (noCopyMode === 'linkedin_like_only' && family === 'public_social_touch') return null;
+    return { reason: 'no_copy_mode_channel_mismatch', details: { no_copy_mode: noCopyMode, family } };
+  }
+
+  const { subject, body, combined } = extractCopyParts(payload);
+  const isMessageBearing = MESSAGE_FAMILIES.has(family) || family === 'connection_request' || family === 'public_social_touch';
+  if (!isMessageBearing) return null;
+
+  if (family === 'email' && (!subject || !body)) {
+    return { reason: 'missing_email_subject_or_body', details: { has_subject: Boolean(subject), has_body: Boolean(body) } };
+  }
+
+  if (family !== 'email' && !body) {
+    return { reason: 'missing_message_body', details: { family } };
+  }
+
+  if (UNRESOLVED_PLACEHOLDER_PATTERN.test(combined)) {
+    return { reason: 'unresolved_copy_placeholder' };
+  }
+
+  if (INTERNAL_SOURCE_LABEL_PATTERN.test(combined)) {
+    return { reason: 'internal_source_label_in_copy' };
+  }
+
+  if (hasStaticTemplateCopy(combined)) {
+    return { reason: 'static_apollo_template_copy' };
+  }
+
+  if (extractPersonalizationEvidence(payload).length === 0) {
+    return { reason: 'missing_personalization_evidence' };
+  }
+
+  return null;
+}
+
+function auditCopyQuality(record) {
+  const { combined } = extractCopyParts(record);
+  if (!combined) return null;
+  if (UNRESOLVED_PLACEHOLDER_PATTERN.test(combined)) return { reason: 'unresolved_copy_placeholder' };
+  if (INTERNAL_SOURCE_LABEL_PATTERN.test(combined)) return { reason: 'internal_source_label_in_copy' };
+  if (hasStaticTemplateCopy(combined)) return { reason: 'static_apollo_template_copy' };
+  return null;
 }
 
 function dateFromValue(value) {
@@ -448,6 +688,25 @@ function claim({ payload, stateDir, ledgerPath }) {
     };
   }
 
+  const copyQualityIssue = validateCopyQuality(payload, keyInfo);
+  if (copyQualityIssue) {
+    return {
+      ok: false,
+      decision: 'blocked',
+      reason: copyQualityIssue.reason,
+      completion_retry_allowed: false,
+      copy_quality_details: copyQualityIssue.details ?? null,
+      normalized: {
+        apollo_task_id: keyInfo.apolloTaskId,
+        recipient: keyInfo.recipient,
+        recipients: keyInfo.recipients,
+        family: keyInfo.family,
+        local_date: keyInfo.localDate,
+        run_started_at: keyInfo.runStartedAt,
+      },
+    };
+  }
+
   return writeClaimLocks(stateDir, keyInfo, payload);
 }
 
@@ -490,10 +749,30 @@ function mark({ payload, stateDir, status }) {
 function audit({ ledgerPath }) {
   const records = readJsonl(ledgerPath);
   const sentRecords = records.filter((record) => record.status === 'sent');
+  const terminalMessageRecords = records.filter((record) => ['sent', 'completed', 'completion_pending'].includes(record.status));
   const sentByTask = new Map();
   const sentByDirectRecipientDay = new Map();
+  const copyQualityIssues = [];
+  const copyQualityIssueCounts = {};
   let replayBlocked = 0;
   const replayKeys = new Set();
+
+  for (const record of terminalMessageRecords) {
+    const issue = auditCopyQuality(record);
+    if (!issue) continue;
+    copyQualityIssueCounts[issue.reason] = (copyQualityIssueCounts[issue.reason] ?? 0) + 1;
+    copyQualityIssues.push({
+      reason: issue.reason,
+      status: record.status ?? null,
+      apollo_task_id: record.apollo_task_id ?? null,
+      action_key: record.action_key ?? null,
+      channel: record.channel ?? null,
+      step_type: record.step_type ?? null,
+      contact_email: record.contact_email ?? null,
+      sent_at: record.sent_at ?? null,
+      apollo_completed_at: record.apollo_completed_at ?? null,
+    });
+  }
 
   for (const record of sentRecords) {
     let keyInfo;
@@ -546,9 +825,12 @@ function audit({ ledgerPath }) {
     sent_records: sentRecords.length,
     duplicate_task_groups: duplicateTasks.length,
     duplicate_direct_recipient_day_groups: duplicateDirectRecipients.length,
+    copy_quality_issue_records: copyQualityIssues.length,
+    copy_quality_issue_counts: copyQualityIssueCounts,
     replay_sends_that_guard_would_block: replayBlocked,
     duplicate_tasks: duplicateTasks,
     duplicate_direct_recipients: duplicateDirectRecipients,
+    copy_quality_issues: copyQualityIssues,
   };
 }
 
@@ -587,7 +869,9 @@ function usage() {
   node scripts/gtm-task-guard.mjs rebuild-index
   node scripts/gtm-task-guard.mjs audit
 
-Payloads must include apollo_task_id, run_started_at, local_date, and a recipient identifier such as contact_email or linkedin_url.`;
+Payloads must include apollo_task_id, run_started_at, local_date, and a recipient identifier such as contact_email or linkedin_url.
+Message-bearing payloads must include final copy fields such as subject/body, message, copy_used, exact_copy, or personalization_packet evidence.
+Use no_copy_mode only for linkedin_like_only or blank_connection_request.`;
 }
 
 function rebuildIndex({ stateDir, ledgerPath }) {
@@ -640,6 +924,7 @@ export const __test__ = {
   buildGuardKeys,
   buildIndexFromLedger,
   claim,
+  extractCopyParts,
   mark,
   normalizeActionFamily,
   normalizeLocalDate,
@@ -647,4 +932,5 @@ export const __test__ = {
   normalizeRecipients,
   parseArgs,
   rebuildIndex,
+  validateCopyQuality,
 };
