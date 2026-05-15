@@ -36,12 +36,16 @@ const validDuoPayload = {
   ...basePayload,
   contact_email: 'dbapna@arkieva.com',
   subject: 'quick breakdown',
-  body: 'deepak - noticed the crow signal around ai help inside complex products.\n\nsupply-chain planning feels like a strong version of that problem. there is a lot of dashboard depth, and users only get value when they can move from question to action quickly.\n\nwarpy lets teams add a plain-english action layer that inherits the existing product ui and only uses approved actions.\n\nworth a quick breakdown for arkieva?',
+  body: 'deepak - noticed arkieva is focused on supply-chain planning workflows.\n\nthat feels like a dashboard where users know the planning job they need done, but not always the fastest path through scenarios, constraints, and updates.\n\nwarpy adds an in-product assistant so users can ask for that workflow in plain english and finish it inside the existing planning UI.\n\nworth a quick breakdown for arkieva?',
   personalization_packet: {
-    core_idea: 'dashboard users should move from question to approved action inside the existing product',
-    lead_specific_observation: 'Duo surfaced Crow competitor engagement from Arkieva CPO Deepak Bapna.',
+    core_idea: 'dashboard users should move from intent to real planning work inside the existing product',
+    lead_specific_observation: 'Arkieva focuses on supply-chain planning workflows for operations teams.',
     persona_angle: 'product adoption for supply-chain planning workflows',
-    proof_workflow: 'plain-english action layer inside the existing Arkieva dashboard',
+    customer_problem: 'planning users can get stuck moving through deep scenario and constraint workflows',
+    why_this_company: 'Arkieva sells workflow-heavy planning software where dashboard depth is part of the product value',
+    specific_dashboard_workflow: 'scenario planning and work order update flows',
+    proof_workflow: 'ask for planning updates in plain english and finish the workflow in the existing UI',
+    recipient_safe_warpy_bridge: 'an in-product assistant where users ask in chat and complete planning workflows through configured tools or screen autopilot in the existing UI',
     copy_source: 'duo_rewritten',
   },
 };
@@ -97,7 +101,7 @@ test('claim blocks static Apollo template copy even when placeholders are absent
       ledgerPath: state.ledgerPath,
       payload: {
         ...basePayload,
-        body: 'victor - noticed your product.\n\nin complex dashboards, most users only use a small slice because they dont know what to do next or where to go.\n\nwarpy lets them ask in plain english and have the dashboard filter, navigate, and take the next approved action right there.\n\nwant me to send a quick breakdown for tonkean?',
+        body: 'victor - noticed your product.\n\nin complex dashboards, most users only use a small slice because they dont know what to do next or where to go.\n\nwarpy lets them ask in plain english and have the dashboard filter, navigate, and finish the workflow right there.\n\nwant me to send a quick breakdown for tonkean?',
       },
     });
 
@@ -146,13 +150,39 @@ test('claim blocks current Apollo scaffold copy even without placeholders', () =
         ...basePayload,
         apollo_task_id: 'current-static-scaffold',
         subject: 'quick breakdown',
-        body: 'noticed a pattern in complex b2b dashboards.\n\nteams ship a lot of useful product depth, but users still miss key workflows and support keeps getting the same how do i do this tickets.\n\nwarpy adds an in-product ai assistant that lets users control the app through chat and dynamic ui, using only approved actions.\n\nworth sending a quick breakdown of where this could fit?',
+        body: 'noticed a pattern in complex b2b dashboards.\n\nteams ship a lot of useful product depth, but users still miss key workflows and support keeps getting the same how do i do this tickets.\n\nwarpy adds an in-product ai assistant so users can ask for help in plain english and finish workflows in the app.\n\nworth sending a quick breakdown of where this could fit?',
         lead_specific_observation: 'Acme has a complex dashboard.',
       },
     });
 
     assert.equal(result.decision, 'blocked');
     assert.equal(result.reason, 'static_apollo_template_copy');
+  } finally {
+    state.cleanup();
+  }
+});
+
+test('claim blocks insider Warpy positioning even when copy is personalized', () => {
+  const state = tempState();
+  try {
+    writeLedger(state.ledgerPath, []);
+
+    const result = __test__.claim({
+      stateDir: state.stateDir,
+      ledgerPath: state.ledgerPath,
+      payload: {
+        ...basePayload,
+        apollo_task_id: 'onehouse-insider-positioning',
+        channel: 'linkedin',
+        step_type: 'linkedin_dm',
+        subject: '',
+        body: 'thanks for connecting. noticed Onehouse is expanding a managed open data lakehouse for analytics, reporting, ML, and GenAI workloads after a 2024 Series B. i think the interesting bit for Onehouse is helping users take the next approved step inside the product, not sending them to a separate bot. happy to send the short version if useful.',
+        lead_specific_observation: 'Onehouse is expanding managed open data lakehouse workflows after a 2024 Series B.',
+      },
+    });
+
+    assert.equal(result.decision, 'blocked');
+    assert.equal(result.reason, 'insider_warpy_positioning_in_copy');
   } finally {
     state.cleanup();
   }
@@ -238,10 +268,50 @@ test('claim accepts non-Duo researched personalized copy', () => {
         subject: 'upkeep workflows',
         body: 'ryan - noticed upkeep has a lot of operational workflow depth for maintenance teams.\n\nthat seems like the kind of dashboard where users know the job they need done, but not always the exact path to get there.\n\nworth a quick breakdown for upkeep?',
         personalization_packet: {
-          core_idea: 'help dashboard users get from intent to approved workflow action',
+          core_idea: 'help dashboard users get from intent to real workflow completion',
           lead_specific_observation: 'UpKeep positions around maintenance workflow depth for operations teams.',
           persona_angle: 'product adoption in operational dashboards',
-          proof_workflow: 'request work order updates in plain english and complete approved actions in the existing UI',
+          customer_problem: 'maintenance users may know the job they need done but miss the fastest path through the dashboard',
+          why_this_company: 'UpKeep is built around maintenance workflows for operations teams',
+          specific_dashboard_workflow: 'work order update and reporting flows',
+          proof_workflow: 'request work order updates in plain english and finish the workflow in the existing UI',
+          recipient_safe_warpy_bridge: 'an in-product assistant where users ask in chat and complete maintenance workflows through configured tools or screen autopilot in the existing UI',
+          copy_source: 'research_generated',
+        },
+      },
+    });
+
+    assert.equal(result.decision, 'claimed');
+  } finally {
+    state.cleanup();
+  }
+});
+
+test('claim accepts workflow-specific Warpy copy that passes recipient comprehension', () => {
+  const state = tempState();
+  try {
+    writeLedger(state.ledgerPath, []);
+
+    const result = __test__.claim({
+      stateDir: state.stateDir,
+      ledgerPath: state.ledgerPath,
+      payload: {
+        ...basePayload,
+        apollo_task_id: 'workflow-specific-copy',
+        contact_email: 'kyle@onehouse.ai',
+        subject: '',
+        channel: 'linkedin',
+        step_type: 'linkedin_dm',
+        body: 'thanks for connecting. noticed Onehouse is pushing deeper into managed lakehouse workflows across analytics, reporting, ML, and GenAI.\n\nfor a product like that, i imagine some friction is helping users know what to do next inside ingestion, catalog, or optimization flows without losing the context of the data UI.\n\nwarpy adds an in-product assistant so users can ask for that workflow in plain english and finish it inside the existing dashboard. happy to send the short version if useful.',
+        personalization_packet: {
+          core_idea: 'help users finish complex data workflows inside the existing dashboard',
+          lead_specific_observation: 'Onehouse is expanding managed lakehouse workflows across analytics, reporting, ML, and GenAI.',
+          persona_angle: 'product adoption for data infrastructure dashboards',
+          customer_problem: 'users can get stuck finding the next step inside deep data workflows',
+          why_this_company: 'Onehouse has complex ingestion, catalog, and optimization workflows in a managed lakehouse product',
+          specific_dashboard_workflow: 'ingestion, catalog, and optimization flows',
+          proof_workflow: 'ask for a lakehouse workflow in plain english and finish it in the existing data UI',
+          recipient_safe_warpy_bridge: 'an in-product assistant where users ask in chat and complete data workflows through configured tools or screen autopilot in the existing UI',
           copy_source: 'research_generated',
         },
       },
@@ -752,7 +822,7 @@ test('audit reports duplicate task sends in ledger order', () => {
   }
 });
 
-test('audit reports historic placeholder, internal-label, and static-template copy issues', () => {
+test('audit reports historic placeholder, internal-label, static-template, and insider-positioning copy issues', () => {
   const state = tempState();
   try {
     writeLedger(state.ledgerPath, [
@@ -767,7 +837,7 @@ test('audit reports historic placeholder, internal-label, and static-template co
         ...basePayload,
         apollo_task_id: 'static-copy',
         status: 'completed',
-        body: 'victor - noticed your product.\n\nin complex dashboards, most users only use a small slice because they dont know what to do next or where to go.\n\nwarpy lets them ask in plain english and have the dashboard filter, navigate, and take the next approved action right there.\n\nwant me to send a quick breakdown for tonkean?',
+        body: 'victor - noticed your product.\n\nin complex dashboards, most users only use a small slice because they dont know what to do next or where to go.\n\nwarpy lets them ask in plain english and have the dashboard filter, navigate, and finish the workflow right there.\n\nwant me to send a quick breakdown for tonkean?',
         sent_at: '2026-04-30T10:02:00Z',
       },
       {
@@ -777,14 +847,22 @@ test('audit reports historic placeholder, internal-label, and static-template co
         body: 'noticed Amplemarket search listed this as a support platform with workflow-heavy dashboards.',
         sent_at: '2026-04-30T10:03:00Z',
       },
+      {
+        ...basePayload,
+        apollo_task_id: 'insider-positioning',
+        status: 'sent',
+        body: 'noticed your dashboard expansion. i think the interesting bit is helping users take the approved step instead of sending them to a separate bot.',
+        sent_at: '2026-04-30T10:04:00Z',
+      },
     ]);
 
     const result = __test__.audit({ ledgerPath: state.ledgerPath });
 
-    assert.equal(result.copy_quality_issue_records, 3);
+    assert.equal(result.copy_quality_issue_records, 4);
     assert.equal(result.copy_quality_issue_counts.unresolved_copy_placeholder, 1);
     assert.equal(result.copy_quality_issue_counts.static_apollo_template_copy, 1);
     assert.equal(result.copy_quality_issue_counts.internal_source_label_in_copy, 1);
+    assert.equal(result.copy_quality_issue_counts.insider_warpy_positioning_in_copy, 1);
   } finally {
     state.cleanup();
   }

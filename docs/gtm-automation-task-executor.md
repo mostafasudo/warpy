@@ -39,7 +39,7 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 - Recipient-safety ledger CLI: `scripts/gtm-task-guard.mjs`
 - Recipient-safety ledger index: `/Users/levw/.codex/state/warpy-gtm/task-guard-index.json`
 - Recipient-safety ledger claims: `/Users/levw/.codex/state/warpy-gtm/task-guard-claims/`
-- Copy-quality gate: the same `scripts/gtm-task-guard.mjs claim` call blocks unresolved placeholders, static Apollo templates, missing email subject/body, and missing personalization evidence before any composer opens
+- Copy-quality gate: the same `scripts/gtm-task-guard.mjs claim` call blocks unresolved placeholders, static Apollo templates, insider Warpy positioning, missing email subject/body, and missing personalization evidence before any composer opens
 - Local improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl` through `scripts/gtm-improvement-log.mjs`
 
 ## Run Concurrency Guard
@@ -165,12 +165,15 @@ The executor sends from the local `personalization_packet`, not from Apollo's st
 For every recipient-visible task:
 
 - load `personalization_packet`, `trigger`, `pain_hypothesis`, `proof_point`, `decision_maker_verification`, and `role_authority_summary`
+- verify the packet includes `customer_problem`, `why_this_company`, `specific_dashboard_workflow`, and `recipient_safe_warpy_bridge`; refresh it before sending when these fields are missing or too generic to support recipient-visible copy
 - map the Apollo task to the matching packet step, such as `email_1`, `email_2`, `linkedin_connection`, `linkedin_dm`, `email_3`, `asset_send`, or `close_loop`
 - verify `copy_status: "ready"` and that `fresh_until` has not passed
-- refresh the step copy as `copy_source: "executor_refreshed"` when packet copy is stale, missing, generic, off-step, or inconsistent with fresh LinkedIn/X/Apollo context
+- refresh the step copy as `copy_source: "executor_refreshed"` when packet copy is stale, missing, generic, off-step, vague, insider-framed, context-missing, or inconsistent with fresh LinkedIn/X/Apollo context
+- run the recipient comprehension check from `GTM.md`: the final copy must explain why the trigger matters, name the likely adoption/support problem, name a concrete dashboard workflow, and explain Warpy in plain recipient language
 - include the final subject/body or message, `personalization_packet`, `personalization_evidence`, and `copy_source` in the audit record before calling `scripts/gtm-task-guard.mjs claim`
 - never send copy that still contains `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, or the static Apollo sequence template with fields swapped
 - never send copy that exposes internal provenance labels such as `Apollo profile`, `Amplemarket`, `Duo Copilot`, `Duo Crow competitor`, or `Structured Amplemarket search`; rewrite those into natural recipient-safe observations first
+- never send copy that uses banned recipient-visible phrases from `GTM.md`, invents a bot comparison the prospect did not raise, or talks about internal permissions instead of a workflow the recipient understands
 
 Valid no-copy cases are explicit:
 
@@ -197,7 +200,9 @@ Key reminders:
 - short, informal, and human
 - no em dashes or semicolons
 - no corporate polish or generic sales language
-- lead with low feature adoption, product usage, and users controlling the dashboard through chat plus dynamic UI
+- lead with the concrete adoption, product-usage, onboarding, or repetitive-support problem
+- tie the message to a workflow, screen, job, or product action the recipient would recognize
+- explain Warpy as an in-product assistant where users ask in chat, get component-rich answers when useful, and complete workflows through configured tools or screen autopilot in the existing dashboard
 - mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets
 
 If a live Apollo draft is off-strategy, generic, missing the verified trigger, or inconsistent with the verified persona, rewrite it before sending. If it cannot be rewritten safely, skip the task with a copy blocker.
@@ -351,6 +356,7 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 - use compact Duo context as inspiration when present, then rewrite in Warpy voice
 - send clean drafts as-is only when they already match the verified trigger, persona, `personalization_packet`, and `GTM.md` voice
 - override inherited Apollo copy when the live task body is off-strategy or missing required context
+- skip with a copy blocker when the message would make a recipient ask "why is this relevant to us?" or "what workflow are you talking about?"
 
 ### LinkedIn Post Interaction
 
@@ -378,6 +384,7 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 
 - send after connection when the task calls for it
 - reference the real trigger
+- connect that trigger to a concrete adoption, support, or workflow problem
 - offer a breakdown or useful observation
 - do not ask for a demo by default
 
@@ -433,6 +440,7 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
    - check handoff, suppression, duplicate, and stage state
    - inspect LinkedIn or X only when needed for context, using Chrome CDP when any non-browser lookup cannot provide the needed context
    - generate, refresh, or edit the exact copy, rewriting any Duo-inspired or Apollo-inherited copy into `GTM.md` voice
+   - apply the recipient comprehension check from `GTM.md`
    - if a message-bearing task cannot produce final personalized copy, skip before opening any composer with a copy-specific blocker
    - write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>` before opening any approved GTM platform composer
    - if the recipient-safety or copy-quality ledger blocks, do not open the platform composer; write `skipped` with the block reason and continue
@@ -487,6 +495,7 @@ A successful run:
 - keeps copy aligned with `GTM.md`
 - uses per-lead `personalization_packet` copy or refreshes it before sending
 - blocks unresolved placeholders and static Apollo templates before any send path
+- blocks insider, vague, or context-missing Warpy positioning before any send path
 - uses Duo suggested-sequence context only as inspiration and never sends it verbatim
 - overrides inherited Apollo copy when it misses the verified Duo trigger, persona, or Warpy voice
 - avoids duplicate sends across retries

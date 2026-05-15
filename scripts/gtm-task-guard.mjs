@@ -23,10 +23,18 @@ const NO_COPY_MODES = new Set(['linkedin_like_only', 'blank_connection_request']
 const MESSAGE_FAMILIES = new Set(['email', 'linkedin_dm', 'x_touch', 'other_outbound']);
 const UNRESOLVED_PLACEHOLDER_PATTERN = /(\[(?:first name|last name|trigger|company|company name|title|persona|pain|proof|workflow|observation)\]|\{\{\s*[^}]+\s*\}\})/i;
 const INTERNAL_SOURCE_LABEL_PATTERN = /\b(?:apollo profile|amplemarket|structured amplemarket|duo crow competitor|duo saas event|duo copilot|crow competitor)\b/i;
+const INSIDER_WARPY_POSITIONING_PATTERNS = [
+  /\bapproved\s+(?:step|steps|action|actions|workflow|workflows)\b/i,
+  /\busing\s+only\s+approved\s+actions\b/i,
+  /\bseparate\s+bot\b/i,
+  /\bgeneric\s+chatbot\b/i,
+  /\binteresting\s+bit\b/i,
+  /\bnot\s+just\s+answers\b/i,
+];
 const STATIC_TEMPLATE_PHRASE_SETS = [
   [
     'in complex dashboards most users only use a small slice',
-    'dashboard filter navigate and take the next approved action',
+    'dashboard filter navigate and finish the workflow',
     'want me to send a quick breakdown',
   ],
   [
@@ -57,7 +65,7 @@ const STATIC_TEMPLATE_PHRASE_SETS = [
   [
     'noticed a pattern in complex b2b dashboards',
     'users still miss key workflows and support keeps getting the same how do i do this tickets',
-    'warpy adds an in product ai assistant',
+    'warpy adds an in product ai assistant so users can ask for help in plain english',
   ],
   [
     'when users cannot find the right feature or workflow',
@@ -71,7 +79,7 @@ const STATIC_TEMPLATE_PHRASE_SETS = [
   ],
   [
     'a user asks the app to do the job in plain english',
-    'opens the right view shows the relevant dynamic ui',
+    'opens the right view and shows the next fields or options',
     'lift feature adoption and cut repetitive support tickets',
   ],
   [
@@ -82,7 +90,7 @@ const STATIC_TEMPLATE_PHRASE_SETS = [
   [
     'complex dashboards often have the same hidden cost',
     'users only adopt a slice of the product',
-    'making the app feel ai native through chat and dynamic ui',
+    'making the app feel ai native through chat and screen autopilot',
   ],
 ];
 
@@ -226,8 +234,10 @@ function collectEvidenceValues(value) {
     'sequence_step',
     'copy_status',
     'copy_source',
+    'customer_problem',
     'generated_at',
     'fresh_until',
+    'recipient_safe_warpy_bridge',
   ]);
   return [
     value.personalization_evidence,
@@ -293,6 +303,10 @@ function hasStaticTemplateCopy(copy) {
   return STATIC_TEMPLATE_PHRASE_SETS.some((phrases) => phrases.every((phrase) => normalized.includes(phrase)));
 }
 
+function hasInsiderWarpyPositioning(copy) {
+  return INSIDER_WARPY_POSITIONING_PATTERNS.some((pattern) => pattern.test(copy));
+}
+
 function validateCopyQuality(payload, keyInfo) {
   const family = keyInfo?.family ?? normalizeActionFamily(payload);
   if (!isOutboundFamily(family)) return null;
@@ -331,6 +345,10 @@ function validateCopyQuality(payload, keyInfo) {
     return { reason: 'static_apollo_template_copy' };
   }
 
+  if (hasInsiderWarpyPositioning(combined)) {
+    return { reason: 'insider_warpy_positioning_in_copy' };
+  }
+
   if (extractPersonalizationEvidence(payload).length === 0) {
     return { reason: 'missing_personalization_evidence' };
   }
@@ -344,6 +362,7 @@ function auditCopyQuality(record) {
   if (UNRESOLVED_PLACEHOLDER_PATTERN.test(combined)) return { reason: 'unresolved_copy_placeholder' };
   if (INTERNAL_SOURCE_LABEL_PATTERN.test(combined)) return { reason: 'internal_source_label_in_copy' };
   if (hasStaticTemplateCopy(combined)) return { reason: 'static_apollo_template_copy' };
+  if (hasInsiderWarpyPositioning(combined)) return { reason: 'insider_warpy_positioning_in_copy' };
   return null;
 }
 

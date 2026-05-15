@@ -70,13 +70,13 @@ If the context starts getting large, stop exploratory work, update the checkpoin
 
 ## What Warpy Is
 
-Warpy helps B2B dashboard users with low feature adoption by embedding an in-product AI assistant that lets users control the app through chat and dynamic UI.
+Warpy helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets make their product AI-native.
 
-Warpy is a drop-in AI execution layer for complex B2B dashboards. Customers embed a lightweight widget into their product, expose approved APIs and UI actions, and let end users ask for work in plain language.
+Customers embed a lightweight in-product assistant into their dashboard. Users ask for work in chat, Warpy can answer with component-rich chat messages using Warpy components or customer native components, and configured tools or screen autopilot can operate the existing dashboard on the user's behalf.
 
-Warpy does not replace the product UI. Chat is the low-friction intent input. The widget can render compact structured output, and customers can map that output to native components when the host app should own the final presentation.
+GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow in the prospect's product, then explain Warpy in plain recipient language.
 
-The core GTM promise is dashboard adoption: more users reaching value, using advanced workflows, and getting work done without menu hunting. Lower support volume matters, but it is a secondary outcome.
+Warpy does not replace the product UI. Chat is the low-friction intent input, dynamic UI is the chat response surface, and dashboard action comes from configured tools or screen autopilot inside the product experience users already use.
 
 ## Voice
 
@@ -92,6 +92,22 @@ For outbound emails, LinkedIn messages, X posts, X/Twitter comments, and follow-
 - keep it short, direct, and human
 
 This is intentional. Do not "clean it up" into standard sales copy.
+
+## Recipient Comprehension Rule
+
+Every recipient-visible message must pass this check before it is written into a ledger record, Apollo composer, LinkedIn message, X reply, or asset note:
+
+- explain why the trigger matters to this company
+- name the likely adoption, onboarding, product-usage, or repetitive-support problem
+- name a concrete dashboard workflow, screen, job, or product action the recipient would recognize
+- explain Warpy in plain recipient language: users ask in chat, get component-rich answers when useful, and Warpy helps them complete the workflow through configured tools or screen autopilot in the existing dashboard
+- use a low-friction CTA tied to the observation
+
+Never use these phrases in recipient-visible copy unless quoting the prospect directly: `approved step`, `approved action`, `separate bot`, `generic chatbot`, `interesting bit`, `not just answers`, or `using only approved actions`.
+
+Do not invent a contrast the prospect did not raise. For example, do not say they are sending users to a bot unless their own material says that. Do not say "approved step" or "approved action" when the recipient-safe idea is that users can complete a familiar workflow in their existing product.
+
+Do not describe dynamic UI as the thing that controls the dashboard. Dynamic UI is structured output in the widget chat. Configured tools and screen autopilot are the action surfaces.
 
 ## ICP
 
@@ -131,7 +147,7 @@ The task executor must preserve Apollo sequence timing and per-contact step orde
 
 Before opening any Apollo email, LinkedIn, X, or other approved GTM platform composer, the task executor must write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>`. This local recipient-safety ledger is the duplicate-prevention and copy-quality boundary. If it blocks the claim, skip without touching the platform composer. `copy_hash` is audit metadata only and must never be used for duplicate prevention. Existing `sent`, `completion_pending`, `completed`, or `claimed` ledger state wins over Apollo backlog pressure. A missed touch is acceptable; a duplicate email, DM, connection request, public social touch, unresolved placeholder, or static Apollo-template send is not.
 
-Every recipient-visible message must be hyper-personalized for the specific lead. Apollo sequence templates are cadence scaffolding only, never the source of truth for final copy. The shared core idea is consistent: Warpy helps B2B dashboards with low feature adoption and repetitive support tickets by embedding an in-product AI assistant that lets users control the app through chat and dynamic UI, using only approved actions. The actual subject, body, LinkedIn note, DM, X reply, or asset note must be unique to the person and account, using that lead's trigger, persona angle, dashboard/workflow context, and proof workflow. Literal placeholders such as `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, or internal sourcing labels like `Amplemarket`, `Apollo profile`, or `Duo Copilot` are terminal blockers.
+Every recipient-visible message must be hyper-personalized for the specific lead. Apollo sequence templates are cadence scaffolding only, never the source of truth for final copy. The shared core idea is consistent: Warpy helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets by embedding an in-product assistant where users ask in chat, get component-rich replies when useful, and complete workflows through configured tools or screen autopilot in the existing dashboard. The actual subject, body, LinkedIn note, DM, X reply, or asset note must be unique to the person and account, using that lead's trigger, persona angle, dashboard/workflow context, and proof workflow. Literal placeholders such as `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, internal sourcing labels like `Amplemarket`, `Apollo profile`, or `Duo Copilot`, and banned recipient-visible phrases from the Recipient Comprehension Rule are terminal blockers.
 
 Pipeline rules:
 
@@ -169,7 +185,7 @@ Pick the best-fit primary lead first. Use the adjacent lead only when the accoun
 | 17 | Email | Primary or adjacent | Pure value touch. No hard CTA. |
 | 21 | Email | Primary | Polite close-the-loop email. |
 
-Every touch should add a new angle. Lead with dashboard adoption, product usage, and users controlling the product through chat plus dynamic UI. Mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets.
+Every touch should add a new angle. Lead with the concrete adoption, product-usage, onboarding, or repetitive-support problem, then connect Warpy to a recognizable workflow in the prospect's product. Mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets.
 
 For each lead, keep messages short and straightforward while varying the observation, proof workflow, and CTA by step. Follow-ups may reuse the same account thesis, but they must not reuse a static template body with only names or company fields swapped.
 
@@ -243,7 +259,7 @@ Content pillars:
 - AI-native dashboards adding conversational input without throwing away the existing UI
 - users only using a small slice of feature-rich products
 - chat as the fastest input path to adoption, activation, and time-to-value
-- embedded AI that takes approved actions, not just answers questions
+- embedded AI that helps users complete real dashboard workflows instead of asking support how to do them
 - product and UX shifts from menu hunting to intent capture with structured output in the widget or native app UI
 - smart commentary on launches, interface changes, and product strategy shifts that show where software is going
 

@@ -31,7 +31,13 @@ When a task involves sales, marketing, or GTM, read [GTM.md](GTM.md) and use it.
 When moving through these steps and invoking those skills, act with agency: make decisions yourself, pick what you recommend, and minimize questions to the user—reserve questions only for truly critical choices.
 
 ## What is Warpy
-Warpy is a drop-in AI execution layer for B2B dashboards. Customers embed a lightweight JS widget into their product; the widget reads the user's session context, calls only customer-approved API endpoints, and performs scoped UI actions on behalf of the end user. It is **not** a generic chatbot — it is a configurable agent that turns natural-language requests into real API calls and UI mutations within the host application's own permission model.
+Warpy helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets make their product AI-native.
+
+Customers embed a lightweight in-product assistant into their dashboard. Users ask for work in chat, Warpy can answer with component-rich chat messages using Warpy components or customer native components, and configured tools or screen autopilot can operate the existing dashboard on the user's behalf.
+
+Dynamic UI means structured chat output, not dashboard control. Dashboard control comes from configured tools and screen autopilot, which can read the page and click, type, navigate, filter, configure, or complete UI workflows inside the customer's product.
+
+GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow in the prospect's product, then explain Warpy in plain recipient language.
 
 ## Monorepo Structure
 This repo contains three projects as submodules or top-level directories:

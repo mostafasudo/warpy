@@ -21,7 +21,7 @@ Widget replies support three response modes:
 
 `messages.content` remains the complete markdown fallback in every mode. `messages.render_payload` is optional structured metadata for dynamic rendering. Invalid payloads, unsuitable content, missing native renderers, and Activity views for native components all fall back to the complete markdown content.
 
-Dynamic UI is output-only in v1. It must not introduce forms, destructive buttons, or extra action controls. Follow-up suggestions and approved tools remain the action surface.
+Dynamic UI is output-only in v1. It must not introduce forms, destructive buttons, or extra action controls. Follow-up suggestions, configured tools, and screen autopilot remain the action surfaces.
 
 Warpy component payload:
 
