@@ -33,11 +33,11 @@ When moving through these steps and invoking those skills, act with agency: make
 ## What is Warpy
 Warpy helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets make their product AI-native.
 
-Customers embed a lightweight in-product assistant into their dashboard. Users ask for work in chat, Warpy can answer with component-rich chat messages using Warpy components or customer native components, and configured tools or screen autopilot can operate the existing dashboard on the user's behalf.
+Public landing slogan: "Let users control your app through chat and dynamic UI."
 
-Dynamic UI means structured chat output, not dashboard control. Dashboard control comes from configured tools and screen autopilot, which can read the page and click, type, navigate, filter, configure, or complete UI workflows inside the customer's product.
+Customers embed a lightweight in-product assistant into their dashboard. Users ask for work in chat, Warpy can answer with dynamic UI in the widget chat using Warpy components or customer native components, and configured tools or screen autopilot can operate the existing dashboard on the user's behalf.
 
-GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow in the prospect's product, then explain Warpy in plain recipient language.
+For GTM and recipient-visible copy, do not make "dynamic UI" carry the whole action story. Dynamic UI means structured chat output; dashboard control comes from configured tools and screen autopilot. GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow, then explain Warpy in plain recipient language.
 
 ## Monorepo Structure
 This repo contains three projects as submodules or top-level directories:
