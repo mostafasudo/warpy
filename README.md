@@ -7,7 +7,6 @@ Sales, marketing, and GTM context: [GTM.md](GTM.md).
 ## Prerequisites
 - Node.js 20+
 - `pnpm` 10+
-- Bun 1+ (only for the vendored `gstack` workflow skills)
 - Python 3.11+
 - Docker (optional but required for the compose workflow)
 
@@ -20,17 +19,6 @@ Sales, marketing, and GTM context: [GTM.md](GTM.md).
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
-## Skills
-LLM agent skills are stored in `.codex/skills/` (the canonical location). The active tool mirrors in this repo are `.claude`, `.agent`, and `.cursor`, and each exposes symlinks pointing back to `.codex/skills/`.
-
-`gstack` is vendored upstream and kept unmodified at `.codex/skills/gstack/`.
-
-Because upstream `gstack` expects a native `.claude/skills/gstack` install, `.claude/skills/gstack`, `.agent/skills/gstack`, and `.cursor/skills/gstack` are symlinks back to `.codex/skills/gstack`, and the top-level skill names `browse`, `careful`, `codex`, `design-consultation`, `design-review`, `document-release`, `freeze`, `gstack-upgrade`, `guard`, `investigate`, `office-hours`, `plan-ceo-review`, `plan-design-review`, `plan-eng-review`, `qa`, `qa-only`, `retro`, `review`, `setup-browser-cookies`, `ship`, and `unfreeze` are mirrored there as discovery symlinks.
-
-Marketing skills from `coreyhaines31/marketingskills` are installed under `.codex/skills/marketing/` and mirrored as a single `marketing` folder in `.claude/skills/`, `.agent/skills/`, and `.cursor/skills/`. Keep them grouped there so they remain separate from the coding skill namespace.
-
-After any gstack reinstall or update, including `/gstack-upgrade`, run `./scripts/sync-gstack-mirrors.sh` from the repo root. It reruns upstream `.codex/skills/gstack/setup` and refreshes the `.claude`, `.agent`, and `.cursor` mirrors while keeping `.codex/skills/gstack/` as the only real repo copy.
-
 ## Deployment
 
 Production infrastructure reference: [docs/infra-guide.md](docs/infra-guide.md).
@@ -40,15 +28,14 @@ Production infrastructure reference: [docs/infra-guide.md](docs/infra-guide.md).
 We use the GitHub Project in this repo (Projects tab) for planning and task tracking (no Linear / external PM tools).
 
 ## Docs
-If you change a feature/surface, update its equivalent doc file in `docs/` when one exists.
+
+If you change a feature or surface, update its equivalent doc file in `docs/` when one exists. Keep this README human-facing: it should cover what Warpy is, how to run the dev environment, and only the most relevant project-level pointers. Put implementation details, automation internals, operational runbooks, and edge-case behavior in `docs/`, not here.
 
 First-run onboarding now lives in [docs/onboarding.md](docs/onboarding.md). New accounts land in a standalone onboarding gate before the signed-in shell, where they can add their website, production API base URL, auth mapping, and get an installable agent script tag in one flow.
 
 Live Chrome-session validation and automation use [docs/chrome-cdp.md](docs/chrome-cdp.md). The direct `scripts/cdp.mjs` CLI keeps one shared Chrome debugging session alive so repeated browser actions do not keep forcing fresh approval prompts.
 
-GTM outbound task follow-through uses [docs/gtm-automation-task-executor.md](docs/gtm-automation-task-executor.md) and must claim recipient-visible work through the local recipient-safety and copy-quality ledger CLI, `scripts/gtm-task-guard.mjs`, before opening Apollo email, LinkedIn, X, or any other approved GTM platform composer. The ledger stores duplicate-prevention state under `/Users/levw/.codex/state/warpy-gtm/`, treats duplicate prevention as at-most-once, and blocks unresolved placeholders, internal source labels, static Apollo template copy, missing email subject/body, and missing personalization evidence for message-bearing tasks.
-
-GTM automations can record only high-confidence, materially useful pipeline bugs or optimization opportunities through `scripts/gtm-improvement-log.mjs`. The improvement log lives under `/Users/levw/.codex/state/warpy-gtm/`, and the weekly review workflow is documented in [docs/gtm-automation-improvement-review.md](docs/gtm-automation-improvement-review.md).
+Agent-specific instructions live in [AGENTS.md](AGENTS.md).
 
 ## Landing page
 
@@ -59,46 +46,6 @@ The marketing/landing site lives in the `landing/` submodule ([LevwTech/warpy-la
 The widget loader package is published as `@warpy-ai/widget`. Source lives in the `widget/` submodule ([warpyai/widget](https://github.com/warpyai/widget)).
 
 - Publish a new version: bump `package.json` version in `widget/`, then `pnpm publish --access public`.
-
-Widget replies support three response modes:
-- `markdown`: plain text and markdown.
-- `warpy_components`: the default for new agents. The backend stores a validated render payload and the vanilla widget renders narrow, responsive output components with a complete markdown fallback.
-- `native_components`: advanced mode. Customers register their own output renderers through `@warpy-ai/widget` or `window.warpy.registerComponents`, while `/widget-components` stores the component contracts the agent can use.
-
-Dynamic UI is output-only. Suggestions and approved tools remain the action surface. Every dynamic response must keep `messages.content` as the complete markdown fallback so history, Activity, accessibility fallback, and unsupported renderers stay reliable.
-
-## Adding an environment variable
-
-Backend/worker env vars are sourced from GitHub Secrets in production (ECS task definitions get synced on deploy).
-
-- Backend code: add a typed field to `backend/app/core/config.py` (`Settings`). Env var name is the uppercased field name (e.g. `foo_bar` → `FOO_BAR`).
-- Local backend: add it to `backend/.env.example` (copy to `backend/.env` when running non-Docker).
-- Docker Compose: add it to `.env.example` (copy to `.env`) and thread it into `docker-compose.yml` for any services that need it (`backend`, `worker`, `frontend`).
-- Production deploy: add it as a GitHub Secret/Variable and wire it into `.github/workflows/deploy-production.yml` (`Deploy ECS services` step env + `render_task_definition`/`managed_env`).
-- Frontend (Vite): add `VITE_*` vars to `frontend/.env.example`, pass as workflow `build-args`, add `ARG/ENV` in `frontend/Dockerfile`, then read via `import.meta.env.VITE_*`.
-
-## Lemon Squeezy (Local development)
-
-Warpy ships with a Lemon Squeezy integration for subscriptions and one-time action top-ups.
-
-- Create a Lemon Squeezy account + Store, then create subscription and one-time top-up variants.
-- Set all required `LEMON_SQUEEZY_*` env vars in your environment (API key, Store ID, Variant IDs, webhook secret, optional redirect URL, test mode).
-- Setup webhook: use ngrok and set the Lemon webhook URL to `https://<ngrok-host>/webhooks/lemon-squeezy`.
-- For testing payments checkout, use Lemon Squeezy test mode: https://docs.lemonsqueezy.com/help/getting-started/test-mode
-
-## Enterprise Accounts (Lemon Squeezy)
-
-How we onboard enterprise customers and create enterprise plans.
-
-- Create an **Enterprise** subscription variant in Lemon Squeezy (a “shell” variant) and set `LEMON_SQUEEZY_ENTERPRISE_VARIANT_ID`.
-- Agree on the plan terms with the customer:
-  - `customPriceCents` (monthly price, in cents)
-  - `monthlyActions` (monthly action quota)
-- Generate a checkout link (admin-only):
-  - Call `POST /billing/checkout/enterprise` with header `x-warpy-admin-token: <BILLING_ADMIN_TOKEN>` and body `{ "customPriceCents": 12345, "monthlyActions": 100000 }`.
-  - Generate the link while authenticated as the customer (Warpy encodes `user_id` in checkout custom data for webhook syncing).
-- After purchase, Lemon webhooks sync the subscription in Warpy and set the customer’s monthly quota to `monthlyActions`.
-- If you need fixed enterprise tiers, create additional private variants and extend the enterprise checkout endpoint to select the variant per tier.
 
 ## Non-Docker Setup
 ### Frontend
@@ -184,28 +131,3 @@ pnpm worktree list    # see URLs per worktree
 pnpm worktree stop    # tear down
 ```
 See [docs/worktrees.md](docs/worktrees.md) for full reference (commands, port allocation, promote, clean).
-
-## Optional Widget JWT Auth (Advanced Security)
-If you enable **Require signed widget token** on the Agent page, the widget will require a short-lived JWT for `WS /widget/session` runs and protected widget endpoints such as `POST /widget/transcribe`. The widget refreshes it via the configured refresh endpoint path and includes it in the first websocket `chat.request`.
-
-Required backend env:
-- `WIDGET_JWT_SECRET` (signing secret for widget JWTs)
-- `API_KEY_ENCRYPTION_SECRET` (dedicated secret for storing revealable Warpy API keys)
-
-Warpy uses a single user-scoped **Warpy API Key** across:
-- dashboard API access / coding-agent control-plane access
-- widget token exchange
-
-Manage and rotate that key only from **API Config**. The Overview page is copy-only.
-
-Local testing helper (no customer endpoint needed):
-- Set `TEST_WIDGET_TOKEN_API_KEY` to your generated **Warpy API Key**
-- In **Advanced Security → Widget Refresh Endpoint**, set the path to `/test-widget-token` and **Deploy Changes**
-
-`POST /test-widget-token` is for testing only (disabled when `ENVIRONMENT=production`); it proxies `POST /widget-token` using `TEST_WIDGET_TOKEN_API_KEY`.
-
-## Tracing (LangSmith)
-
-If you wish to use LangSmith for tracing:
-1. Create an account at [LangSmith](https://smith.langchain.com/).
-2. Add your own API key in the `LANGSMITH_API_KEY` environment variable.

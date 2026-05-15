@@ -70,6 +70,8 @@ If the context starts getting large, stop exploratory work, update the checkpoin
 
 ## What Warpy Is
 
+Warpy helps B2B dashboard users with low feature adoption by embedding an in-product AI assistant that lets users control the app through chat and dynamic UI.
+
 Warpy is a drop-in AI execution layer for complex B2B dashboards. Customers embed a lightweight widget into their product, expose approved APIs and UI actions, and let end users ask for work in plain language.
 
 Warpy does not replace the product UI. Chat is the low-friction intent input. The widget can render compact structured output, and customers can map that output to native components when the host app should own the final presentation.
