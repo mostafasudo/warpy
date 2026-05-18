@@ -275,7 +275,10 @@ If the recipient-safety ledger returns `blocked`, do not open or touch the appro
 node scripts/gtm-task-guard.mjs mark --status sent --payload-file /path/to/task-audit-record.json
 node scripts/gtm-task-guard.mjs mark --status completed --payload-file /path/to/task-audit-record.json
 node scripts/gtm-task-guard.mjs mark --status completion_pending --payload-file /path/to/task-audit-record.json
+node scripts/gtm-task-guard.mjs mark --status void --payload-file /path/to/task-audit-record.json
 ```
+
+Use `void` only when a claimed platform action is verified not to have sent anything. The payload must include `no_send_reason`, must not include `sent_at` or `apollo_completed_at`, and the run artifact must capture the proof needed to safely retry later. Examples: LinkedIn opened a modal for the wrong person and it was closed before sending, Apollo opened a stale composer that was discarded before send, or X showed the wrong recipient and no action was posted. Do not use `void` after any successful recipient-visible action or when send state is uncertain; use `completion_pending` when the action succeeded but Apollo completion did not persist.
 
 For Apollo-native email, do not pre-complete the Apollo task if doing so would destroy the send/draft path. The local recipient-safety ledger claim is the hard safety boundary. Use Apollo pre-completion only for task types where completion is independent of the outbound send.
 
@@ -315,6 +318,7 @@ Ledger fields:
 - `personalization_packet`
 - `personalization_evidence`
 - `no_copy_mode`
+- `no_send_reason`
 - `status`
 - `sent_at`
 - `apollo_completed_at`
@@ -324,12 +328,13 @@ Statuses:
 
 - `claimed`: local recipient-safety ledger claim created before any approved GTM platform composer was opened
 - `planned`: copy generated, action not taken
+- `void`: a prior `claimed` action was verified to have no recipient-visible side effect and can be safely retried
 - `sent`: recipient-visible platform step succeeded
 - `completion_pending`: action sent, Apollo completion did not persist
 - `completed`: action sent and Apollo task completed
 - `skipped`: task intentionally skipped with reason
 
-Never resend an action already recorded as `claimed`, `sent`, `completion_pending`, or `completed`. If completion is pending, retry only Apollo task completion.
+Never resend an action already recorded as `claimed`, `sent`, `completion_pending`, or `completed`. If a claim is verified no-send, mark it `void` before any future retry. If completion is pending, retry only Apollo task completion.
 
 ## Task Priority
 
@@ -379,6 +384,14 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 - default to a blank request
 - use a note only when there is specific context
 - keep it casual and non-pitchy
+- open only the exact LinkedIn URL from Apollo/local manifest for the target lead
+- before clicking anything, verify the profile header name, current company, and normalized URL match the Apollo task and local manifest
+- use only the target profile header `More -> Connect` path, or a Connect button proven to live inside the target profile header
+- never click generic page-level Connect buttons, sidebar cards, `People similar to`, `More profiles for you`, feed cards, search results, or carousel suggestions
+- after opening the connection modal, verify the modal recipient name matches the target lead before clicking `Send`; if the modal does not expose the recipient name, close it and skip
+- for blank requests, leave the note field empty and send only after the modal recipient verification passes
+- if LinkedIn opens a wrong-recipient modal or changes a suggested profile card to `Pending`, immediately close/withdraw that action, record the wrong visible recipient, mark the guard claim `void` with `no_send_reason`, and do not complete Apollo
+- if the wrong-recipient state cannot be confidently withdrawn or verified as no-send, mark `completion_pending` or skip with a manual reconciliation blocker; do not retry automatically
 
 ### LinkedIn DM
 

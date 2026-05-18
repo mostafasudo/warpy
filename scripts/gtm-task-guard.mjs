@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const TERMINAL_BLOCKING_STATUSES = new Set(['claimed', 'sent', 'completion_pending', 'completed']);
+const BLOCKING_STATUSES = new Set(['claimed', 'sent', 'completion_pending', 'completed']);
+const MARK_STATUSES = new Set([...BLOCKING_STATUSES, 'void']);
 const DIRECT_MESSAGE_FAMILIES = new Set(['email', 'linkedin_dm']);
 const OUTBOUND_FAMILIES = new Set([
   'email',
@@ -506,7 +507,7 @@ function buildIndexFromLedger(records, ledgerPath) {
   };
 
   records.forEach((record, offset) => {
-    if (!TERMINAL_BLOCKING_STATUSES.has(record.status)) return;
+    if (!BLOCKING_STATUSES.has(record.status)) return;
 
     let keyInfo;
     try {
@@ -586,6 +587,7 @@ function readClaimFiles(stateDir) {
     const path = join(claimsDir, file);
     const claim = JSON.parse(readFileSync(path, 'utf8'));
     if (!claim.key) continue;
+    if (!BLOCKING_STATUSES.has(claim.status)) continue;
     if (!claims[claim.key]) claims[claim.key] = [];
     claims[claim.key].push({ ...claim, source: 'claim_file' });
   }
@@ -625,6 +627,26 @@ function writeClaimLocks(stateDir, keyInfo, payload) {
     created_at: new Date().toISOString(),
   }));
   const createdPaths = [];
+  const pathsToReplace = [];
+
+  for (const key of keyInfo.keys) {
+    const path = claimFilePath(stateDir, key.key);
+    if (existsSync(path)) {
+      const existing = JSON.parse(readFileSync(path, 'utf8'));
+      if (BLOCKING_STATUSES.has(existing.status)) {
+        return {
+          ok: false,
+          decision: 'blocked',
+          reason: key.reason,
+          conflict_key: key.key,
+          completion_retry_allowed: false,
+        };
+      }
+      pathsToReplace.push(path);
+    }
+  }
+
+  for (const path of pathsToReplace) rmSync(path, { force: true });
 
   for (const key of keyInfo.keys) {
     const path = claimFilePath(stateDir, key.key);
@@ -729,10 +751,21 @@ function claim({ payload, stateDir, ledgerPath }) {
   return writeClaimLocks(stateDir, keyInfo, payload);
 }
 
+function validateMarkPayload(payload, status) {
+  if (status !== 'void') return;
+  if (!normalizeString(payload.no_send_reason)) {
+    throw new Error('void guard marks require no_send_reason.');
+  }
+  if (payload.sent_at || payload.apollo_completed_at) {
+    throw new Error('void guard marks cannot include sent_at or apollo_completed_at.');
+  }
+}
+
 function mark({ payload, stateDir, status }) {
-  if (!TERMINAL_BLOCKING_STATUSES.has(status)) {
+  if (!MARK_STATUSES.has(status)) {
     throw new Error(`Unsupported guard mark status: ${status}`);
   }
+  validateMarkPayload(payload, status);
 
   ensureState(stateDir);
   const keyInfo = buildGuardKeys(payload);
@@ -758,6 +791,11 @@ function mark({ payload, stateDir, status }) {
     current.updated_at = updatedAt;
     current.sent_at = payload.sent_at ?? current.sent_at ?? null;
     current.apollo_completed_at = payload.apollo_completed_at ?? current.apollo_completed_at ?? null;
+    if (status === 'void') {
+      current.voided_at = updatedAt;
+      current.no_send_reason = payload.no_send_reason;
+      current.platform_url = payload.platform_url ?? current.platform_url ?? null;
+    }
     writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`, { mode: 0o600 });
     updated.push(key.key);
   }
@@ -885,12 +923,14 @@ function usage() {
   return `Usage:
   node scripts/gtm-task-guard.mjs claim --payload-file task.json
   node scripts/gtm-task-guard.mjs mark --status sent --payload-file task.json
+  node scripts/gtm-task-guard.mjs mark --status void --payload-file task.json
   node scripts/gtm-task-guard.mjs rebuild-index
   node scripts/gtm-task-guard.mjs audit
 
 Payloads must include apollo_task_id, run_started_at, local_date, and a recipient identifier such as contact_email or linkedin_url.
 Message-bearing payloads must include final copy fields such as subject/body, message, copy_used, exact_copy, or personalization_packet evidence.
-Use no_copy_mode only for linkedin_like_only or blank_connection_request.`;
+Use no_copy_mode only for linkedin_like_only or blank_connection_request.
+Use mark --status void only for verified no-send aborts, and include no_send_reason.`;
 }
 
 function rebuildIndex({ stateDir, ledgerPath }) {

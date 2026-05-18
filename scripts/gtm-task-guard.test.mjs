@@ -732,6 +732,92 @@ test('same recipient in the same run is blocked after a claim', () => {
   }
 });
 
+test('voided no-send claims do not block a later retry', () => {
+  const state = tempState();
+  try {
+    writeLedger(state.ledgerPath, []);
+    const first = __test__.claim({
+      stateDir: state.stateDir,
+      ledgerPath: state.ledgerPath,
+      payload: {
+        ...basePayload,
+        apollo_task_id: 'voidable-connect-task',
+        channel: 'linkedin',
+        step_type: 'connection_request',
+        linkedin_url: 'https://www.linkedin.com/in/micheletex',
+        subject: '',
+        body: '',
+        no_copy_mode: 'blank_connection_request',
+      },
+    });
+    assert.equal(first.decision, 'claimed');
+
+    const voidResult = __test__.mark({
+      stateDir: state.stateDir,
+      payload: {
+        ...basePayload,
+        apollo_task_id: 'voidable-connect-task',
+        channel: 'linkedin',
+        step_type: 'connection_request',
+        linkedin_url: 'https://www.linkedin.com/in/micheletex',
+        no_copy_mode: 'blank_connection_request',
+        no_send_reason: 'linkedin_wrong_recipient_modal_closed_no_request_sent',
+      },
+      status: 'void',
+    });
+    assert.equal(voidResult.decision, 'marked');
+    assert.equal(voidResult.status, 'void');
+
+    const retry = __test__.claim({
+      stateDir: state.stateDir,
+      ledgerPath: state.ledgerPath,
+      payload: {
+        ...basePayload,
+        apollo_task_id: 'voidable-connect-task',
+        channel: 'linkedin',
+        step_type: 'connection_request',
+        linkedin_url: 'https://www.linkedin.com/in/micheletex',
+        subject: '',
+        body: '',
+        no_copy_mode: 'blank_connection_request',
+      },
+    });
+    assert.equal(retry.decision, 'claimed');
+  } finally {
+    state.cleanup();
+  }
+});
+
+test('void marks require a verified no-send reason and no sent timestamps', () => {
+  const state = tempState();
+  try {
+    writeLedger(state.ledgerPath, []);
+    assert.throws(
+      () => __test__.mark({
+        stateDir: state.stateDir,
+        payload: basePayload,
+        status: 'void',
+      }),
+      /no_send_reason/,
+    );
+
+    assert.throws(
+      () => __test__.mark({
+        stateDir: state.stateDir,
+        payload: {
+          ...basePayload,
+          no_send_reason: 'modal_closed_no_request_sent',
+          sent_at: '2026-04-30T10:01:00Z',
+        },
+        status: 'void',
+      }),
+      /cannot include sent_at/,
+    );
+  } finally {
+    state.cleanup();
+  }
+});
+
 test('same-day email and LinkedIn DM collision is blocked across runs', () => {
   const state = tempState();
   try {
