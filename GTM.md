@@ -6,7 +6,7 @@ For any sales, marketing, or GTM task, read this file first, then check the mark
 
 ## GTM Scope & Platform Compliance
 
-Warpy GTM automations are routine sales, marketing, sourcing, sequencing, and content-drafting workflows only. They use authenticated, user-owned GTM accounts and the approved workflows exposed by Apollo, Amplemarket, Buffer, LinkedIn, X, and source websites.
+warpy.ai GTM automations are routine sales, marketing, sourcing, sequencing, and content-drafting workflows only. They use authenticated, user-owned GTM accounts and the approved workflows exposed by Apollo, Amplemarket, Buffer, LinkedIn, X, and source websites.
 
 They must not perform cybersecurity testing, vulnerability research, credential work, bypassing, evasion, scraping protected data, or unauthorized access. If a task appears outside GTM, outside the user's authenticated account permissions, or outside a platform-allowed workflow, skip it and log the reason instead of continuing.
 
@@ -68,15 +68,15 @@ Each run must keep a resume checkpoint in the automation's persistent state dire
 
 If the context starts getting large, stop exploratory work, update the checkpoint, reread only the checkpoint plus the relevant workflow doc, and continue from the checkpoint. Do not repeat sourcing, imports, sends, draft creation, or other side effects that the checkpoint marks complete.
 
-## What Warpy Is
+## What warpy.ai is
 
-Warpy helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets make their product AI-native.
+warpy.ai helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets make their product AI-native.
 
-Customers embed a lightweight in-product assistant into their dashboard. Users ask for work in chat, Warpy can answer with component-rich chat messages using Warpy components or customer native components, and configured tools or screen autopilot can operate the existing dashboard on the user's behalf.
+Customers embed a lightweight in-product assistant into their dashboard. Users ask for work in chat, warpy.ai can answer with component-rich chat messages using warpy.ai components or customer native components, and configured tools or screen autopilot can operate the existing dashboard on the user's behalf.
 
-GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow in the prospect's product, then explain Warpy in plain recipient language.
+GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow in the prospect's product, then explain warpy.ai in plain recipient language.
 
-Warpy does not replace the product UI. Chat is the low-friction intent input, dynamic UI is the chat response surface, and dashboard action comes from configured tools or screen autopilot inside the product experience users already use.
+warpy.ai does not replace the product UI. Chat is the low-friction intent input, dynamic UI is the chat response surface, and dashboard action comes from configured tools or screen autopilot inside the product experience users already use.
 
 ## Voice
 
@@ -100,7 +100,7 @@ Every recipient-visible message must pass this check before it is written into a
 - explain why the trigger matters to this company
 - name the likely adoption, onboarding, product-usage, or repetitive-support problem
 - name a concrete dashboard workflow, screen, job, or product action the recipient would recognize
-- explain Warpy in plain recipient language: users ask in chat, get component-rich answers when useful, and Warpy helps them complete the workflow through configured tools or screen autopilot in the existing dashboard
+- explain warpy.ai in plain recipient language: users ask in chat, get component-rich answers when useful, and warpy.ai helps them complete the workflow through configured tools or screen autopilot in the existing dashboard
 - use a low-friction CTA tied to the observation
 
 Never use these phrases in recipient-visible copy unless quoting the prospect directly: `approved step`, `approved action`, `separate bot`, `generic chatbot`, `interesting bit`, `not just answers`, or `using only approved actions`.
@@ -143,11 +143,11 @@ Apollo is the outbound workflow control plane. The live sequence is [`Warpy Foun
 
 Amplemarket is the sourcing and enrichment layer. Codex automations move clean leads into Apollo and complete eligible due or overdue Apollo tasks through approved GTM platform workflows. The AE owns replies, objections, live conversations, and opportunities.
 
-The task executor must preserve Apollo sequence timing and per-contact step order. It may complete only Apollo tasks from the Warpy sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before a recipient-visible GTM step, skip the task and log the blocker. For a given contact, never complete a later sequence step until all earlier Apollo sequence steps for that contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo. Build the eligible queue once at run start; do not complete tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
+The task executor must preserve Apollo sequence timing and per-contact step order. It may complete only Apollo tasks from the warpy.ai sequence that are overdue or due on the current local date. Future-dated tasks are not actionable, even if Apollo shows them in an open or pending task list. If the due date cannot be confirmed before a recipient-visible GTM step, skip the task and log the blocker. For a given contact, never complete a later sequence step until all earlier Apollo sequence steps for that contact are completed, safely skipped with a terminal no-action reason, or no longer applicable in Apollo. Build the eligible queue once at run start; do not complete tasks that appear only after completing another task in the same run. Never send more than one outbound touch to the same contact in a single executor run.
 
 Before opening any Apollo email, LinkedIn, X, or other approved GTM platform composer, the task executor must write an audit record JSON and run `node scripts/gtm-task-guard.mjs claim --payload-file <task-audit-record.json>`. This local recipient-safety ledger is the duplicate-prevention and copy-quality boundary. If it blocks the claim, skip without touching the platform composer. `copy_hash` is audit metadata only and must never be used for duplicate prevention. Existing `sent`, `completion_pending`, `completed`, or `claimed` ledger state wins over Apollo backlog pressure. A missed touch is acceptable; a duplicate email, DM, connection request, public social touch, unresolved placeholder, or static Apollo-template send is not.
 
-Every recipient-visible message must be hyper-personalized for the specific lead. Apollo sequence templates are cadence scaffolding only, never the source of truth for final copy. The shared core idea is consistent: Warpy helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets by embedding an in-product assistant where users ask in chat, get component-rich replies when useful, and complete workflows through configured tools or screen autopilot in the existing dashboard. The actual subject, body, LinkedIn note, DM, X reply, or asset note must be unique to the person and account, using that lead's trigger, persona angle, dashboard/workflow context, and proof workflow. Literal placeholders such as `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, internal sourcing labels like `Amplemarket`, `Apollo profile`, or `Duo Copilot`, and banned recipient-visible phrases from the Recipient Comprehension Rule are terminal blockers.
+Every recipient-visible message must be hyper-personalized for the specific lead. Apollo sequence templates are cadence scaffolding only, never the source of truth for final copy. The shared core idea is consistent: warpy.ai helps B2B SaaS teams with complex dashboards, low feature adoption, and repetitive support tickets by embedding an in-product assistant where users ask in chat, get component-rich replies when useful, and complete workflows through configured tools or screen autopilot in the existing dashboard. The actual subject, body, LinkedIn note, DM, X reply, or asset note must be unique to the person and account, using that lead's trigger, persona angle, dashboard/workflow context, and proof workflow. Literal placeholders such as `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, internal sourcing labels like `Amplemarket`, `Apollo profile`, or `Duo Copilot`, and banned recipient-visible phrases from the Recipient Comprehension Rule are terminal blockers.
 
 Pipeline rules:
 
@@ -185,7 +185,7 @@ Pick the best-fit primary lead first. Use the adjacent lead only when the accoun
 | 17 | Email | Primary or adjacent | Pure value touch. No hard CTA. |
 | 21 | Email | Primary | Polite close-the-loop email. |
 
-Every touch should add a new angle. Lead with the concrete adoption, product-usage, onboarding, or repetitive-support problem, then connect Warpy to a recognizable workflow in the prospect's product. Mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets.
+Every touch should add a new angle. Lead with the concrete adoption, product-usage, onboarding, or repetitive-support problem, then connect warpy.ai to a recognizable workflow in the prospect's product. Mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets.
 
 For each lead, keep messages short and straightforward while varying the observation, proof workflow, and CTA by step. Follow-ups may reuse the same account thesis, but they must not reuse a static template body with only names or company fields swapped.
 
@@ -240,15 +240,15 @@ The weekly improvement review automation reads the report, clusters related note
 
 ## Marketing Engine
 
-Warpy runs a founder-led marketing engine alongside outbound. Its job is to publish smart, human takes on product, AI, dashboards, and software behavior so the market associates Warpy with a clear point of view.
+warpy.ai runs a founder-led marketing engine alongside outbound. Its job is to publish smart, human takes on product, AI, dashboards, and software behavior so the market associates warpy.ai with a clear point of view.
 
 Operating principles:
 
 - post from the founder or personal profile on LinkedIn, not the company page
 - lead with the thought or pattern, not bait
 - default to broader tech, AI, product, and UI shifts
-- mention Warpy only when the bridge is natural
-- broad commentary should still work if Warpy disappeared from the page
+- mention warpy.ai only when the bridge is natural
+- broad commentary should still work if warpy.ai disappeared from the page
 - never turn a loose source story into a disguised product pitch
 - do not put links in the LinkedIn post body unless there is a deliberate reason
 - optimize for saves, thoughtful comments, DMs, and profile visits

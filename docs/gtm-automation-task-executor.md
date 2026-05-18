@@ -1,4 +1,4 @@
-# Warpy GTM Task Executor Automation
+# warpy.ai GTM Task Executor Automation
 
 ## Objective
 
@@ -39,7 +39,7 @@ If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only 
 - Recipient-safety ledger CLI: `scripts/gtm-task-guard.mjs`
 - Recipient-safety ledger index: `/Users/levw/.codex/state/warpy-gtm/task-guard-index.json`
 - Recipient-safety ledger claims: `/Users/levw/.codex/state/warpy-gtm/task-guard-claims/`
-- Copy-quality gate: the same `scripts/gtm-task-guard.mjs claim` call blocks unresolved placeholders, static Apollo templates, insider Warpy positioning, missing email subject/body, and missing personalization evidence before any composer opens
+- Copy-quality gate: the same `scripts/gtm-task-guard.mjs claim` call blocks unresolved placeholders, static Apollo templates, insider warpy.ai positioning, missing email subject/body, and missing personalization evidence before any composer opens
 - Local improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl` through `scripts/gtm-improvement-log.mjs`
 
 ## Run Concurrency Guard
@@ -117,7 +117,7 @@ Do not record speculative ideas, low-confidence preferences, isolated site slown
 
 The executor must preserve Apollo sequence timing and per-contact sequence order. A task is eligible only when all of these are true:
 
-- it belongs to the Warpy outbound motion / `Warpy Founder-Led SDR Sequence`
+- it belongs to the warpy.ai outbound motion / `Warpy Founder-Led SDR Sequence`
 - Apollo status is open or pending, not completed, dismissed, paused, or skipped
 - Apollo due date is before the current local date, or due on the current local date
 - Apollo due date is verified from Apollo before any recipient-visible GTM step
@@ -139,7 +139,7 @@ Use Apollo's task queue as the entry point:
 
 `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`
 
-After opening the task page, apply the necessary Apollo filters so the working view contains only due/overdue or today's tasks for the Warpy outbound motion, sorted by due date ascending. Treat the URL as a starting view, not proof of eligibility. Never complete a task from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
+After opening the task page, apply the necessary Apollo filters so the working view contains only due/overdue or today's tasks for the warpy.ai outbound motion, sorted by due date ascending. Treat the URL as a starting view, not proof of eligibility. Never complete a task from an all-open, all-pending, sequence-wide, or contact-detail task list until the task detail confirms that it is due today or overdue.
 
 If a task has no visible due date, a malformed due date, an ambiguous timezone, or conflicting list/detail due-state, skip it with `skip_reason: "due_date_unverified"` and continue to the next eligible task. The only exception is retrying Apollo completion for an existing `completion_pending` ledger item after the recipient-visible platform step has already succeeded; that retry must not send any new outbound touch.
 
@@ -169,7 +169,7 @@ For every recipient-visible task:
 - map the Apollo task to the matching packet step, such as `email_1`, `email_2`, `linkedin_connection`, `linkedin_dm`, `email_3`, `asset_send`, or `close_loop`
 - verify `copy_status: "ready"` and that `fresh_until` has not passed
 - refresh the step copy as `copy_source: "executor_refreshed"` when packet copy is stale, missing, generic, off-step, vague, insider-framed, context-missing, or inconsistent with fresh LinkedIn/X/Apollo context
-- run the recipient comprehension check from `GTM.md`: the final copy must explain why the trigger matters, name the likely adoption/support problem, name a concrete dashboard workflow, and explain Warpy in plain recipient language
+- run the recipient comprehension check from `GTM.md`: the final copy must explain why the trigger matters, name the likely adoption/support problem, name a concrete dashboard workflow, and explain warpy.ai in plain recipient language
 - include the final subject/body or message, `personalization_packet`, `personalization_evidence`, and `copy_source` in the audit record before calling `scripts/gtm-task-guard.mjs claim`
 - never send copy that still contains `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, or the static Apollo sequence template with fields swapped
 - never send copy that exposes internal provenance labels such as `Apollo profile`, `Amplemarket`, `Duo Copilot`, `Duo Crow competitor`, or `Structured Amplemarket search`; rewrite those into natural recipient-safe observations first
@@ -188,7 +188,7 @@ For Duo-sourced leads, load `duo_message_context`, `duo_trigger_summary`, `decis
 
 If a Duo-sourced task is missing this context and the lookup can be done safely, use Amplemarket or the Duo profile through Chrome CDP to inspect only the specific profile and suggested sequence fields needed. Capture compact inspiration only: angle, trigger, pain, proof cue, and useful phrasing. Do not paste full Duo suggested messages into the live transcript or local ledger.
 
-Duo suggested sequence copy is inspiration, not send-ready copy. Rewrite it using the `GTM.md` voice and the current Apollo sequence step. Override inherited Apollo task copy when it is generic, off-persona, missing the Duo trigger, over-polished, too salesy, or conflicts with Warpy copy rules. Never send Duo suggested copy as-is. If Duo context exists but no packet exists, generate or refresh the packet before any recipient-visible action.
+Duo suggested sequence copy is inspiration, not send-ready copy. Rewrite it using the `GTM.md` voice and the current Apollo sequence step. Override inherited Apollo task copy when it is generic, off-persona, missing the Duo trigger, over-polished, too salesy, or conflicts with warpy.ai copy rules. Never send Duo suggested copy as-is. If Duo context exists but no packet exists, generate or refresh the packet before any recipient-visible action.
 
 ## Voice
 
@@ -202,7 +202,7 @@ Key reminders:
 - no corporate polish or generic sales language
 - lead with the concrete adoption, product-usage, onboarding, or repetitive-support problem
 - tie the message to a workflow, screen, job, or product action the recipient would recognize
-- explain Warpy as an in-product assistant where users ask in chat, get component-rich answers when useful, and complete workflows through configured tools or screen autopilot in the existing dashboard
+- explain warpy.ai as an in-product assistant where users ask in chat, get component-rich answers when useful, and complete workflows through configured tools or screen autopilot in the existing dashboard
 - mention support reduction when the persona or trigger makes it natural, especially repetitive "how do i..." tickets
 
 If a live Apollo draft is off-strategy, generic, missing the verified trigger, or inconsistent with the verified persona, rewrite it before sending. If it cannot be rewritten safely, skip the task with a copy blocker.
@@ -353,7 +353,7 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 - align the message with the sequence step and persona angle
 - pull trigger and proof context from local manifest first
 - use the matching `personalization_packet` step as the starting point
-- use compact Duo context as inspiration when present, then rewrite in Warpy voice
+- use compact Duo context as inspiration when present, then rewrite in warpy.ai voice
 - send clean drafts as-is only when they already match the verified trigger, persona, `personalization_packet`, and `GTM.md` voice
 - override inherited Apollo copy when the live task body is off-strategy or missing required context
 - skip with a copy blocker when the message would make a recipient ask "why is this relevant to us?" or "what workflow are you talking about?"
@@ -420,7 +420,7 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 
 1. Claim the run concurrency guard for `warpy-gtm-task-executor`.
 2. Establish the current local date.
-3. Open Apollo tasks at `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`, then apply due/overdue and today's-task filters for the Warpy outbound motion only.
+3. Open Apollo tasks at `https://app.apollo.io/#/tasks?sortBy[]=task_due_at.asc&dateRange[min]=0_minutes_later&dateRange[max]=1_days_later`, then apply due/overdue and today's-task filters for the warpy.ai outbound motion only.
 4. Load the manifest index and task ledger.
 5. Rebuild the recipient-safety ledger index with `node scripts/gtm-task-guard.mjs rebuild-index`.
 6. Build the eligible task queue only from Apollo tasks whose detail view confirms they are overdue or due on the current local date.
@@ -495,9 +495,9 @@ A successful run:
 - keeps copy aligned with `GTM.md`
 - uses per-lead `personalization_packet` copy or refreshes it before sending
 - blocks unresolved placeholders and static Apollo templates before any send path
-- blocks insider, vague, or context-missing Warpy positioning before any send path
+- blocks insider, vague, or context-missing warpy.ai positioning before any send path
 - uses Duo suggested-sequence context only as inspiration and never sends it verbatim
-- overrides inherited Apollo copy when it misses the verified Duo trigger, persona, or Warpy voice
+- overrides inherited Apollo copy when it misses the verified Duo trigger, persona, or warpy.ai voice
 - avoids duplicate sends across retries
 - leaves replies and live conversations to the AE
 - updates Apollo task state and local ledger accurately

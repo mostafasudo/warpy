@@ -1,4 +1,4 @@
-# Warpy GTM Improvement Review Automation
+# warpy.ai GTM Improvement Review Automation
 
 ## Objective
 

@@ -1,10 +1,10 @@
-# Warpy Marketing GTM Engine Automation
+# warpy.ai Marketing GTM Engine Automation
 
 ## Objective
 
 Turn fresh product and tech signals into smart, human LinkedIn and X drafts without becoming a news bot or a generic founder-content machine.
 
-This automation keeps a steady founder-led point of view in market while preserving taste, specificity, and Warpy's voice.
+This automation keeps a steady founder-led point of view in market while preserving taste, specificity, and warpy.ai's voice.
 
 ## Source Of Truth
 
@@ -134,7 +134,7 @@ Reference accounts for taste calibration:
 - `https://x.com/itsalexvacca`
 - `https://x.com/paolo_scales`
 
-Use reference accounts to calibrate hook sharpness, specificity, and human framing. Do not mimic their rhythm, reuse their lines, or let them override Warpy's voice.
+Use reference accounts to calibrate hook sharpness, specificity, and human framing. Do not mimic their rhythm, reuse their lines, or let them override warpy.ai's voice.
 
 ## Topic Selection
 
@@ -152,16 +152,16 @@ Weak topic zones:
 - generic AI news with no product implication
 - viral drama with no useful takeaway
 - anything that only restates the news
-- any angle that mainly exists to sneak in a Warpy pitch
+- any angle that mainly exists to sneak in a warpy.ai pitch
 
 Choose ideas with:
 
 - a concrete observation
-- a reason Warpy has standing to comment
+- a reason warpy.ai has standing to comment
 - enough evidence for the confidence level of the claim
 - a new angle relative to recent posts and local memory
 
-If the Warpy bridge is weak, keep the post broad or choose a better idea.
+If the warpy.ai bridge is weak, keep the post broad or choose a better idea.
 
 ## Voice
 
@@ -176,7 +176,7 @@ Hard reminders:
 - no arrogant certainty
 - humble framing for opinions
 - concrete examples or observed patterns when possible
-- no forced Warpy mention
+- no forced warpy.ai mention
 - never frame chat as replacing the product UI
 - when relevant, frame chat as the input layer and structured UI as the output layer, either inside the widget or through native app components
 
@@ -221,7 +221,7 @@ Do not update reference notes just to show activity.
 6. Fetch current product and tech signals.
 7. Open original sources where needed.
 8. Build a shortlist of candidate topics.
-9. Remove stale, repetitive, unsupported, derivative, or forced-Warpy angles.
+9. Remove stale, repetitive, unsupported, derivative, or forced warpy.ai angles.
 10. Draft channel-native copy for the strongest ideas.
 11. Sanity-check each draft for evidence, humility, and voice.
 12. Save drafts to Buffer when available, falling back from Buffer MCP to the Chrome CDP Buffer UI when needed, or write local draft artifacts if Buffer cannot be safely reached.
@@ -255,7 +255,7 @@ A successful run:
 
 - creates strong channel-native drafts without fixed output caps
 - avoids duplicate takes and disguised product pitches
-- stays inside Warpy's voice
+- stays inside warpy.ai's voice
 - supports claims with appropriate evidence
 - records local memory so the next run gets sharper
 - falls back gracefully when one source or tool is unavailable

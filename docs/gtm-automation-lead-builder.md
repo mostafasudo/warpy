@@ -1,4 +1,4 @@
-# Warpy GTM Lead Builder Automation
+# warpy.ai GTM Lead Builder Automation
 
 ## Objective
 
@@ -33,7 +33,7 @@ Use the direct `mcp__amplemarket__*` namespace for Amplemarket work whenever it 
 - Local state: authoritative manifests and account-level control state
 - Local artifacts: Apollo import CSVs and audit CSVs
 - Apollo authenticated GTM browser workflow: import, verification, sequence enrollment, and adjacent import when multithreading is useful
-- Amplemarket Duo Copilot suggestions: first-priority candidate queue from manually configured Warpy ICP signals at `https://app.amplemarket.com/dashboard/duo`
+- Amplemarket Duo Copilot suggestions: first-priority candidate queue from manually configured warpy.ai ICP signals at `https://app.amplemarket.com/dashboard/duo`
 - Chrome CDP workflow for the user's authenticated GTM browser session: Apollo work, optional X lookup, and any Amplemarket step where direct MCP cannot complete the exact operation
 - Local personalization packet: source of truth for per-lead outbound copy that the task executor refreshes and sends
 - Local improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl` through `scripts/gtm-improvement-log.mjs`
@@ -94,11 +94,11 @@ At the start of the sourcing phase, open `https://app.amplemarket.com/dashboard/
 
 For each promising Duo suggestion, click into the lead profile before acceptance. Verify the account is ICP-fit, the person maps to a primary buyer persona, and the title has seniority or ownership over Product, Support, CS/Growth, Engineering, or Founder decisions. Reject random SWEs, designers, junior ICs, unclear titles, or other non-buyer roles unless the profile or public context clearly proves relevant decision ownership.
 
-When the Duo profile shows a suggested sequence panel, capture only compact messaging context: the suggested angle, trigger, pain, proof cue, and any useful phrase-level inspiration. Do not copy Duo messages verbatim, store full raw suggested copy, or let Duo copy override `GTM.md` voice. The Lead Builder should preserve enough context for Apollo execution to rewrite the eventual task copy in Warpy voice.
+When the Duo profile shows a suggested sequence panel, capture only compact messaging context: the suggested angle, trigger, pain, proof cue, and any useful phrase-level inspiration. Do not copy Duo messages verbatim, store full raw suggested copy, or let Duo copy override `GTM.md` voice. The Lead Builder should preserve enough context for Apollo execution to rewrite the eventual task copy in warpy.ai voice.
 
 Do not bulk-read the Duo page, profile histories, full post bodies, large tables, screenshots, suggested-sequence bodies, or hidden detail payloads into the live transcript. Write any needed audit detail to the run artifact directory and summarize only counts, accepted domains, rejected counts by reason, signal names, and blockers.
 
-Current manually configured Warpy ICP signals:
+Current manually configured warpy.ai ICP signals:
 
 - `Warpy ICP | dashboard adoption + in-app AI intent`
 - `Warpy ICP | Crow competitor engagement`
@@ -254,7 +254,7 @@ Useful company filters:
 
 Useful trigger signals:
 
-- Duo Copilot suggestions from the configured Warpy ICP signals
+- Duo Copilot suggestions from the configured warpy.ai ICP signals
 - complex dashboard, analytics, reporting, workflow, or platform language
 - product, support, onboarding, implementation, solutions engineering, or AI hiring
 - recent launches, partnerships, funding, or product expansion that strengthens ICP fit
@@ -271,7 +271,7 @@ Avoid bad-fit accounts when evidence points to:
 Score viable accounts before import:
 
 - dashboard complexity and workflow density
-- Warpy pain intensity: adoption drag, onboarding friction, repetitive support, or AI-native pressure
+- warpy.ai pain intensity: adoption drag, onboarding friction, repetitive support, or AI-native pressure
 - trigger strength and recency
 - persona seniority and ownership
 - channel surface quality
@@ -342,14 +342,14 @@ Every accepted primary lead must get a compact `personalization_packet` before s
 
 Required fields:
 
-- `core_idea`: the Warpy thesis for this account, centered on complex dashboards, low feature adoption, repetitive support tickets, and an in-product assistant that combines chat, component-rich replies, configured tools, and screen autopilot
+- `core_idea`: the warpy.ai thesis for this account, centered on complex dashboards, low feature adoption, repetitive support tickets, and an in-product assistant that combines chat, component-rich replies, configured tools, and screen autopilot
 - `lead_specific_observation`: the specific account/person trigger that makes this outreach relevant
 - `persona_angle`: the Product, Support, Technical, or CS/Growth angle for this lead
 - `customer_problem`: the likely adoption, onboarding, product-usage, or repetitive-support problem this account may feel
 - `why_this_company`: the bridge between the verified trigger and that customer problem
 - `specific_dashboard_workflow`: one concrete workflow, screen, job, or product action the recipient would recognize
-- `proof_workflow`: one concrete workflow Warpy could help users complete inside the company's dashboard
-- `recipient_safe_warpy_bridge`: a plain-language explanation of how Warpy helps users ask for that workflow in chat, get component-rich guidance when useful, and complete the workflow through configured tools or screen autopilot in the existing dashboard
+- `proof_workflow`: one concrete workflow warpy.ai could help users complete inside the company's dashboard
+- `recipient_safe_warpy_bridge`: a plain-language explanation of how warpy.ai helps users ask for that workflow in chat, get component-rich guidance when useful, and complete the workflow through configured tools or screen autopilot in the existing dashboard
 - `copy_source`: `duo_rewritten`, `research_generated`, or `executor_refreshed`
 - `generated_at`: ISO timestamp
 - `fresh_until`: ISO date or timestamp after which the executor should refresh the copy before sending
@@ -365,7 +365,7 @@ Each message-bearing `steps` entry should include:
 - `personalization_evidence`: the trigger or observation that justifies the copy
 - `copy_status`: `ready`, `needs_refresh`, or `blocked`
 
-Each message-bearing `steps` entry must be understandable without internal Warpy context. It should state why the trigger matters, name the likely user or support problem, include the concrete dashboard workflow, and explain Warpy in recipient-safe language. If a draft relies on internal terms, a vague comparison, or an unexplained product phrase, set `copy_status: "needs_refresh"` or `copy_status: "blocked"` instead of enrolling the lead.
+Each message-bearing `steps` entry must be understandable without internal warpy.ai context. It should state why the trigger matters, name the likely user or support problem, include the concrete dashboard workflow, and explain warpy.ai in recipient-safe language. If a draft relies on internal terms, a vague comparison, or an unexplained product phrase, set `copy_status: "needs_refresh"` or `copy_status: "blocked"` instead of enrolling the lead.
 
 Keep packet content compact. Store enough to regenerate and validate copy, not full Duo raw messages, bulky post bodies, screenshots, or long page extracts.
 
@@ -420,7 +420,7 @@ Amplemarket lead lists are temporary batch containers.
 11. Enrich accepted leads and look up verified business emails for accepted primaries.
 12. Add optional X context only when confidence is high.
 13. Write trigger, pain hypothesis, proof point, fit score, priority tier, source channel, decision-maker verification, role authority, and Duo provenance/message context when present.
-14. Generate a `personalization_packet` for every accepted primary lead using the trigger, persona, customer problem, company-specific bridge, concrete dashboard workflow, recipient-safe Warpy bridge, and compact evidence. Use Duo suggested-sequence context only as inspiration, rewritten in `GTM.md` voice.
+14. Generate a `personalization_packet` for every accepted primary lead using the trigger, persona, customer problem, company-specific bridge, concrete dashboard workflow, recipient-safe warpy.ai bridge, and compact evidence. Use Duo suggested-sequence context only as inspiration, rewritten in `GTM.md` voice.
 15. If safe personalized copy cannot be generated, record `personalization_blocker`, skip Apollo enrollment for that lead, and keep processing other leads.
 16. Create the temporary Amplemarket list and add accepted leads, using Chrome CDP if the MCP path is limited or failing.
 17. Fetch final list metadata for audit only through compact metadata surfaces. Do not fetch full lead-list contents after the local manifest has been written.
