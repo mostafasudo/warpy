@@ -28,6 +28,8 @@ Relevant marketing skills:
 
 If Amplemarket context is needed, prefer direct `mcp__amplemarket__*` read-only lookup when it can answer the exact question. If that lookup is unavailable, limited, unsupported, stale, or failing, load `docs/chrome-cdp.md` and fall back to the Chrome CDP user browser.
 
+Amplemarket-sourced identity is trusted GTM data. If the local manifest or Apollo task detail contains the same LinkedIn URL from Amplemarket enrichment, use that URL as the canonical LinkedIn recipient identity. Do not block blank connection requests on redundant profile-header, current-company, or page-layout checks once the recipient-safety ledger claim has passed and the LinkedIn invitation modal names the intended person.
+
 ## Systems
 
 - Apollo: task queue, sequence context, contact/account stage state
@@ -384,13 +386,12 @@ Within each bucket, work overdue tasks first, oldest due first, then tasks due t
 - default to a blank request
 - use a note only when there is specific context
 - keep it casual and non-pitchy
-- open only the exact LinkedIn URL from Apollo/local manifest for the target lead
-- before clicking anything, verify the profile header name, current company, and normalized URL match the Apollo task and local manifest
-- use only the target profile header `More -> Connect` path, or a Connect button proven to live inside the target profile header
-- never click generic page-level Connect buttons, sidebar cards, `People similar to`, `More profiles for you`, feed cards, search results, or carousel suggestions
-- after opening the connection modal, verify the modal recipient name matches the target lead before clicking `Send`; if the modal does not expose the recipient name, close it and skip
-- for blank requests, leave the note field empty and send only after the modal recipient verification passes
-- if LinkedIn opens a wrong-recipient modal or changes a suggested profile card to `Pending`, immediately close/withdraw that action, record the wrong visible recipient, mark the guard claim `void` with `no_send_reason`, and do not complete Apollo
+- open the exact LinkedIn URL from the local manifest or Apollo task detail for the target lead
+- treat Amplemarket-sourced LinkedIn URLs in the local manifest as trusted identity data; do not require extra profile-header, current-company, or page-layout verification before a blank connection request
+- after the recipient-safety ledger claim passes, click the available Connect path for the trusted target URL and use the invitation modal as the final UI check
+- for blank requests, leave the note field empty and click `Send without a note` when the modal recipient name matches the target lead
+- if the modal names a different person or does not expose a recipient name, close it, record the blocker, mark the guard claim `void` with `no_send_reason`, and do not complete Apollo
+- if LinkedIn changes a non-target suggested profile card to `Pending`, immediately close/withdraw that action, record the wrong visible recipient, mark the guard claim `void` with `no_send_reason`, and do not complete Apollo
 - if the wrong-recipient state cannot be confidently withdrawn or verified as no-send, mark `completion_pending` or skip with a manual reconciliation blocker; do not retry automatically
 
 ### LinkedIn DM
