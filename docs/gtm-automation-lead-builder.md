@@ -101,7 +101,6 @@ Do not bulk-read the Duo page, profile histories, full post bodies, large tables
 Current manually configured warpy.ai ICP signals:
 
 - `Warpy ICP | dashboard adoption + in-app AI intent`
-- `Warpy ICP | Crow competitor engagement`
 - `Warpy ICP | SaaS product + CS event intent`
 - `Warpy ICP | PLG + AI product thought leaders`
 

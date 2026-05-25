@@ -15,6 +15,7 @@ backend/coverage/
 
 # General
 **/worktrees/
+gtm-improvement-reviews/
 .env
 .env.*
 !.env.example

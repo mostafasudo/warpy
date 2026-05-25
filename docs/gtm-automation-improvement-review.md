@@ -20,7 +20,7 @@ Read first:
 - Improvement report CLI: `scripts/gtm-improvement-log.mjs report --days 90`
 - Improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl`
 - Improvement index: `/Users/levw/.codex/state/warpy-gtm/improvement-log-index.json`
-- Review output directory: `/Users/levw/.codex/state/warpy-gtm/improvement-reviews/`
+- Review output directory: `/Users/levw/Desktop/Levw/warpy/gtm-improvement-reviews/`
 
 ## Review Standard
 
@@ -55,7 +55,7 @@ Deprioritize:
    - validation plan
    - rollout and risk notes
 6. For rejected or deferred items, give a short reason.
-7. Write a compact markdown review artifact under `/Users/levw/.codex/state/warpy-gtm/improvement-reviews/YYYY-MM-DD-review.md`.
+7. Write a compact markdown review artifact under `/Users/levw/Desktop/Levw/warpy/gtm-improvement-reviews/YYYY-MM-DD-review.md`.
 8. Open an inbox item summarizing selected fixes, deferred items, artifact path, and any urgent `p1` recommendation.
 
 ## Output Shape

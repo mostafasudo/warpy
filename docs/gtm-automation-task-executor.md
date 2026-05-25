@@ -174,7 +174,7 @@ For every recipient-visible task:
 - run the recipient comprehension check from `GTM.md`: the final copy must explain why the trigger matters, name the likely adoption/support problem, name a concrete dashboard workflow, and explain warpy.ai in plain recipient language
 - include the final subject/body or message, `personalization_packet`, `personalization_evidence`, and `copy_source` in the audit record before calling `scripts/gtm-task-guard.mjs claim`
 - never send copy that still contains `[First name]`, `[trigger]`, `[Company]`, `{{ ... }}`, or the static Apollo sequence template with fields swapped
-- never send copy that exposes internal provenance labels such as `Apollo profile`, `Amplemarket`, `Duo Copilot`, `Duo Crow competitor`, or `Structured Amplemarket search`; rewrite those into natural recipient-safe observations first
+- never send copy that exposes internal provenance labels such as `Apollo profile`, `Amplemarket`, `Duo Copilot`, or `Structured Amplemarket search`; rewrite those into natural recipient-safe observations first
 - never send copy that uses banned recipient-visible phrases from `GTM.md`, invents a bot comparison the prospect did not raise, or talks about internal permissions instead of a workflow the recipient understands
 
 Valid no-copy cases are explicit:

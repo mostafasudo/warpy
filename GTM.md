@@ -133,9 +133,6 @@ Primary buyer personas:
 | Technical Lead | CTO, VP Eng, Head of Engineering, Founder | AI-native product experience without building an internal agent stack |
 | CS/Growth Lead | VP CS, Head of Growth, Onboarding Lead | Activation, onboarding, expansion, power-user behavior |
 
-## Competitive Context
-
-Use [Crow AI](https://usecrow.ai) as the default direct competitor reference for positioning, objection handling, sales enablement, and competitive GTM work unless a task calls for a different competitor set.
 
 ## Outbound System
 
@@ -199,6 +196,7 @@ Sales automation state:
 - temporary artifacts: `/Users/levw/.codex/tmp/warpy-gtm/`
 - improvement log: `/Users/levw/.codex/state/warpy-gtm/improvement-log.jsonl`
 - improvement index: `/Users/levw/.codex/state/warpy-gtm/improvement-log-index.json`
+- improvement review artifacts: `/Users/levw/Desktop/Levw/warpy/gtm-improvement-reviews/`
 
 Marketing automation state:
 

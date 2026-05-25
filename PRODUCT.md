@@ -20,16 +20,9 @@ B2B SaaS platforms often struggle with user engagement and onboarding due to com
 - First in market: there are 0 products currently in market that do this, or do something similar, we will be the first, which would be very challenging in terms of explaining this product to possible users and difficult in sales and marketing.
 - Computer Use / Operator: the whole point of this product is to help users skip complex UIs to get things done easily by chatting with a widget, Computer Use AI Systems such as Operator by OpenAI could do the exact same functionality by making the agent take control over the browser and navigating the complex UI and getting the task done for you, though today we are so far from this, due to these reason:
 - Though it requires chrome extension or user launching chrome with CDP, not doable via a script tag.
-
-## Competitors
-
-- https://usecrow.ai
-
   
 ## Valuable resources
 
-- Kapa.ai offers a customizable widget for websites that answers technical documentation questions. Their onboarding process is similar—they ingest all your technical docs (API docs in our case). They also let you style the widget with custom hex codes to match your design. Companies like Docker, Reddit, Netlify, and OpenAI use it.
-- https://www.youtube.com/watch?v=p7Iculwh7q8
 - The Weird Death Of User Interfaces: https://www.youtube.com/watch?v=KG4ONHqF1qg&list=WL&index=1
 - Claude Extention: https://www.youtube.com/watch?v=IypXvHej9eY&t=78s
 - Clay's Sculpture, PostHog AI
