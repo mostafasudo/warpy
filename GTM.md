@@ -12,10 +12,10 @@ They must not perform cybersecurity testing, vulnerability research, credential 
 
 Automation source docs:
 
-- [Lead Builder](docs/gtm-automation-lead-builder.md)
-- [Task Executor](docs/gtm-automation-task-executor.md)
-- [Marketing Engine](docs/gtm-automation-marketing-engine.md)
-- [Improvement Review](docs/gtm-automation-improvement-review.md)
+- [Lead Builder](docs/gtm/gtm-automation-lead-builder.md)
+- [Task Executor](docs/gtm/gtm-automation-task-executor.md)
+- [Marketing Engine](docs/gtm/gtm-automation-marketing-engine.md)
+- [Improvement Review](docs/gtm/gtm-automation-improvement-review.md)
 
 ## Chrome CDP Fallback Rule
 

@@ -11,7 +11,7 @@ This automation keeps Apollo focused on outbound workflow state and keeps Amplem
 Read first:
 
 1. `GTM.md`
-2. `docs/gtm-automation-lead-builder.md`
+2. `docs/gtm/gtm-automation-lead-builder.md`
 
 ## GTM Scope & Platform Compliance
 

@@ -11,7 +11,7 @@ This automation removes founder manual work from sequence follow-through while p
 Read first:
 
 1. `GTM.md`
-2. `docs/gtm-automation-task-executor.md`
+2. `docs/gtm/gtm-automation-task-executor.md`
 
 ## GTM Scope & Platform Compliance
 

@@ -11,9 +11,9 @@ This automation does not run sourcing, send outreach, enroll leads, or mutate GT
 Read first:
 
 1. `GTM.md`
-2. `docs/gtm-automation-improvement-review.md`
-3. `docs/gtm-automation-lead-builder.md`
-4. `docs/gtm-automation-task-executor.md`
+2. `docs/gtm/gtm-automation-improvement-review.md`
+3. `docs/gtm/gtm-automation-lead-builder.md`
+4. `docs/gtm/gtm-automation-task-executor.md`
 
 ## Systems
 

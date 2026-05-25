@@ -11,7 +11,7 @@ This automation keeps a steady founder-led point of view in market while preserv
 Read first:
 
 1. `GTM.md`
-2. `docs/gtm-automation-marketing-engine.md`
+2. `docs/gtm/gtm-automation-marketing-engine.md`
 
 ## GTM Scope & Platform Compliance
 
