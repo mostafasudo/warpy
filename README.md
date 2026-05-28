@@ -174,10 +174,6 @@ Native components are optional. Use them only when the widget response mode is s
 
 React, Vue, and Svelte wrappers can adapt framework components passed as `{ key, version, component }`. Angular and vanilla installs should pass `{ key, version, render }` and mount with the app's own lifecycle helpers.
 
-### License
-
-MIT
-
 ## Non-Docker Setup
 ### Frontend
 Copy `frontend/.env.example` to `frontend/.env` and adjust values before running `pnpm dev`.
