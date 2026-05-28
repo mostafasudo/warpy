@@ -1,4 +1,4 @@
-![Warpy](docs/assets/warpy-readme-banner.svg)
+![Warpy](docs/assets/warpy-readme-banner.png)
 
 ## What is Warpy
 
