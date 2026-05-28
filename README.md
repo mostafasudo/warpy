@@ -1,6 +1,8 @@
 # Warpy
 
-Embeddable agent widget for dashboards. Bend interfaces into authenticated API actions and UI operations. Learn more in [PRODUCT](PRODUCT.md).
+## What is Warpy
+
+Warpy is an AI assistant that lets users control your app through chat and dynamic UI. Learn more in [PRODUCT](PRODUCT.md).
 
 ## Prerequisites
 - Node.js 20+
