@@ -2,7 +2,7 @@
 
 ## What is Warpy
 
-Warpy is an AI assistant that lets users control your app through chat and dynamic UI. Learn more in [PRODUCT](PRODUCT.md).
+Warpy is a lightweight AI assistant customers embed in their SaaS dashboards with a script or framework wrapper. Users ask for work in chat, and Warpy can answer with markdown, Warpy components, or customer-native components, then complete workflows through configured tools: backend tools map the customer's authenticated API endpoints into typed function calls, frontend tools call `window.warpy(...)`, and Screen Autopilot can read and operate the current page when no explicit tool exists. Auth stays scoped to the host app: customer-owned requests can use the user's browser cookies or configured auth headers, and optional signed widget tokens protect widget sessions so actions run with the current user's existing permissions. Learn more in [PRODUCT](PRODUCT.md).
 
 ## Prerequisites
 - Node.js 20+
@@ -17,7 +17,6 @@ Warpy is an AI assistant that lets users control your app through chat and dynam
 - **Backend:** FastAPI, LangChain, PostgreSQL/PGVector, SQLAlchemy, Redis, RQ, Pytest
 - **Knowledge Base:** uploaded files + public websites with source-aware hybrid retrieval
 - **Auth:** Clerk
-- **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
 
 ## Planning
 
