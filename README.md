@@ -2,8 +2,6 @@
 
 Embeddable agent widget for dashboards. Bend interfaces into authenticated API actions and UI operations. Learn more in [PRODUCT](PRODUCT.md).
 
-Sales, marketing, and GTM context: [GTM.md](GTM.md).
-
 ## Prerequisites
 - Node.js 20+
 - `pnpm` 10+
@@ -18,10 +16,6 @@ Sales, marketing, and GTM context: [GTM.md](GTM.md).
 - **Knowledge Base:** uploaded files + public websites with source-aware hybrid retrieval
 - **Auth:** Clerk
 - **Infrastructure:** Docker, AWS ECR, ECS Fargate, Aurora DB
-
-## Deployment
-
-Production infrastructure reference: [docs/infra-guide.md](docs/infra-guide.md).
 
 ## Planning
 

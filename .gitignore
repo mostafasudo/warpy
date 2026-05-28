@@ -18,6 +18,7 @@ backend/coverage/
 gtm-improvement-reviews/
 GTM.md
 docs/gtm/
+docs/infra-guide.md
 .env
 .env.*
 !.env.example
