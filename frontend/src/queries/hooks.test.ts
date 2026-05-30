@@ -160,10 +160,10 @@ describe("react-query hooks", () => {
   it("fetches billing summary", () => {
     queryMock.useQuery.mockImplementation((options: any) => {
       options.queryFn()
-      return { data: { plan: "free", actionsRemaining: 50 } }
+      return { data: { plan: "free", actionsRemaining: 0 } }
     })
     const { useBillingSummaryQuery } = require("./use-billing-summary")
-    ;(apiClient.getBillingSummary as any).mockResolvedValue({ plan: "free", actionsRemaining: 50 })
+    ;(apiClient.getBillingSummary as any).mockResolvedValue({ plan: "free", actionsRemaining: 0 })
 
     useBillingSummaryQuery()
 

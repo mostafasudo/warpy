@@ -129,7 +129,7 @@ export const BillingPanel = () => {
         <PlanCard
           title="Free"
           price="$0"
-          description="50 lifetime actions for new accounts."
+          description="Warpy is open source. Self-host it and run your own infrastructure."
           current={currentPlan === "free"}
           action={<Button type="button" variant="secondary" disabled>Included</Button>}
         />

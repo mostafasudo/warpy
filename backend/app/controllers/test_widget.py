@@ -88,6 +88,18 @@ def auth_headers():
     return {"Authorization": "Bearer token"}
 
 
+def seed_lifetime_actions(actions: int) -> None:
+    from app.core.database import session_scope
+
+    with session_scope() as session:
+        account = session.get(BillingAccount, "user_1")
+        if not account:
+            account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = actions
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
+
 def send_widget_request(websocket, request: dict, *, widget_token: str | None = None) -> dict:
     request_payload = dict(request)
     last_request_id = getattr(websocket, "_warpy_request_id", None)
@@ -148,8 +160,8 @@ def test_widget_config_returns_headers(client: TestClient):
     assert config.status_code == 200
     body = config.json()
     assert "headers" in body
-    assert body["isWidgetHidden"] is False
-    assert body["actionsRemaining"] == 50
+    assert body["isWidgetHidden"] is True
+    assert body["actionsRemaining"] == 0
     assert body["widgetTitle"] == "Warpy"
     assert body["widgetIconUrl"] is None
     assert body["widgetAppearanceMode"] == "infer"
@@ -230,6 +242,7 @@ def test_widget_session_returns_dynamic_suggestions(client: TestClient, monkeypa
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(1)
 
     update = client.put(
         "/agent/widget-config",
@@ -288,6 +301,7 @@ def test_widget_session_creates_langsmith_trace(client: TestClient, monkeypatch:
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(1)
 
     with client.websocket_connect("/widget/session") as websocket:
         response = send_widget_request(
@@ -604,6 +618,7 @@ def test_widget_session_rechecks_user_rate_limit_on_follow_up_requests(client: T
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
     update = client.put(
         "/agent/user-rate-limits",
         headers=auth_headers(),
@@ -671,6 +686,7 @@ def test_widget_session_caps_follow_up_tool_iterations(client: TestClient, monke
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(websocket, {"agentId": agent_id, "message": "start"})
@@ -786,6 +802,7 @@ def test_widget_session_emits_agent_not_found(client: TestClient):
 def test_widget_session_creates_conversation(client: TestClient):
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         response = send_widget_request(
@@ -835,6 +852,7 @@ def test_widget_session_uses_short_lived_sessions_per_phase(client: TestClient, 
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         response = send_widget_request(
@@ -852,6 +870,7 @@ def test_widget_session_uses_short_lived_sessions_per_phase(client: TestClient, 
 def test_widget_session_uses_existing_conversation(client: TestClient):
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(websocket, {"agentId": agent_id, "message": "first"})
@@ -954,6 +973,7 @@ def test_widget_session_handles_tool_calls_and_final_response(client: TestClient
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_ws_first"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         websocket.send_json(
@@ -1026,6 +1046,7 @@ def test_widget_session_serializes_frontend_tool_feature(client: TestClient, mon
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(
@@ -1064,6 +1085,7 @@ def test_widget_session_replays_completed_request_without_duplicate_persistence(
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_completed_once"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(
@@ -1123,6 +1145,7 @@ def test_widget_session_replays_completed_request_without_conversation_id_after_
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_completed_disconnect"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         websocket.send_json(
@@ -1160,6 +1183,7 @@ def test_widget_session_replays_completed_request_without_conversation_id_after_
 def test_widget_session_rejects_request_conversation_mismatch(client: TestClient):
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(
@@ -1200,6 +1224,7 @@ def test_widget_session_rejects_request_payload_mismatch(client: TestClient):
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_payload_mismatch"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         send_widget_request(
@@ -1278,6 +1303,7 @@ def test_widget_session_same_request_replay_drops_stale_in_flight_result(client:
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_resume_once"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as first_socket:
         first_socket.send_json(
@@ -1367,6 +1393,7 @@ def test_widget_session_newer_request_supersedes_older_in_flight_result(client: 
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as first_socket:
         first_socket.send_json(
@@ -1615,6 +1642,7 @@ def test_widget_session_restores_pending_state_on_new_socket(client: TestClient,
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_ws_resume"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         websocket.send_json(
@@ -1713,6 +1741,7 @@ def test_widget_session_rewrites_legacy_pending_state_to_v2(client: TestClient, 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_ws_legacy"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(
@@ -1803,6 +1832,7 @@ def test_widget_session_emits_retriable_error_for_invalid_v2_pending_state(clien
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_ws_invalid"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         first = send_widget_request(
@@ -1905,6 +1935,7 @@ def test_widget_session_emits_transport_error(client: TestClient, monkeypatch: p
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         websocket.send_json(
@@ -1973,6 +2004,7 @@ def test_widget_session_emits_timeout_waiting_for_next_request(client: TestClien
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
     request_id = "req_timeout"
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         websocket.send_json(
@@ -2155,6 +2187,7 @@ def test_widget_session_persists_v2_tool_context_on_done(client: TestClient, mon
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         response = send_widget_request(
@@ -2233,6 +2266,7 @@ def test_widget_session_persists_v2_pending_state_on_tool_calls(client: TestClie
 
     agent = client.post("/agent", headers=auth_headers())
     agent_id = agent.json()["id"]
+    seed_lifetime_actions(20)
 
     with client.websocket_connect("/widget/session") as websocket:
         response = send_widget_request(

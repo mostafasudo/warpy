@@ -189,7 +189,7 @@ describe("KnowledgeBasePanel", () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockedUseBillingSummaryQuery.mockReturnValue({
-      data: { plan: "free", actionsRemaining: 50 },
+      data: { plan: "free", actionsRemaining: 1 },
       isLoading: false,
     })
     mockedUseAgentQuery.mockReturnValue({

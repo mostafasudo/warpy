@@ -533,12 +533,12 @@ describe("apiClient", () => {
     const responses = [
       jsonResponse({
         plan: "free",
-        actionsRemaining: 50,
+        actionsRemaining: 0,
         monthlyActionsRemaining: 0,
         monthlyActionQuota: 0,
         topupActionsRemaining: 0,
-        lifetimeActionsRemaining: 50,
-        isWidgetHidden: false,
+        lifetimeActionsRemaining: 0,
+        isWidgetHidden: true,
         canManageSubscription: false,
         subscriptionStatus: null,
         subscriptionRenewsAt: null

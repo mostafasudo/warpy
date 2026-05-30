@@ -45,6 +45,15 @@ def stub_auth(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def client():
+    from app.core.database import session_scope
+    from app.services.billing_service import get_or_create_billing_account
+
+    with session_scope() as session:
+        account = get_or_create_billing_account(session, "user_1")
+        account.lifetime_actions_remaining = 1
+        account.topup_actions_remaining = 0
+        account.monthly_actions_remaining = 0
+
     app = create_app()
     with TestClient(app) as client:
         yield client
