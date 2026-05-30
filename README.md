@@ -42,6 +42,8 @@ The marketing/landing site lives in the `landing/` submodule ([LevwTech/warpy-la
 
 Tiny, framework-agnostic loader for the Warpy embeddable widget.
 
+The package source lives in [`widget/`](widget/) as a normal tracked directory in this repo.
+
 This package **does not bundle the widget UI**. It simply injects the Warpy widget `<script>` (`widget.js`) and passes configuration via `data-*` attributes.
 
 ### Install

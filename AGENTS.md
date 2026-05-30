@@ -40,16 +40,16 @@ Customers embed a lightweight in-product assistant into their dashboard. Users a
 For GTM and recipient-visible copy, do not make "dynamic UI" carry the whole action story. Dynamic UI means structured chat output; dashboard control comes from configured tools and screen autopilot. GTM messaging must lead with the adoption or support problem, tie it to a concrete workflow, then explain Warpy in plain recipient language.
 
 ## Monorepo Structure
-This repo contains three projects as submodules or top-level directories:
+This repo contains these projects:
 
 | Directory | Repo | Purpose |
 |-----------|------|---------|
 | `frontend/` + `backend/` | (this repo) | Core platform — dashboard, API, agent engine, and all backend services. |
 | `docs-site/` | `docs` (submodule) | Public Mintlify documentation site for customers and implementers. |
 | `landing/` | `warpy-landing` (submodule) | Public marketing site / landing page. |
-| `widget/` | `widget` (submodule) | The embeddable JS widget that customers drop into their dashboards. |
+| `widget/` | (this repo) | The `@warpy-ai/widget` package customers install to embed Warpy in their dashboards. |
 
-Submodules have their own git history. Commit inside the submodule first, then update the reference in the parent repo.
+`docs-site/` and `landing/` are submodules with their own git history. Commit inside those submodules first, then update the reference in the parent repo. `widget/` is a normal tracked package directory in this repo, not a submodule.
 `docs-site/` is public customer-facing documentation. Do not put internal-only implementation details, engineering notes, or private operational guidance there.
 
 ## Modes
